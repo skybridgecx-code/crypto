@@ -5,7 +5,6 @@ from collections import Counter
 from pathlib import Path
 
 import pytest
-
 from crypto_agent.evaluation.replay import replay_journal
 
 FIXTURES_DIR = Path("tests/fixtures")

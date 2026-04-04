@@ -1,7 +1,6 @@
 from datetime import UTC, datetime
 
 import pytest
-
 from crypto_agent.enums import EventType, Mode
 from crypto_agent.events.envelope import EventEnvelope
 

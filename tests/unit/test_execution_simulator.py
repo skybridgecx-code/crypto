@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import pytest
-
 from crypto_agent.config import load_settings
 from crypto_agent.execution.models import PaperExecutionConfig
 from crypto_agent.execution.order_normalizer import normalize_order_intent

@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from crypto_agent.cli.main import main
 from crypto_agent.events.journal import AppendOnlyJournal
 

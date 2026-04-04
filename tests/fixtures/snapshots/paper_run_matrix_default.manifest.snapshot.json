@@ -1,0 +1,103 @@
+{
+  "aggregate_counts": {
+    "alert_count": 4,
+    "approval_count": 3,
+    "denial_count": 0,
+    "event_count": 28,
+    "fill_event_count": 4,
+    "halt_count": 1,
+    "order_reject_count": 1,
+    "partial_fill_intent_count": 2,
+    "proposal_count": 4
+  },
+  "entries": [
+    {
+      "fixture": "paper_candles_breakout_long.jsonl",
+      "journal_path": "journals/paper-run-matrix-demo-breakout-paper-run.jsonl",
+      "outcome_counts": {
+        "alert_count": 1,
+        "approval_count": 1,
+        "denial_count": 0,
+        "event_count": 8,
+        "fill_event_count": 2,
+        "halt_count": 0,
+        "order_reject_count": 0,
+        "partial_fill_intent_count": 1,
+        "proposal_count": 1
+      },
+      "run_id": "paper-run-matrix-demo-breakout-paper-run",
+      "summary_path": "runs/paper-run-matrix-demo-breakout-paper-run/summary.json"
+    },
+    {
+      "fixture": "paper_candles_mean_reversion_short.jsonl",
+      "journal_path": "journals/paper-run-matrix-demo-mean-reversion-paper-run.jsonl",
+      "outcome_counts": {
+        "alert_count": 1,
+        "approval_count": 1,
+        "denial_count": 0,
+        "event_count": 8,
+        "fill_event_count": 2,
+        "halt_count": 0,
+        "order_reject_count": 0,
+        "partial_fill_intent_count": 1,
+        "proposal_count": 1
+      },
+      "run_id": "paper-run-matrix-demo-mean-reversion-paper-run",
+      "summary_path": "runs/paper-run-matrix-demo-mean-reversion-paper-run/summary.json"
+    },
+    {
+      "fixture": "paper_candles_high_volatility.jsonl",
+      "journal_path": "journals/paper-run-matrix-demo-high-vol-no-signal-paper-run.jsonl",
+      "outcome_counts": {
+        "alert_count": 0,
+        "approval_count": 0,
+        "denial_count": 0,
+        "event_count": 0,
+        "fill_event_count": 0,
+        "halt_count": 0,
+        "order_reject_count": 0,
+        "partial_fill_intent_count": 0,
+        "proposal_count": 0
+      },
+      "run_id": "paper-run-matrix-demo-high-vol-no-signal-paper-run",
+      "summary_path": "runs/paper-run-matrix-demo-high-vol-no-signal-paper-run/summary.json"
+    },
+    {
+      "fixture": "paper_candles_breakout_long.jsonl",
+      "journal_path": "journals/paper-run-matrix-demo-breakout-reject-low-equity-paper-run.jsonl",
+      "outcome_counts": {
+        "alert_count": 1,
+        "approval_count": 1,
+        "denial_count": 0,
+        "event_count": 7,
+        "fill_event_count": 0,
+        "halt_count": 0,
+        "order_reject_count": 1,
+        "partial_fill_intent_count": 0,
+        "proposal_count": 1
+      },
+      "run_id": "paper-run-matrix-demo-breakout-reject-low-equity-paper-run",
+      "summary_path": "runs/paper-run-matrix-demo-breakout-reject-low-equity-paper-run/summary.json"
+    },
+    {
+      "fixture": "paper_candles_breakout_long.jsonl",
+      "journal_path": "journals/paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run.jsonl",
+      "outcome_counts": {
+        "alert_count": 1,
+        "approval_count": 0,
+        "denial_count": 0,
+        "event_count": 5,
+        "fill_event_count": 0,
+        "halt_count": 1,
+        "order_reject_count": 0,
+        "partial_fill_intent_count": 0,
+        "proposal_count": 1
+      },
+      "run_id": "paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run",
+      "summary_path": "runs/paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run/summary.json"
+    }
+  ],
+  "entry_count": 5,
+  "manifest_path": "runs/paper-run-matrix-demo/manifest.json",
+  "matrix_run_id": "paper-run-matrix-demo"
+}
