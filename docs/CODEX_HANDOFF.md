@@ -38,8 +38,8 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - the paper replay harness plus Harness Validation 1-4 are implemented
 - replay scorecards, event counts, review packets, and replay-derived operator summaries are snapshot-locked
 - harness summaries, replay artifacts, and event-stream views are snapshot-locked
-- `make validate` is the default validation path
-- `make validate-edited` is the required validation path after file edits because it runs Ruff autofix before format, lint, typecheck, and test
+- `make validate` is the default validation path after edits because it runs Ruff autofix before format, lint, typecheck, and test
+- `make validate-check` is the non-mutating verification path for an already-clean tree
 - live trading, exchange integration, UI, and production deployment are still out of scope
 
 ## Future Work Rule

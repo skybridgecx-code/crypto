@@ -72,7 +72,7 @@ Adverse paths:
 - `make typecheck`
 - `make test`
 - `make validate`
-- `make validate-edited`
+- `make validate-check`
 
 ## Known Limits
 

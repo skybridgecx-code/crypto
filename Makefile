@@ -1,4 +1,4 @@
-.PHONY: fix format lint typecheck test validate validate-edited
+.PHONY: fix format lint typecheck test validate validate-check
 
 fix:
 	ruff check --fix .
@@ -15,6 +15,6 @@ typecheck:
 test:
 	pytest -q
 
-validate: format lint typecheck test
+validate-check: format lint typecheck test
 
-validate-edited: fix format lint typecheck test
+validate: fix format lint typecheck test
