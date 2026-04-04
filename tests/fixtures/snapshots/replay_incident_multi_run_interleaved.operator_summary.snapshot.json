@@ -1,0 +1,22 @@
+{
+  "alert_count": 5,
+  "approval_count": 6,
+  "complete_execution_count": 5,
+  "denial_count": 0,
+  "event_count": 41,
+  "fill_event_count": 4,
+  "first_event_type": "trade.proposal.created",
+  "fixture": "replay_incident_multi_run_interleaved.jsonl",
+  "halt_count": 1,
+  "incomplete_execution_count": 2,
+  "kill_switch_activations": 1,
+  "last_event_type": "order.filled",
+  "order_intent_count": 5,
+  "order_reject_count": 1,
+  "orders_submitted_count": 4,
+  "partial_fill_intent_count": 1,
+  "proposal_count": 7,
+  "review_filled_event_count": 4,
+  "review_rejected_event_count": 1,
+  "run_id": "run-multi-interleaved"
+}

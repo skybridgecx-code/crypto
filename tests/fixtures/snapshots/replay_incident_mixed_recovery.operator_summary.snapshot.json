@@ -1,0 +1,22 @@
+{
+  "alert_count": 5,
+  "approval_count": 3,
+  "complete_execution_count": 4,
+  "denial_count": 0,
+  "event_count": 28,
+  "fill_event_count": 3,
+  "first_event_type": "trade.proposal.created",
+  "fixture": "replay_incident_mixed_recovery.jsonl",
+  "halt_count": 1,
+  "incomplete_execution_count": 0,
+  "kill_switch_activations": 1,
+  "last_event_type": "order.filled",
+  "order_intent_count": 3,
+  "order_reject_count": 1,
+  "orders_submitted_count": 3,
+  "partial_fill_intent_count": 1,
+  "proposal_count": 4,
+  "review_filled_event_count": 3,
+  "review_rejected_event_count": 1,
+  "run_id": "run-mixed-recovery"
+}
