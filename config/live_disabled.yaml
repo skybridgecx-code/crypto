@@ -1,0 +1,8 @@
+mode: halted
+app:
+  name: crypto-agent
+  environment: local
+paths:
+  data_dir: data
+  runs_dir: runs
+  journals_dir: journals

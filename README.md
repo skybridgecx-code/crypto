@@ -1,0 +1,65 @@
+# Crypto Agent
+
+Controlled, auditable, risk-aware crypto trading system built in bounded phases.
+
+Phase 0 defines the architecture and operating model. Phase 1 establishes the local repository foundation only:
+
+- Python packaging and quality gates
+- configuration skeleton
+- event envelope contract
+- initial docs
+- initial unit tests
+
+This repository is intentionally simulation-first. Live trading is out of scope until paper-mode validation, replayability, and guardrail coverage are in place.
+
+## Principles
+
+- Protect capital first.
+- Keep deterministic policy and risk logic outside the LLM.
+- Make every action explainable after the fact.
+- Default to `research_only`, then `paper`.
+- Prefer simple, testable building blocks over premature infrastructure.
+
+## Current Scope
+
+Implemented in Phase 1:
+
+- repository scaffold and module boundaries
+- `pyproject.toml`, `Makefile`, and `.env.example`
+- architecture and operating model docs
+- initial `config.py` and `events/envelope.py`
+- unit tests for config loading and the shared event envelope
+
+Explicitly not implemented yet:
+
+- exchange integrations
+- trading strategies
+- risk sizing
+- execution routing
+- live trading
+
+## Quick Start
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -e ".[dev]"
+make validate
+```
+
+## Repo Layout
+
+The package layout follows the bounded module structure in [docs/ARCHITECTURE.md](/Users/muhammadaatif/cryp/docs/ARCHITECTURE.md). Empty directories are intentional placeholders for later phases.
+
+## Execution Rules
+
+Before making changes, read:
+
+- [docs/ARCHITECTURE.md](/Users/muhammadaatif/cryp/docs/ARCHITECTURE.md)
+- [docs/OPERATING_MODEL.md](/Users/muhammadaatif/cryp/docs/OPERATING_MODEL.md)
+- [docs/RISK_POLICY.md](/Users/muhammadaatif/cryp/docs/RISK_POLICY.md)
+- [docs/PHASE_PLAN.md](/Users/muhammadaatif/cryp/docs/PHASE_PLAN.md)
+- [docs/CODEX_HANDOFF.md](/Users/muhammadaatif/cryp/docs/CODEX_HANDOFF.md)
+
+Work in one bounded phase at a time. Validate before advancing. Do not add live trading features until the paper-trading path is stable and replayable.
