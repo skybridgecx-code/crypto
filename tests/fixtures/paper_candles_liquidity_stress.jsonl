@@ -1,0 +1,4 @@
+{"venue":"paper","symbol":"BTCUSDT","interval":"1m","open_time":"2026-04-03T15:00:00Z","close_time":"2026-04-03T15:01:00Z","open":68000.0,"high":68090.0,"low":67960.0,"close":68040.0,"volume":3.0,"closed":true}
+{"venue":"paper","symbol":"BTCUSDT","interval":"1m","open_time":"2026-04-03T15:01:00Z","close_time":"2026-04-03T15:02:00Z","open":68040.0,"high":68110.0,"low":68000.0,"close":68020.0,"volume":2.5,"closed":true}
+{"venue":"paper","symbol":"BTCUSDT","interval":"1m","open_time":"2026-04-03T15:02:00Z","close_time":"2026-04-03T15:03:00Z","open":68020.0,"high":68080.0,"low":67980.0,"close":68010.0,"volume":2.0,"closed":true}
+{"venue":"paper","symbol":"BTCUSDT","interval":"1m","open_time":"2026-04-03T15:03:00Z","close_time":"2026-04-03T15:04:00Z","open":68010.0,"high":68070.0,"low":67990.0,"close":68030.0,"volume":1.8,"closed":true}

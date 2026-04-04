@@ -2,12 +2,13 @@
 
 Controlled, auditable, risk-aware crypto trading system built in bounded phases.
 
-Phase 0 defines the architecture and operating model. The repository currently includes the first three bounded implementation phases:
+Phase 0 defines the architecture and operating model. The repository currently includes the first four bounded implementation phases:
 
 - Python packaging and quality gates
 - configuration and shared contracts
 - event and schema artifacts
 - market-data models and replay skeleton
+- deterministic features and regime rules
 - initial docs and tests
 
 This repository is intentionally simulation-first. Live trading is out of scope until paper-mode validation, replayability, and guardrail coverage are in place.
@@ -30,13 +31,13 @@ Implemented so far:
 - typed config, enums, IDs, and core event/order/proposal contracts
 - checked-in JSON schema artifacts for core contracts
 - market-data models, replay loading, and paper-feed adapter skeleton
+- deterministic momentum, volatility, liquidity features, and rule-based regime classification
 - unit tests for config, contracts, replay loading, and market-data quality checks
 
 Explicitly not implemented yet:
 
 - exchange integrations
 - trading strategies
-- feature computation
 - risk sizing
 - execution routing
 - live trading
