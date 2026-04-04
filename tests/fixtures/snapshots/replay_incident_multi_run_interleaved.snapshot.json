@@ -1,0 +1,34 @@
+{
+  "event_type_counts": {
+    "alert.raised": 5,
+    "kill_switch.activated": 1,
+    "order.filled": 4,
+    "order.intent.created": 5,
+    "order.rejected": 1,
+    "order.submitted": 4,
+    "policy.decision.made": 7,
+    "risk.check.completed": 7,
+    "trade.proposal.created": 7
+  },
+  "fixture": "replay_incident_multi_run_interleaved.jsonl",
+  "scorecard": {
+    "approval_count": 6,
+    "average_slippage_bps": 1.5,
+    "complete_execution_count": 5,
+    "denial_count": 0,
+    "event_count": 41,
+    "fill_event_count": 4,
+    "filled_intent_count": 3,
+    "halt_count": 1,
+    "incomplete_execution_count": 2,
+    "max_slippage_bps": 3.1,
+    "order_intent_count": 5,
+    "order_reject_count": 1,
+    "orders_submitted_count": 4,
+    "partial_fill_intent_count": 1,
+    "proposal_count": 7,
+    "run_id": "run-multi-interleaved",
+    "total_fee_usd": 3.6799999999999997,
+    "total_fill_notional_usd": 18400.0
+  }
+}
