@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from collections.abc import Sequence
+from math import fsum
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from crypto_agent.cli.main import run_paper_replay
 from crypto_agent.config import Settings, load_settings
+from crypto_agent.evaluation.models import EvaluationScorecard
+from crypto_agent.evaluation.replay import replay_journal
 from crypto_agent.ids import new_id
 
 
@@ -39,6 +43,38 @@ class PaperRunMatrixManifest(BaseModel):
     entry_count: int = Field(ge=0)
     aggregate_counts: dict[str, int]
     entries: list[PaperRunMatrixEntry] = Field(default_factory=list)
+
+
+MANIFEST_COUNT_KEYS: tuple[str, ...] = (
+    "event_count",
+    "proposal_count",
+    "approval_count",
+    "denial_count",
+    "halt_count",
+    "order_reject_count",
+    "fill_event_count",
+    "partial_fill_intent_count",
+    "alert_count",
+)
+
+REPLAY_TOTAL_KEYS: tuple[str, ...] = (
+    "event_count",
+    "proposal_count",
+    "approval_count",
+    "denial_count",
+    "halt_count",
+    "order_intent_count",
+    "orders_submitted_count",
+    "order_reject_count",
+    "fill_event_count",
+    "filled_intent_count",
+    "partial_fill_intent_count",
+    "complete_execution_count",
+    "incomplete_execution_count",
+    "alert_count",
+    "kill_switch_activations",
+    "empty_replay_scorecard_count",
+)
 
 
 def _default_matrix_cases() -> list[PaperRunMatrixCase]:
@@ -109,18 +145,144 @@ def _entry_from_summary(
 
 
 def _aggregate_counts(entries: list[PaperRunMatrixEntry]) -> dict[str, int]:
-    keys = (
-        "event_count",
-        "proposal_count",
-        "approval_count",
-        "denial_count",
-        "halt_count",
-        "order_reject_count",
-        "fill_event_count",
-        "partial_fill_intent_count",
-        "alert_count",
+    return {key: sum(entry.outcome_counts[key] for entry in entries) for key in MANIFEST_COUNT_KEYS}
+
+
+def _format_float(value: float) -> str:
+    text = f"{value:.10f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _relative_journal_path(run_id: str) -> str:
+    return f"journals/{run_id}.jsonl"
+
+
+def _relative_summary_path(run_id: str) -> str:
+    return f"runs/{run_id}/summary.json"
+
+
+def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
+    replay_runs: list[tuple[PaperRunMatrixEntry, EvaluationScorecard, int, int]] = []
+    total_fill_notionals: list[float] = []
+    total_fees: list[float] = []
+    max_slippages: list[float] = []
+    replay_totals: dict[str, int | float] = {key: 0 for key in REPLAY_TOTAL_KEYS}
+    replay_totals.update(
+        {
+            "total_fill_notional_usd": 0.0,
+            "total_fee_usd": 0.0,
+            "max_slippage_bps": 0.0,
+        }
     )
-    return {key: sum(entry.outcome_counts[key] for entry in entries) for key in keys}
+
+    for entry in manifest.entries:
+        replay_result = replay_journal(entry.journal_path)
+        scorecard = replay_result.scorecard
+        event_counts = Counter(event.event_type.value for event in replay_result.events)
+        alert_count = int(event_counts["alert.raised"])
+        kill_switch_activations = int(event_counts["kill_switch.activated"])
+
+        replay_runs.append((entry, scorecard, alert_count, kill_switch_activations))
+
+        replay_totals["event_count"] += scorecard.event_count
+        replay_totals["proposal_count"] += scorecard.proposal_count
+        replay_totals["approval_count"] += scorecard.approval_count
+        replay_totals["denial_count"] += scorecard.denial_count
+        replay_totals["halt_count"] += scorecard.halt_count
+        replay_totals["order_intent_count"] += scorecard.order_intent_count
+        replay_totals["orders_submitted_count"] += scorecard.orders_submitted_count
+        replay_totals["order_reject_count"] += scorecard.order_reject_count
+        replay_totals["fill_event_count"] += scorecard.fill_event_count
+        replay_totals["filled_intent_count"] += scorecard.filled_intent_count
+        replay_totals["partial_fill_intent_count"] += scorecard.partial_fill_intent_count
+        replay_totals["complete_execution_count"] += scorecard.complete_execution_count
+        replay_totals["incomplete_execution_count"] += scorecard.incomplete_execution_count
+        replay_totals["alert_count"] += alert_count
+        replay_totals["kill_switch_activations"] += kill_switch_activations
+
+        if scorecard.run_id == "empty":
+            replay_totals["empty_replay_scorecard_count"] += 1
+        total_fill_notionals.append(scorecard.total_fill_notional_usd)
+        total_fees.append(scorecard.total_fee_usd)
+        max_slippages.append(scorecard.max_slippage_bps)
+
+    replay_totals["total_fill_notional_usd"] = fsum(total_fill_notionals)
+    replay_totals["total_fee_usd"] = fsum(total_fees)
+    replay_totals["max_slippage_bps"] = max(max_slippages, default=0.0)
+
+    lines = [
+        "# Paper Run Matrix Operator Report",
+        "",
+        f"matrix_run_id: {manifest.matrix_run_id}",
+        f"entry_count: {manifest.entry_count}",
+        f"manifest_path: runs/{manifest.matrix_run_id}/manifest.json",
+        f"report_path: runs/{manifest.matrix_run_id}/report.md",
+        "",
+        "## Aggregate Manifest Counts",
+    ]
+    lines.extend(f"{key}: {manifest.aggregate_counts.get(key, 0)}" for key in MANIFEST_COUNT_KEYS)
+    lines.extend(["", "## Aggregate Replay Totals"])
+    lines.extend(f"{key}: {int(replay_totals[key])}" for key in REPLAY_TOTAL_KEYS)
+    lines.extend(
+        [
+            "total_fill_notional_usd: "
+            f"{_format_float(float(replay_totals['total_fill_notional_usd']))}",
+            f"total_fee_usd: {_format_float(float(replay_totals['total_fee_usd']))}",
+            f"max_slippage_bps: {_format_float(float(replay_totals['max_slippage_bps']))}",
+            "",
+            "## Per-Run Details",
+        ]
+    )
+
+    for entry, scorecard, alert_count, kill_switch_activations in replay_runs:
+        lines.extend(
+            [
+                f"### run_id: {entry.run_id}",
+                f"fixture: {entry.fixture}",
+                f"journal_path: {_relative_journal_path(entry.run_id)}",
+                f"summary_path: {_relative_summary_path(entry.run_id)}",
+                f"manifest_event_count: {entry.outcome_counts['event_count']}",
+                f"manifest_proposal_count: {entry.outcome_counts['proposal_count']}",
+                f"manifest_approval_count: {entry.outcome_counts['approval_count']}",
+                f"manifest_denial_count: {entry.outcome_counts['denial_count']}",
+                f"manifest_halt_count: {entry.outcome_counts['halt_count']}",
+                f"manifest_order_reject_count: {entry.outcome_counts['order_reject_count']}",
+                f"manifest_fill_event_count: {entry.outcome_counts['fill_event_count']}",
+                "manifest_partial_fill_intent_count: "
+                f"{entry.outcome_counts['partial_fill_intent_count']}",
+                f"manifest_alert_count: {entry.outcome_counts['alert_count']}",
+                f"replay_run_id: {scorecard.run_id}",
+                f"replay_event_count: {scorecard.event_count}",
+                f"replay_proposal_count: {scorecard.proposal_count}",
+                f"replay_approval_count: {scorecard.approval_count}",
+                f"replay_denial_count: {scorecard.denial_count}",
+                f"replay_halt_count: {scorecard.halt_count}",
+                f"replay_order_intent_count: {scorecard.order_intent_count}",
+                f"replay_orders_submitted_count: {scorecard.orders_submitted_count}",
+                f"replay_order_reject_count: {scorecard.order_reject_count}",
+                f"replay_fill_event_count: {scorecard.fill_event_count}",
+                f"replay_filled_intent_count: {scorecard.filled_intent_count}",
+                "replay_partial_fill_intent_count: " f"{scorecard.partial_fill_intent_count}",
+                f"replay_complete_execution_count: {scorecard.complete_execution_count}",
+                "replay_incomplete_execution_count: " f"{scorecard.incomplete_execution_count}",
+                f"replay_alert_count: {alert_count}",
+                f"replay_kill_switch_activations: {kill_switch_activations}",
+                "replay_average_slippage_bps: " f"{_format_float(scorecard.average_slippage_bps)}",
+                f"replay_max_slippage_bps: {_format_float(scorecard.max_slippage_bps)}",
+                "replay_total_fill_notional_usd: "
+                f"{_format_float(scorecard.total_fill_notional_usd)}",
+                f"replay_total_fee_usd: {_format_float(scorecard.total_fee_usd)}",
+                "",
+            ]
+        )
+
+    return "\n".join(lines)
+
+
+def _write_operator_report(manifest: PaperRunMatrixManifest) -> Path:
+    report_path = Path(manifest.manifest_path).with_name("report.md")
+    report_path.write_text(_build_operator_report(manifest), encoding="utf-8")
+    return report_path
 
 
 def run_paper_replay_matrix(
@@ -172,6 +334,7 @@ def run_paper_replay_matrix(
         json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True),
         encoding="utf-8",
     )
+    _write_operator_report(manifest)
     return manifest
 
 
