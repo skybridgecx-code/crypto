@@ -41,6 +41,6 @@ The system is designed as a controlled trading platform, not a black-box autonom
 - simulation before any live venue interaction
 - append-only evidence and replayability from day one
 
-## Phase 1 Boundary
+## Current State
 
-Phase 1 establishes the repository scaffold, quality tooling, initial config contract, and shared event envelope. It does not implement strategies, venue adapters, risk logic, or order execution.
+The validated baseline now spans Phases 1-10 plus Validation Tracks 1-5. The architecture surface above is implemented in simulation-first form, with snapshot-locked replay outputs over scorecards, event counts, review packets, and replay-derived operator summaries.

@@ -2,7 +2,7 @@
 
 Controlled, auditable, risk-aware crypto trading system built in bounded phases.
 
-Phase 0 defines the architecture and operating model. The repository currently includes all ten bounded implementation phases:
+Phase 0 defines the architecture and operating model. The repository currently includes all ten bounded implementation phases, Validation Tracks 1-5, and a frozen baseline record of the validated system state:
 
 - Python packaging and quality gates
 - configuration and shared contracts
@@ -15,6 +15,7 @@ Phase 0 defines the architecture and operating model. The repository currently i
 - deterministic monitoring and append-only journaling
 - deterministic replay and evaluation workflows
 - deterministic advisory-only LLM wrappers and prompts
+- replay regression snapshots for scorecards, event counts, review packets, and operator summaries
 - initial docs and tests
 
 This repository is intentionally simulation-first. Live trading is out of scope until paper-mode validation, replayability, and guardrail coverage are in place.
@@ -44,13 +45,14 @@ Implemented so far:
 - deterministic health snapshots, alerts, event serialization, and append-only journal helpers
 - deterministic journal replay and scorecard generation over the existing event stream
 - advisory-only LLM prompt payloads and strict JSON parsing wrappers
-- unit tests for config, contracts, replay loading, market-data quality checks, signals, risk policy, execution, journaling, evaluation, and LLM parsing
+- unit tests for config, contracts, replay loading, market-data quality checks, signals, risk policy, execution, journaling, evaluation, LLM parsing, incident drills, and replay snapshot regression coverage
+- validation tracks for incident drills, mixed replay runs, multi-run replay suites, replay scorecard snapshots, and review/operator-summary snapshots
 
 Explicitly not implemented yet:
 
 - exchange integrations
-- trading strategies
 - live trading
+- production deployment or operator UI
 
 ## Quick Start
 
@@ -71,9 +73,10 @@ The package layout follows the bounded module structure in [docs/ARCHITECTURE.md
 Before making changes, read:
 
 - [docs/ARCHITECTURE.md](/Users/muhammadaatif/cryp/docs/ARCHITECTURE.md)
+- [docs/BASELINE.md](/Users/muhammadaatif/cryp/docs/BASELINE.md)
 - [docs/OPERATING_MODEL.md](/Users/muhammadaatif/cryp/docs/OPERATING_MODEL.md)
 - [docs/RISK_POLICY.md](/Users/muhammadaatif/cryp/docs/RISK_POLICY.md)
 - [docs/PHASE_PLAN.md](/Users/muhammadaatif/cryp/docs/PHASE_PLAN.md)
 - [docs/CODEX_HANDOFF.md](/Users/muhammadaatif/cryp/docs/CODEX_HANDOFF.md)
 
-Work in one bounded phase at a time. Validate before advancing. Do not add live trading features until the paper-trading path is stable and replayable.
+Work in one bounded phase at a time. Treat [docs/BASELINE.md](/Users/muhammadaatif/cryp/docs/BASELINE.md) as the reference point for future work. Validate before advancing. Do not add live trading features until the paper-trading path is stable, replayable, and explicitly approved to widen scope.

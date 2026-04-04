@@ -29,6 +29,12 @@ Default operating progression:
 2. `paper`
 3. `limited_live` only after evidence-based validation
 
+Current validated baseline:
+
+- replay, paper-simulator, monitoring, journaling, and evaluation paths are implemented
+- limited-live remains a documented control boundary, not an active validated operating mode
+- trust is currently grounded in replay and simulation evidence, not exchange execution
+
 ## Control Boundaries
 
 - LLMs may summarize, rank, and explain.
