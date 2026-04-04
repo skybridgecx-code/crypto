@@ -12,8 +12,10 @@ def test_load_settings_reads_expected_values() -> None:
     assert settings.app.name == "crypto-agent"
     assert settings.paths.data_dir == Path("data")
     assert settings.venue.allowed_symbols == ["BTCUSDT", "ETHUSDT"]
+    assert settings.risk.risk_per_trade_fraction == 0.005
     assert settings.risk.max_open_positions == 3
     assert settings.policy.kill_switch_enabled is True
+    assert settings.policy.max_consecutive_order_rejects == 3
 
 
 def test_dump_settings_returns_plain_mapping() -> None:

@@ -50,6 +50,8 @@ def generate_breakout_proposal(
             supporting_features={
                 "momentum_return": features.momentum_return,
                 "atr": features.atr,
+                "average_dollar_volume": features.average_dollar_volume,
+                "average_range_bps": features.average_range_bps,
                 "breakout_reference_high": reference_high,
                 "reference_window_size": len(reference_window),
             },
@@ -85,6 +87,8 @@ def generate_breakout_proposal(
             supporting_features={
                 "momentum_return": features.momentum_return,
                 "atr": features.atr,
+                "average_dollar_volume": features.average_dollar_volume,
+                "average_range_bps": features.average_range_bps,
                 "breakout_reference_low": reference_low,
                 "reference_window_size": len(reference_window),
             },

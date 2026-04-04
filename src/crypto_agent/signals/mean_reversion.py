@@ -67,6 +67,9 @@ def generate_mean_reversion_proposal(
             ),
             supporting_features={
                 "zscore": zscore,
+                "average_dollar_volume": features.average_dollar_volume,
+                "realized_volatility": features.realized_volatility,
+                "atr_pct": features.atr_pct,
                 "reference_mean_close": mean_close,
                 "reference_stddev_close": stddev_close,
                 "reference_window_size": len(reference_window),
@@ -98,6 +101,9 @@ def generate_mean_reversion_proposal(
             ),
             supporting_features={
                 "zscore": zscore,
+                "average_dollar_volume": features.average_dollar_volume,
+                "realized_volatility": features.realized_volatility,
+                "atr_pct": features.atr_pct,
                 "reference_mean_close": mean_close,
                 "reference_stddev_close": stddev_close,
                 "reference_window_size": len(reference_window),

@@ -37,6 +37,7 @@ class VenueConfig(BaseModel):
 class RiskLimitsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    risk_per_trade_fraction: float = Field(default=0.005, ge=0, le=1)
     max_portfolio_gross_exposure: float = Field(default=1.0, ge=0)
     max_symbol_gross_exposure: float = Field(default=0.5, ge=0)
     max_daily_realized_loss: float = Field(default=0.02, ge=0, le=1)
@@ -44,7 +45,7 @@ class RiskLimitsConfig(BaseModel):
     max_leverage: float = Field(default=1.0, gt=0)
     max_spread_bps: float = Field(default=15.0, ge=0)
     max_expected_slippage_bps: float = Field(default=20.0, ge=0)
-    min_24h_quote_volume_usd: float = Field(default=50_000_000.0, ge=0)
+    min_average_dollar_volume_usd: float = Field(default=5_000_000.0, ge=0)
 
 
 class PolicyConfig(BaseModel):
@@ -53,6 +54,9 @@ class PolicyConfig(BaseModel):
     allow_live_orders: bool = False
     require_manual_approval_above_notional_usd: float = Field(default=0.0, ge=0)
     kill_switch_enabled: bool = True
+    max_consecutive_order_rejects: int = Field(default=3, ge=1)
+    max_slippage_breaches: int = Field(default=2, ge=1)
+    max_drawdown_fraction: float = Field(default=0.05, ge=0, le=1)
 
 
 class Settings(BaseModel):
