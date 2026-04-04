@@ -73,7 +73,7 @@ def build_scorecard(events: list[EventEnvelope]) -> EvaluationScorecard:
     slippage_values = [
         float(event.payload["estimated_slippage_bps"])
         for event in events
-        if event.event_type in (EventType.ORDER_SUBMITTED, EventType.ORDER_REJECTED)
+        if event.event_type is EventType.ORDER_SUBMITTED
     ]
     filled_intents = {
         str(event.payload["intent_id"])
