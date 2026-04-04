@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -208,3 +209,116 @@ def test_replay_fixture_mixed_interleaved_scorecard_and_mapping_integrity() -> N
     assert replay_result.scorecard.total_fee_usd == pytest.approx(2.74)
     assert events[-1].event_type.value == "order.filled"
     assert str(events[-1].payload["intent_id"]) == "intent-eth-recovery"
+
+
+def test_replay_fixture_multi_run_suite_cumulative_accounting() -> None:
+    journal = AppendOnlyJournal(FIXTURES_DIR / "replay_incident_multi_run_suite.jsonl")
+    events = journal.read_all()
+    replay_result = replay_journal(FIXTURES_DIR / "replay_incident_multi_run_suite.jsonl")
+    review_packet = build_review_packet(events)
+
+    event_type_counts = Counter(event.event_type.value for event in events)
+    policy_actions = [
+        str(event.payload["action"])
+        for event in events
+        if event.event_type.value == "policy.decision.made"
+    ]
+
+    assert event_type_counts == Counter(
+        {
+            "trade.proposal.created": 8,
+            "risk.check.completed": 8,
+            "policy.decision.made": 8,
+            "order.intent.created": 5,
+            "order.submitted": 4,
+            "order.rejected": 1,
+            "order.filled": 4,
+            "kill_switch.activated": 2,
+            "alert.raised": 7,
+        }
+    )
+    assert policy_actions == [
+        "allow",
+        "allow",
+        "halt",
+        "allow",
+        "halt",
+        "allow",
+        "allow",
+        "allow",
+    ]
+    assert replay_result.scorecard.event_count == 47
+    assert replay_result.scorecard.proposal_count == 8
+    assert replay_result.scorecard.approval_count == 6
+    assert replay_result.scorecard.halt_count == 2
+    assert replay_result.scorecard.order_intent_count == 5
+    assert replay_result.scorecard.orders_submitted_count == 4
+    assert replay_result.scorecard.order_reject_count == 1
+    assert replay_result.scorecard.fill_event_count == 4
+    assert replay_result.scorecard.filled_intent_count == 3
+    assert replay_result.scorecard.partial_fill_intent_count == 1
+    assert replay_result.scorecard.complete_execution_count == 6
+    assert replay_result.scorecard.incomplete_execution_count == 2
+    assert replay_result.scorecard.average_slippage_bps == pytest.approx(1.6)
+    assert replay_result.scorecard.max_slippage_bps == 3.2
+    assert replay_result.scorecard.total_fill_notional_usd == 20300.0
+    assert replay_result.scorecard.total_fee_usd == pytest.approx(4.06)
+    assert review_packet["event_count"] == 47
+    assert review_packet["filled_event_count"] == 4
+    assert review_packet["rejected_event_count"] == 1
+    assert str(events[-1].payload["proposal_id"]) == "proposal-stalled-intent"
+
+
+def test_replay_fixture_multi_run_interleaved_complete_vs_incomplete_accounting() -> None:
+    journal = AppendOnlyJournal(FIXTURES_DIR / "replay_incident_multi_run_interleaved.jsonl")
+    events = journal.read_all()
+    replay_result = replay_journal(FIXTURES_DIR / "replay_incident_multi_run_interleaved.jsonl")
+    review_packet = build_review_packet(events)
+
+    event_type_counts = Counter(event.event_type.value for event in events)
+    filled_intent_ids = [
+        str(event.payload["intent_id"])
+        for event in events
+        if event.event_type.value == "order.filled"
+    ]
+
+    assert event_type_counts == Counter(
+        {
+            "trade.proposal.created": 7,
+            "risk.check.completed": 7,
+            "policy.decision.made": 7,
+            "order.intent.created": 5,
+            "order.submitted": 4,
+            "order.rejected": 1,
+            "order.filled": 4,
+            "kill_switch.activated": 1,
+            "alert.raised": 5,
+        }
+    )
+    assert filled_intent_ids == [
+        "intent-alpha-partial",
+        "intent-delta-recovery",
+        "intent-alpha-partial",
+        "intent-eta-recovery",
+    ]
+    assert replay_result.scorecard.event_count == 41
+    assert replay_result.scorecard.proposal_count == 7
+    assert replay_result.scorecard.approval_count == 6
+    assert replay_result.scorecard.halt_count == 1
+    assert replay_result.scorecard.order_intent_count == 5
+    assert replay_result.scorecard.orders_submitted_count == 4
+    assert replay_result.scorecard.order_reject_count == 1
+    assert replay_result.scorecard.fill_event_count == 4
+    assert replay_result.scorecard.filled_intent_count == 3
+    assert replay_result.scorecard.partial_fill_intent_count == 1
+    assert replay_result.scorecard.complete_execution_count == 5
+    assert replay_result.scorecard.incomplete_execution_count == 2
+    assert replay_result.scorecard.average_slippage_bps == pytest.approx(1.5)
+    assert replay_result.scorecard.max_slippage_bps == 3.1
+    assert replay_result.scorecard.total_fill_notional_usd == 18400.0
+    assert replay_result.scorecard.total_fee_usd == pytest.approx(3.68)
+    assert review_packet["event_count"] == 41
+    assert review_packet["filled_event_count"] == 4
+    assert review_packet["rejected_event_count"] == 1
+    assert events[-1].event_type.value == "order.filled"
+    assert str(events[-1].payload["intent_id"]) == "intent-eta-recovery"
