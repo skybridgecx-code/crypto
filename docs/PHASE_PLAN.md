@@ -33,6 +33,12 @@ Complete one bounded phase at a time. Validate that phase before starting the ne
 - Harness Validation 3: adverse paper-run snapshots
 - Harness Validation 4: event-stream regression snapshots
 
+## Completed Matrix Work
+
+- Paper Run Matrix: fixed five-case batch replay runner
+- Matrix Validation 1: manifest regression snapshots
+- Matrix Validation 2: replay aggregate regression snapshots
+
 ## Baseline Freeze
 
 The current repository state is frozen as the validated baseline documented in [docs/BASELINE.md](/Users/muhammadaatif/cryp/docs/BASELINE.md). Future work should treat that document as the reference point and propose new bounded tracks relative to it.
@@ -41,13 +47,14 @@ The current repository state is frozen as the validated baseline documented in [
 
 The paper replay harness is frozen as the validated operator path documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md). Future operator-facing work should extend that path rather than introducing a second CLI or parallel harness.
 
+## Matrix Freeze
+
+The paper-run matrix is frozen as the validated batch operator path documented in [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md). Future batch operator work should extend that path rather than introducing a second matrix runner or parallel batch flow.
+
 ## Current Validation Path
 
-- `make format`
-- `make lint`
-- `make typecheck`
-- `make test`
 - `make validate`
+- `make validate-check`
 
 ## Stop Conditions
 

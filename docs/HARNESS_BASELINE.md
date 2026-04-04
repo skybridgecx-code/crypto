@@ -2,7 +2,7 @@
 
 ## What Matters
 
-The paper replay harness is now the validated operator path on top of the frozen simulation-first baseline. Future operator-facing work should extend this path, not fork a second one.
+The paper replay harness is now the validated single-run operator path on top of the frozen simulation-first baseline. Future single-run operator work should extend this path, not fork a second one.
 
 ## Operator Command Path
 
@@ -66,13 +66,12 @@ Adverse paths:
 
 ## Validation Command Path
 
-- `make fix`
-- `make format`
-- `make lint`
-- `make typecheck`
-- `make test`
 - `make validate`
 - `make validate-check`
+
+## Batch Extension
+
+The validated batch operator path that builds on this harness is documented in [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md). Batch work should extend that matrix runner instead of adding a second batch path.
 
 ## Known Limits
 

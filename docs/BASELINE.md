@@ -2,7 +2,7 @@
 
 ## What Matters
 
-This repository is frozen as a validated simulation-first baseline after Phases 1-10, Validation Tracks 1-5, the paper-run harness, and Harness Validation 1-4. It is the reference point for future bounded work.
+This repository is frozen as a validated simulation-first baseline after Phases 1-10, Validation Tracks 1-5, the paper-run harness, Harness Validation 1-4, the paper-run matrix, and Matrix Validation 1-2. It is the reference point for future bounded work.
 
 ## Current Architecture Surface
 
@@ -14,6 +14,7 @@ This repository is frozen as a validated simulation-first baseline after Phases 
 - deterministic monitoring alerts, health snapshots, journaling, replay, and evaluation
 - advisory-only LLM wrappers with strict JSON parsing
 - validated paper replay harness and operator artifacts over the existing journal/replay path
+- validated paper-run matrix and batch artifacts over the existing harness, journal, and replay path
 
 ## Completed Phases
 
@@ -44,6 +45,12 @@ This repository is frozen as a validated simulation-first baseline after Phases 
 - Harness Validation 3: adverse paper-run regression snapshots
 - Harness Validation 4: harness event-stream regression snapshots
 
+## Completed Matrix Work
+
+- Paper Run Matrix: validated fixed-matrix batch replay runner
+- Matrix Validation 1: manifest regression snapshots
+- Matrix Validation 2: replay-derived batch aggregate snapshots
+
 ## Snapshot Surfaces
 
 - replay scorecards and event-type counts:
@@ -56,20 +63,21 @@ This repository is frozen as a validated simulation-first baseline after Phases 
   - [tests/unit/test_paper_run_replay_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_replay_snapshots.py)
 - paper-run harness event-stream snapshots:
   - [tests/unit/test_paper_run_event_stream_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_event_stream_snapshots.py)
+- paper-run matrix manifest snapshots:
+  - [tests/unit/test_paper_run_matrix_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_snapshots.py)
+- paper-run matrix replay-aggregate snapshots:
+  - [tests/unit/test_paper_run_matrix_replay_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_replay_snapshots.py)
 - checked-in snapshot artifacts:
   - [tests/fixtures/snapshots](/Users/muhammadaatif/cryp/tests/fixtures/snapshots)
 
 ## Operator Path
 
-The validated operator command path is documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md). Future operator-facing work should extend that path instead of creating a second CLI or parallel runtime entrypoint.
+The validated single-run operator command path is documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md). The validated batch operator path is documented in [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md). Future operator-facing work should extend those paths instead of creating parallel CLIs or runtime entrypoints.
 
 ## Validation Command Path
 
-- `make format`
-- `make lint`
-- `make typecheck`
-- `make test`
 - `make validate`
+- `make validate-check`
 
 ## Known Limits
 

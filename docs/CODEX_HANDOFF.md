@@ -4,6 +4,7 @@ Read first:
 
 - `docs/BASELINE.md`
 - `docs/HARNESS_BASELINE.md`
+- `docs/MATRIX_BASELINE.md`
 - `docs/ARCHITECTURE.md`
 - `docs/OPERATING_MODEL.md`
 - `docs/RISK_POLICY.md`
@@ -29,6 +30,7 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - do not rewrite the architecture unless explicitly instructed
 - preserve the existing replay, journal, and snapshot surfaces unless the assignment explicitly changes them
 - treat the paper replay harness as the reference operator path unless the assignment explicitly changes it
+- treat the paper-run matrix as the reference batch operator path unless the assignment explicitly changes it
 - when files were edited, run the autofix step before validation instead of relying on manual import cleanup
 
 ## Current Baseline
@@ -36,8 +38,10 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - Phases 1-10 are implemented
 - Validation Tracks 1-5 are implemented
 - the paper replay harness plus Harness Validation 1-4 are implemented
+- the paper-run matrix plus Matrix Validation 1-2 are implemented
 - replay scorecards, event counts, review packets, and replay-derived operator summaries are snapshot-locked
 - harness summaries, replay artifacts, and event-stream views are snapshot-locked
+- matrix manifests and replay-derived batch aggregates are snapshot-locked
 - `make validate` is the default validation path after edits because it runs Ruff autofix before format, lint, typecheck, and test
 - `make validate-check` is the non-mutating verification path for an already-clean tree
 - live trading, exchange integration, UI, and production deployment are still out of scope

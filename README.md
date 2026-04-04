@@ -2,7 +2,7 @@
 
 Controlled, auditable, risk-aware crypto trading system built in bounded phases.
 
-Phase 0 defines the architecture and operating model. The repository currently includes all ten bounded implementation phases, Validation Tracks 1-5, the paper replay harness, Harness Validation 1-4, and a frozen record of the validated system state:
+Phase 0 defines the architecture and operating model. The repository currently includes all ten bounded implementation phases, Validation Tracks 1-5, the paper replay harness, Harness Validation 1-4, the paper-run matrix, Matrix Validation 1-2, and a frozen record of the validated system state:
 
 - Python packaging and quality gates
 - configuration and shared contracts
@@ -17,6 +17,7 @@ Phase 0 defines the architecture and operating model. The repository currently i
 - deterministic advisory-only LLM wrappers and prompts
 - replay regression snapshots for scorecards, event counts, review packets, and operator summaries
 - validated paper replay harness artifacts and snapshot coverage over summary, replay, and event-stream views
+- validated paper-run matrix manifest and replay-aggregate artifacts with snapshot coverage
 - initial docs and tests
 
 This repository is intentionally simulation-first. Live trading is out of scope until paper-mode validation, replayability, and guardrail coverage are in place.
@@ -49,6 +50,7 @@ Implemented so far:
 - unit tests for config, contracts, replay loading, market-data quality checks, signals, risk policy, execution, journaling, evaluation, LLM parsing, incident drills, and replay snapshot regression coverage
 - validation tracks for incident drills, mixed replay runs, multi-run replay suites, replay scorecard snapshots, and review/operator-summary snapshots
 - validated paper replay harness with regression snapshots for summary outputs, replay-derived artifacts, adverse runs, and event-stream views
+- validated paper-run matrix with regression snapshots for manifest and replay-derived batch aggregates
 
 Explicitly not implemented yet:
 
@@ -81,6 +83,22 @@ Artifacts are written to:
 
 The frozen harness baseline is documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md).
 
+## Paper Run Matrix
+
+Run the validated fixed batch matrix on top of the existing harness:
+
+```bash
+crypto-agent-paper-matrix-run --config config/paper.yaml --matrix-run-id demo-paper-matrix
+```
+
+Artifacts are written to:
+
+- `journals/<run-id>.jsonl` for each generated run
+- `runs/<run-id>/summary.json` for each generated run
+- `runs/<matrix-run-id>/manifest.json` for the batch manifest
+
+The frozen matrix baseline is documented in [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md).
+
 ## Repo Layout
 
 The package layout follows the bounded module structure in [docs/ARCHITECTURE.md](/Users/muhammadaatif/cryp/docs/ARCHITECTURE.md). Empty directories are intentional placeholders for later phases.
@@ -92,11 +110,12 @@ Before making changes, read:
 - [docs/ARCHITECTURE.md](/Users/muhammadaatif/cryp/docs/ARCHITECTURE.md)
 - [docs/BASELINE.md](/Users/muhammadaatif/cryp/docs/BASELINE.md)
 - [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md)
+- [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md)
 - [docs/OPERATING_MODEL.md](/Users/muhammadaatif/cryp/docs/OPERATING_MODEL.md)
 - [docs/RISK_POLICY.md](/Users/muhammadaatif/cryp/docs/RISK_POLICY.md)
 - [docs/PHASE_PLAN.md](/Users/muhammadaatif/cryp/docs/PHASE_PLAN.md)
 - [docs/CODEX_HANDOFF.md](/Users/muhammadaatif/cryp/docs/CODEX_HANDOFF.md)
 
-Work in one bounded phase at a time. Treat [docs/BASELINE.md](/Users/muhammadaatif/cryp/docs/BASELINE.md) as the system reference point and [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md) as the operator-path reference point for future work. Validate before advancing. Do not add live trading features until the paper-trading path is stable, replayable, and explicitly approved to widen scope.
+Work in one bounded phase at a time. Treat [docs/BASELINE.md](/Users/muhammadaatif/cryp/docs/BASELINE.md) as the system reference point, [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md) as the single-run operator-path reference point, and [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md) as the batch operator-path reference point for future work. Validate before advancing. Do not add live trading features until the paper-trading path is stable, replayable, and explicitly approved to widen scope.
 
 After edits, run `make validate` so Ruff autofix runs before format, lint, typecheck, and test. Use `make validate-check` only when you specifically want a non-mutating pass on an already-clean tree.
