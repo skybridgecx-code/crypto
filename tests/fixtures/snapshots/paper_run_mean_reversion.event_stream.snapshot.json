@@ -1,0 +1,22 @@
+{
+  "event_type_counts": {
+    "alert.raised": 1,
+    "order.filled": 2,
+    "order.intent.created": 1,
+    "order.submitted": 1,
+    "policy.decision.made": 1,
+    "risk.check.completed": 1,
+    "trade.proposal.created": 1
+  },
+  "event_type_sequence": [
+    "trade.proposal.created",
+    "risk.check.completed",
+    "policy.decision.made",
+    "order.intent.created",
+    "order.submitted",
+    "order.filled",
+    "order.filled",
+    "alert.raised"
+  ],
+  "fixture": "paper_candles_mean_reversion_short.jsonl"
+}

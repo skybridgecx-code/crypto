@@ -1,0 +1,17 @@
+{
+  "event_type_counts": {
+    "alert.raised": 1,
+    "kill_switch.activated": 1,
+    "policy.decision.made": 1,
+    "risk.check.completed": 1,
+    "trade.proposal.created": 1
+  },
+  "event_type_sequence": [
+    "trade.proposal.created",
+    "risk.check.completed",
+    "policy.decision.made",
+    "kill_switch.activated",
+    "alert.raised"
+  ],
+  "fixture": "paper_candles_breakout_long.jsonl"
+}

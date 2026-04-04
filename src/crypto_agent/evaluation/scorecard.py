@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from math import fsum
 
 from crypto_agent.enums import EventType, PolicyAction
 from crypto_agent.evaluation.models import EvaluationScorecard
@@ -86,6 +87,16 @@ def build_scorecard(events: list[EventEnvelope]) -> EvaluationScorecard:
         if event.event_type is EventType.ORDER_FILLED
         and str(event.payload["status"]) == "partially_filled"
     }
+    total_fill_notional_usd = fsum(
+        float(event.payload["notional_usd"])
+        for event in events
+        if event.event_type is EventType.ORDER_FILLED
+    )
+    total_fee_usd = fsum(
+        float(event.payload["fee_usd"])
+        for event in events
+        if event.event_type is EventType.ORDER_FILLED
+    )
     proposal_state = _collect_proposal_execution_state(events)
     complete_execution_count = sum(
         1
@@ -133,17 +144,9 @@ def build_scorecard(events: list[EventEnvelope]) -> EvaluationScorecard:
         complete_execution_count=complete_execution_count,
         incomplete_execution_count=len(proposal_state) - complete_execution_count,
         average_slippage_bps=(
-            sum(slippage_values) / len(slippage_values) if slippage_values else 0.0
+            fsum(slippage_values) / len(slippage_values) if slippage_values else 0.0
         ),
         max_slippage_bps=max(slippage_values) if slippage_values else 0.0,
-        total_fill_notional_usd=sum(
-            float(event.payload["notional_usd"])
-            for event in events
-            if event.event_type is EventType.ORDER_FILLED
-        ),
-        total_fee_usd=sum(
-            float(event.payload["fee_usd"])
-            for event in events
-            if event.event_type is EventType.ORDER_FILLED
-        ),
+        total_fill_notional_usd=total_fill_notional_usd,
+        total_fee_usd=total_fee_usd,
     )
