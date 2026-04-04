@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+
 from crypto_agent.config import Settings, dump_settings, load_settings
 from crypto_agent.enums import Mode
 
