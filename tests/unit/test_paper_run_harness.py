@@ -38,6 +38,7 @@ def test_run_paper_replay_writes_journal_and_summary_for_breakout_fixture(
 
     assert result.journal_path.exists()
     assert result.summary_path.exists()
+    assert result.report_path.exists()
     assert replay_result.scorecard.run_id == "breakout-paper-run"
     assert replay_result.scorecard.proposal_count == 1
     assert replay_result.scorecard.approval_count == 1
@@ -104,6 +105,7 @@ def test_cli_main_runs_mean_reversion_fixture_and_prints_summary(
     assert output["run_id"] == "mean-reversion-paper-run"
     assert Path(output["journal_path"]).exists()
     assert Path(output["summary_path"]).exists()
+    assert Path(output["report_path"]).exists()
     assert output["scorecard"]["proposal_count"] == 1
     assert output["scorecard"]["approval_count"] == 1
     assert output["scorecard"]["order_intent_count"] == 1

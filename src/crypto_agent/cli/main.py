@@ -45,6 +45,7 @@ class PaperRunResult(BaseModel):
     replay_path: Path
     journal_path: Path
     summary_path: Path
+    report_path: Path
     scorecard: EvaluationScorecard
     review_packet: dict[str, object]
     operator_summary: dict[str, object]
@@ -226,6 +227,133 @@ def _operator_summary(
     }
 
 
+def _format_float(value: float) -> str:
+    text = f"{value:.10f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _relative_journal_path(run_id: str) -> str:
+    return f"journals/{run_id}.jsonl"
+
+
+def _relative_summary_path(run_id: str) -> str:
+    return f"runs/{run_id}/summary.json"
+
+
+def _relative_report_path(run_id: str) -> str:
+    return f"runs/{run_id}/report.md"
+
+
+def _event_type_sequence(review_packet: dict[str, Any]) -> str:
+    event_types = [str(event_type) for event_type in review_packet["event_types"]]
+    return ", ".join(event_types) if event_types else "<none>"
+
+
+def _build_operator_report(
+    *,
+    run_id: str,
+    mode: Mode,
+    replay_path: Path,
+    quality_issue_count: int,
+    scorecard: EvaluationScorecard,
+    review_packet: dict[str, Any],
+    operator_summary: dict[str, object],
+) -> str:
+    lines = [
+        "# Paper Run Operator Report",
+        "",
+        f"run_id: {run_id}",
+        f"mode: {mode.value}",
+        f"fixture: {replay_path.name}",
+        f"replay_path: {replay_path}",
+        f"journal_path: {_relative_journal_path(run_id)}",
+        f"summary_path: {_relative_summary_path(run_id)}",
+        f"report_path: {_relative_report_path(run_id)}",
+        f"quality_issue_count: {quality_issue_count}",
+        "",
+        "## Event Counts",
+        f"event_count: {scorecard.event_count}",
+        f"alert_count: {operator_summary['alert_count']}",
+        f"kill_switch_activations: {operator_summary['kill_switch_activations']}",
+        f"review_rejected_event_count: {review_packet['rejected_event_count']}",
+        f"review_filled_event_count: {review_packet['filled_event_count']}",
+        f"first_event_type: {operator_summary['first_event_type']}",
+        f"last_event_type: {operator_summary['last_event_type']}",
+        "",
+        "## Scorecard",
+        f"proposal_count: {scorecard.proposal_count}",
+        f"approval_count: {scorecard.approval_count}",
+        f"denial_count: {scorecard.denial_count}",
+        f"halt_count: {scorecard.halt_count}",
+        f"order_intent_count: {scorecard.order_intent_count}",
+        f"orders_submitted_count: {scorecard.orders_submitted_count}",
+        f"order_reject_count: {scorecard.order_reject_count}",
+        f"fill_event_count: {scorecard.fill_event_count}",
+        f"filled_intent_count: {scorecard.filled_intent_count}",
+        f"partial_fill_intent_count: {scorecard.partial_fill_intent_count}",
+        f"complete_execution_count: {scorecard.complete_execution_count}",
+        f"incomplete_execution_count: {scorecard.incomplete_execution_count}",
+        f"average_slippage_bps: {_format_float(scorecard.average_slippage_bps)}",
+        f"max_slippage_bps: {_format_float(scorecard.max_slippage_bps)}",
+        f"total_fill_notional_usd: {_format_float(scorecard.total_fill_notional_usd)}",
+        f"total_fee_usd: {_format_float(scorecard.total_fee_usd)}",
+        "",
+        "## Review Packet",
+        f"event_count: {review_packet['event_count']}",
+        f"filled_event_count: {review_packet['filled_event_count']}",
+        f"rejected_event_count: {review_packet['rejected_event_count']}",
+        f"event_types: {_event_type_sequence(review_packet)}",
+        "",
+        "## Operator Summary",
+        f"fixture: {operator_summary['fixture']}",
+        f"run_id: {operator_summary['run_id']}",
+        f"event_count: {operator_summary['event_count']}",
+        f"proposal_count: {operator_summary['proposal_count']}",
+        f"approval_count: {operator_summary['approval_count']}",
+        f"denial_count: {operator_summary['denial_count']}",
+        f"halt_count: {operator_summary['halt_count']}",
+        f"order_intent_count: {operator_summary['order_intent_count']}",
+        f"orders_submitted_count: {operator_summary['orders_submitted_count']}",
+        f"order_reject_count: {operator_summary['order_reject_count']}",
+        f"fill_event_count: {operator_summary['fill_event_count']}",
+        f"partial_fill_intent_count: {operator_summary['partial_fill_intent_count']}",
+        f"complete_execution_count: {operator_summary['complete_execution_count']}",
+        f"incomplete_execution_count: {operator_summary['incomplete_execution_count']}",
+        f"alert_count: {operator_summary['alert_count']}",
+        f"kill_switch_activations: {operator_summary['kill_switch_activations']}",
+        "review_rejected_event_count: " f"{operator_summary['review_rejected_event_count']}",
+        f"review_filled_event_count: {operator_summary['review_filled_event_count']}",
+        f"first_event_type: {operator_summary['first_event_type']}",
+        f"last_event_type: {operator_summary['last_event_type']}",
+    ]
+    return "\n".join(lines)
+
+
+def _write_operator_report(
+    *,
+    run_id: str,
+    mode: Mode,
+    replay_path: Path,
+    report_path: Path,
+    quality_issue_count: int,
+    scorecard: EvaluationScorecard,
+    review_packet: dict[str, Any],
+    operator_summary: dict[str, object],
+) -> None:
+    report_path.write_text(
+        _build_operator_report(
+            run_id=run_id,
+            mode=mode,
+            replay_path=replay_path,
+            quality_issue_count=quality_issue_count,
+            scorecard=scorecard,
+            review_packet=review_packet,
+            operator_summary=operator_summary,
+        ),
+        encoding="utf-8",
+    )
+
+
 def run_paper_replay(
     replay_path: str | Path,
     *,
@@ -260,6 +388,7 @@ def run_paper_replay(
         Path(run_dir) if run_dir is not None else settings.paths.runs_dir / resolved_run_id
     )
     summary_path = resolved_run_dir / "summary.json"
+    report_path = resolved_run_dir / "report.md"
 
     if resolved_journal_path.exists():
         raise FileExistsError(f"Journal path already exists: {resolved_journal_path}")
@@ -404,12 +533,23 @@ def run_paper_replay(
         "operator_summary": operator_summary,
     }
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+    _write_operator_report(
+        run_id=resolved_run_id,
+        mode=settings.mode,
+        replay_path=replay_fixture_path,
+        report_path=report_path,
+        quality_issue_count=len(quality_issues),
+        scorecard=scorecard,
+        review_packet=review_packet,
+        operator_summary=operator_summary,
+    )
 
     return PaperRunResult(
         run_id=resolved_run_id,
         replay_path=replay_fixture_path,
         journal_path=resolved_journal_path,
         summary_path=summary_path,
+        report_path=report_path,
         scorecard=scorecard,
         review_packet=review_packet,
         operator_summary=operator_summary,
@@ -455,6 +595,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "run_id": result.run_id,
                 "journal_path": str(result.journal_path),
                 "summary_path": str(result.summary_path),
+                "report_path": str(result.report_path),
                 "scorecard": result.scorecard.model_dump(mode="json"),
             },
             indent=2,
