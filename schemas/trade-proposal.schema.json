@@ -1,0 +1,187 @@
+{
+  "$defs": {
+    "ExecutionConstraints": {
+      "additionalProperties": false,
+      "properties": {
+        "max_slippage_bps": {
+          "default": 20.0,
+          "minimum": 0,
+          "title": "Max Slippage Bps",
+          "type": "number"
+        },
+        "max_spread_bps": {
+          "default": 15.0,
+          "minimum": 0,
+          "title": "Max Spread Bps",
+          "type": "number"
+        },
+        "min_notional_usd": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Notional Usd"
+        },
+        "order_type": {
+          "$ref": "#/$defs/OrderType",
+          "default": "market"
+        },
+        "time_in_force": {
+          "$ref": "#/$defs/TimeInForce",
+          "default": "gtc"
+        }
+      },
+      "title": "ExecutionConstraints",
+      "type": "object"
+    },
+    "OrderType": {
+      "enum": [
+        "market",
+        "limit"
+      ],
+      "title": "OrderType",
+      "type": "string"
+    },
+    "Side": {
+      "enum": [
+        "buy",
+        "sell"
+      ],
+      "title": "Side",
+      "type": "string"
+    },
+    "TimeInForce": {
+      "enum": [
+        "gtc",
+        "ioc",
+        "fok"
+      ],
+      "title": "TimeInForce",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "entry_reference": {
+      "exclusiveMinimum": 0,
+      "title": "Entry Reference",
+      "type": "number"
+    },
+    "execution_constraints": {
+      "$ref": "#/$defs/ExecutionConstraints"
+    },
+    "expected_holding_period": {
+      "minLength": 1,
+      "title": "Expected Holding Period",
+      "type": "string"
+    },
+    "invalidation_reason": {
+      "minLength": 1,
+      "title": "Invalidation Reason",
+      "type": "string"
+    },
+    "proposal_id": {
+      "title": "Proposal Id",
+      "type": "string"
+    },
+    "regime_context": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "title": "Regime Context",
+      "type": "object"
+    },
+    "side": {
+      "$ref": "#/$defs/Side"
+    },
+    "stop_price": {
+      "exclusiveMinimum": 0,
+      "title": "Stop Price",
+      "type": "number"
+    },
+    "strategy_id": {
+      "title": "Strategy Id",
+      "type": "string"
+    },
+    "supporting_features": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "title": "Supporting Features",
+      "type": "object"
+    },
+    "symbol": {
+      "title": "Symbol",
+      "type": "string"
+    },
+    "take_profit_price": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Take Profit Price"
+    },
+    "thesis": {
+      "minLength": 1,
+      "title": "Thesis",
+      "type": "string"
+    }
+  },
+  "required": [
+    "strategy_id",
+    "symbol",
+    "side",
+    "confidence",
+    "thesis",
+    "entry_reference",
+    "stop_price",
+    "expected_holding_period",
+    "invalidation_reason"
+  ],
+  "title": "TradeProposal",
+  "type": "object"
+}

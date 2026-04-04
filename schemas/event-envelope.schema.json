@@ -1,0 +1,98 @@
+{
+  "$defs": {
+    "EventType": {
+      "enum": [
+        "market.tick.received",
+        "market.candle.closed",
+        "features.computed",
+        "regime.updated",
+        "trade.proposal.created",
+        "risk.check.completed",
+        "policy.decision.made",
+        "order.intent.created",
+        "order.submitted",
+        "order.filled",
+        "order.rejected",
+        "position.updated",
+        "alert.raised",
+        "kill_switch.activated",
+        "review.packet.created"
+      ],
+      "title": "EventType",
+      "type": "string"
+    },
+    "Mode": {
+      "enum": [
+        "research_only",
+        "paper",
+        "limited_live",
+        "halted"
+      ],
+      "title": "Mode",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "$ref": "#/$defs/EventType"
+    },
+    "mode": {
+      "$ref": "#/$defs/Mode"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "strategy_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Strategy Id"
+    },
+    "symbol": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Symbol"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_type",
+    "source",
+    "run_id",
+    "mode"
+  ],
+  "title": "EventEnvelope",
+  "type": "object"
+}

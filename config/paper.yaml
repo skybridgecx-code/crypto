@@ -2,7 +2,28 @@ mode: paper
 app:
   name: crypto-agent
   environment: local
+  timezone: America/New_York
 paths:
   data_dir: data
   runs_dir: runs
   journals_dir: journals
+  schemas_dir: schemas
+venue:
+  default_venue: paper
+  allowed_symbols:
+    - BTCUSDT
+    - ETHUSDT
+  quote_currency: USDT
+risk:
+  max_portfolio_gross_exposure: 1.0
+  max_symbol_gross_exposure: 0.4
+  max_daily_realized_loss: 0.015
+  max_open_positions: 2
+  max_leverage: 1.0
+  max_spread_bps: 12.0
+  max_expected_slippage_bps: 15.0
+  min_24h_quote_volume_usd: 75000000.0
+policy:
+  allow_live_orders: false
+  require_manual_approval_above_notional_usd: 1000.0
+  kill_switch_enabled: true

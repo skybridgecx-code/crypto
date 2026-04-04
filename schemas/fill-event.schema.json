@@ -1,0 +1,104 @@
+{
+  "$defs": {
+    "FillStatus": {
+      "enum": [
+        "partially_filled",
+        "filled"
+      ],
+      "title": "FillStatus",
+      "type": "string"
+    },
+    "LiquidityRole": {
+      "enum": [
+        "maker",
+        "taker"
+      ],
+      "title": "LiquidityRole",
+      "type": "string"
+    },
+    "Mode": {
+      "enum": [
+        "research_only",
+        "paper",
+        "limited_live",
+        "halted"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "Side": {
+      "enum": [
+        "buy",
+        "sell"
+      ],
+      "title": "Side",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "fee_usd": {
+      "default": 0.0,
+      "minimum": 0,
+      "title": "Fee Usd",
+      "type": "number"
+    },
+    "fill_id": {
+      "title": "Fill Id",
+      "type": "string"
+    },
+    "intent_id": {
+      "title": "Intent Id",
+      "type": "string"
+    },
+    "liquidity_role": {
+      "$ref": "#/$defs/LiquidityRole",
+      "default": "taker"
+    },
+    "mode": {
+      "$ref": "#/$defs/Mode"
+    },
+    "notional_usd": {
+      "exclusiveMinimum": 0,
+      "title": "Notional Usd",
+      "type": "number"
+    },
+    "price": {
+      "exclusiveMinimum": 0,
+      "title": "Price",
+      "type": "number"
+    },
+    "quantity": {
+      "exclusiveMinimum": 0,
+      "title": "Quantity",
+      "type": "number"
+    },
+    "side": {
+      "$ref": "#/$defs/Side"
+    },
+    "status": {
+      "$ref": "#/$defs/FillStatus",
+      "default": "filled"
+    },
+    "symbol": {
+      "title": "Symbol",
+      "type": "string"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    }
+  },
+  "required": [
+    "intent_id",
+    "symbol",
+    "side",
+    "price",
+    "quantity",
+    "notional_usd",
+    "mode"
+  ],
+  "title": "FillEvent",
+  "type": "object"
+}

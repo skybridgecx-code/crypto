@@ -1,0 +1,106 @@
+{
+  "$defs": {
+    "Mode": {
+      "enum": [
+        "research_only",
+        "paper",
+        "limited_live",
+        "halted"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "OrderType": {
+      "enum": [
+        "market",
+        "limit"
+      ],
+      "title": "OrderType",
+      "type": "string"
+    },
+    "Side": {
+      "enum": [
+        "buy",
+        "sell"
+      ],
+      "title": "Side",
+      "type": "string"
+    },
+    "TimeInForce": {
+      "enum": [
+        "gtc",
+        "ioc",
+        "fok"
+      ],
+      "title": "TimeInForce",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "intent_id": {
+      "title": "Intent Id",
+      "type": "string"
+    },
+    "limit_price": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Limit Price"
+    },
+    "max_slippage_bps": {
+      "default": 20.0,
+      "minimum": 0,
+      "title": "Max Slippage Bps",
+      "type": "number"
+    },
+    "mode": {
+      "$ref": "#/$defs/Mode"
+    },
+    "order_type": {
+      "$ref": "#/$defs/OrderType",
+      "default": "market"
+    },
+    "proposal_id": {
+      "title": "Proposal Id",
+      "type": "string"
+    },
+    "quantity": {
+      "exclusiveMinimum": 0,
+      "title": "Quantity",
+      "type": "number"
+    },
+    "reduce_only": {
+      "default": false,
+      "title": "Reduce Only",
+      "type": "boolean"
+    },
+    "side": {
+      "$ref": "#/$defs/Side"
+    },
+    "symbol": {
+      "title": "Symbol",
+      "type": "string"
+    },
+    "time_in_force": {
+      "$ref": "#/$defs/TimeInForce",
+      "default": "gtc"
+    }
+  },
+  "required": [
+    "proposal_id",
+    "symbol",
+    "side",
+    "quantity",
+    "mode"
+  ],
+  "title": "OrderIntent",
+  "type": "object"
+}
