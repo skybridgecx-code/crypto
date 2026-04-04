@@ -29,6 +29,7 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - do not rewrite the architecture unless explicitly instructed
 - preserve the existing replay, journal, and snapshot surfaces unless the assignment explicitly changes them
 - treat the paper replay harness as the reference operator path unless the assignment explicitly changes it
+- when files were edited, run the autofix step before validation instead of relying on manual import cleanup
 
 ## Current Baseline
 
@@ -38,6 +39,7 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - replay scorecards, event counts, review packets, and replay-derived operator summaries are snapshot-locked
 - harness summaries, replay artifacts, and event-stream views are snapshot-locked
 - `make validate` is the default validation path
+- `make validate-edited` is the required validation path after file edits because it runs Ruff autofix before format, lint, typecheck, and test
 - live trading, exchange integration, UI, and production deployment are still out of scope
 
 ## Future Work Rule

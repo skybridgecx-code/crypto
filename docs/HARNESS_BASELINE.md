@@ -66,11 +66,13 @@ Adverse paths:
 
 ## Validation Command Path
 
+- `make fix`
 - `make format`
 - `make lint`
 - `make typecheck`
 - `make test`
 - `make validate`
+- `make validate-edited`
 
 ## Known Limits
 

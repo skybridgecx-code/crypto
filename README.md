@@ -63,7 +63,7 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -e ".[dev]"
-make validate
+make validate-edited
 ```
 
 ## Paper Replay Harness
@@ -98,3 +98,5 @@ Before making changes, read:
 - [docs/CODEX_HANDOFF.md](/Users/muhammadaatif/cryp/docs/CODEX_HANDOFF.md)
 
 Work in one bounded phase at a time. Treat [docs/BASELINE.md](/Users/muhammadaatif/cryp/docs/BASELINE.md) as the system reference point and [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md) as the operator-path reference point for future work. Validate before advancing. Do not add live trading features until the paper-trading path is stable, replayable, and explicitly approved to widen scope.
+
+When files were edited, run `make validate-edited` so Ruff autofix runs before format, lint, typecheck, and test. Use `make validate` only when you want the non-mutating validation pass on an already-clean tree.
