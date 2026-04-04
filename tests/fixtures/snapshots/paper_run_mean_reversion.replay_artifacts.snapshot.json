@@ -1,0 +1,60 @@
+{
+  "fixture": "paper_candles_mean_reversion_short.jsonl",
+  "operator_summary": {
+    "alert_count": 1,
+    "approval_count": 1,
+    "complete_execution_count": 1,
+    "denial_count": 0,
+    "event_count": 8,
+    "fill_event_count": 2,
+    "first_event_type": "trade.proposal.created",
+    "fixture": "paper_candles_mean_reversion_short.jsonl",
+    "halt_count": 0,
+    "incomplete_execution_count": 0,
+    "kill_switch_activations": 0,
+    "last_event_type": "alert.raised",
+    "order_intent_count": 1,
+    "order_reject_count": 0,
+    "orders_submitted_count": 1,
+    "partial_fill_intent_count": 1,
+    "proposal_count": 1,
+    "review_filled_event_count": 2,
+    "review_rejected_event_count": 0,
+    "run_id": "mean-reversion-paper-run"
+  },
+  "review_packet": {
+    "event_count": 8,
+    "event_types": [
+      "trade.proposal.created",
+      "risk.check.completed",
+      "policy.decision.made",
+      "order.intent.created",
+      "order.submitted",
+      "order.filled",
+      "order.filled",
+      "alert.raised"
+    ],
+    "filled_event_count": 2,
+    "rejected_event_count": 0
+  },
+  "scorecard": {
+    "approval_count": 1,
+    "average_slippage_bps": 0.5,
+    "complete_execution_count": 1,
+    "denial_count": 0,
+    "event_count": 8,
+    "fill_event_count": 2,
+    "filled_intent_count": 1,
+    "halt_count": 0,
+    "incomplete_execution_count": 0,
+    "max_slippage_bps": 0.5,
+    "order_intent_count": 1,
+    "order_reject_count": 0,
+    "orders_submitted_count": 1,
+    "partial_fill_intent_count": 1,
+    "proposal_count": 1,
+    "run_id": "mean-reversion-paper-run",
+    "total_fee_usd": 7.9995962141893,
+    "total_fill_notional_usd": 39997.9810709465
+  }
+}
