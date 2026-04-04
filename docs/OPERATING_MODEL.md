@@ -33,6 +33,7 @@ Current validated baseline:
 
 - replay, paper-simulator, monitoring, journaling, and evaluation paths are implemented
 - the paper replay harness is the validated single-run operator command path on top of those modules
+- the single-run operator report (`runs/<run-id>/report.md`) is part of the validated single-run path
 - the paper-run matrix is the validated fixed batch operator path built on top of the single-run harness
 - the matrix operator report (`runs/<matrix-run-id>/report.md`) is part of the validated batch path
 - limited-live remains a documented control boundary, not an active validated operating mode

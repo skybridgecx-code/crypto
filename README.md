@@ -16,7 +16,7 @@ Phase 0 defines the architecture and operating model. The repository currently i
 - deterministic replay and evaluation workflows
 - deterministic advisory-only LLM wrappers and prompts
 - replay regression snapshots for scorecards, event counts, review packets, and operator summaries
-- validated paper replay harness artifacts and snapshot coverage over summary, replay, and event-stream views
+- validated paper replay harness artifacts and snapshot coverage over summary, replay, event-stream, and operator-report views
 - validated paper-run matrix manifest, replay-aggregate, and operator-report artifacts with snapshot coverage
 - initial docs and tests
 
@@ -80,6 +80,7 @@ Artifacts are written to:
 
 - `journals/<run-id>.jsonl`
 - `runs/<run-id>/summary.json`
+- `runs/<run-id>/report.md`
 
 The frozen harness baseline is documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md).
 

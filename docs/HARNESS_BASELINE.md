@@ -29,6 +29,7 @@ The harness is validated only for `paper` mode and existing replay candle fixtur
 
 - append-only journal at `journals/<run-id>.jsonl`
 - run summary at `runs/<run-id>/summary.json`
+- operator report at `runs/<run-id>/report.md`
 - replay-derived scorecard
 - replay-derived review packet
 - replay-derived operator summary
@@ -41,6 +42,11 @@ The harness is validated only for `paper` mode and existing replay candle fixtur
   - [runs](/Users/muhammadaatif/cryp/runs)
 - harness snapshot artifacts:
   - [tests/fixtures/snapshots](/Users/muhammadaatif/cryp/tests/fixtures/snapshots)
+
+## Operator-Readable Artifact Path
+
+- single-run operator report:
+  - `runs/<run-id>/report.md`
 
 ## Validated Fixture Matrix
 
@@ -63,6 +69,8 @@ Adverse paths:
   - [tests/unit/test_paper_run_replay_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_replay_snapshots.py)
 - replay-derived event-count and event-sequence snapshots:
   - [tests/unit/test_paper_run_event_stream_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_event_stream_snapshots.py)
+- single-run operator report snapshots:
+  - [tests/unit/test_paper_run_report_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_report_snapshots.py)
 
 ## Validation Command Path
 

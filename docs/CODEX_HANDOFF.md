@@ -40,10 +40,11 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - Phases 1-10 are implemented
 - Validation Tracks 1-5 are implemented
 - the paper replay harness plus Harness Validation 1-4 are implemented
+- Single Run Report Pack and Single-Run Report Validation are implemented
 - the paper-run matrix plus Matrix Validation 1-2 are implemented
 - Matrix Report Pack and Matrix Report Validation are implemented
 - replay scorecards, event counts, review packets, and replay-derived operator summaries are snapshot-locked
-- harness summaries, replay artifacts, and event-stream views are snapshot-locked
+- harness summaries, replay artifacts, event-stream views, and single-run operator reports are snapshot-locked
 - matrix manifests and replay-derived batch aggregates are snapshot-locked
 - matrix operator reports and report snapshots are snapshot-locked
 - `make validate` is the default validation path after edits because it runs Ruff autofix before format, lint, typecheck, and test

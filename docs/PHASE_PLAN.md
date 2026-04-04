@@ -32,6 +32,8 @@ Complete one bounded phase at a time. Validate that phase before starting the ne
 - Harness Validation 2: replay artifact regression snapshots
 - Harness Validation 3: adverse paper-run snapshots
 - Harness Validation 4: event-stream regression snapshots
+- Single Run Report Pack: operator-readable single-run report artifact
+- Single-Run Report Validation: report regression snapshot coverage
 
 ## Completed Matrix Work
 
