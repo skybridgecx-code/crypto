@@ -64,6 +64,19 @@ pip install -e ".[dev]"
 make validate
 ```
 
+## Paper Replay Harness
+
+Run the validated paper-mode harness against a replay fixture:
+
+```bash
+crypto-agent-paper-run tests/fixtures/paper_candles_breakout_long.jsonl --config config/paper.yaml --run-id demo-paper-run
+```
+
+Artifacts are written to:
+
+- `journals/<run-id>.jsonl`
+- `runs/<run-id>/summary.json`
+
 ## Repo Layout
 
 The package layout follows the bounded module structure in [docs/ARCHITECTURE.md](/Users/muhammadaatif/cryp/docs/ARCHITECTURE.md). Empty directories are intentional placeholders for later phases.
