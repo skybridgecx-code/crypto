@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+from crypto_agent.execution.models import ExecutionReport
+from crypto_agent.monitoring.models import AlertEvent, AlertSeverity
+
+
+def generate_execution_alerts(
+    report: ExecutionReport,
+    slippage_alert_bps: float = 3.0,
+) -> list[AlertEvent]:
+    alerts: list[AlertEvent] = []
+    observed_at = report.fills[-1].timestamp if report.fills else datetime.now(UTC)
+
+    if report.rejected:
+        alerts.append(
+            AlertEvent(
+                code="order_rejected",
+                severity=AlertSeverity.CRITICAL,
+                message="Paper execution rejected the normalized order intent.",
+                observed_at=observed_at,
+                symbol=report.intent.symbol,
+                details={
+                    "intent_id": report.intent.intent_id,
+                    "reject_reason": report.reject_reason or "unknown",
+                },
+            )
+        )
+
+    if report.estimated_slippage_bps >= slippage_alert_bps:
+        alerts.append(
+            AlertEvent(
+                code="slippage_above_threshold",
+                severity=AlertSeverity.WARNING,
+                message="Estimated slippage exceeded the configured alert threshold.",
+                observed_at=observed_at,
+                symbol=report.intent.symbol,
+                details={
+                    "intent_id": report.intent.intent_id,
+                    "estimated_slippage_bps": report.estimated_slippage_bps,
+                },
+            )
+        )
+
+    if any(fill.status.value == "partially_filled" for fill in report.fills):
+        alerts.append(
+            AlertEvent(
+                code="partial_fill_detected",
+                severity=AlertSeverity.INFO,
+                message="Paper execution produced a partial fill sequence.",
+                observed_at=observed_at,
+                symbol=report.intent.symbol,
+                details={
+                    "intent_id": report.intent.intent_id,
+                    "fill_count": len(report.fills),
+                },
+            )
+        )
+
+    return alerts
