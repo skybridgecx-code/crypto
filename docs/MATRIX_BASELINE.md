@@ -64,8 +64,14 @@ The manifest records:
 
 ## Validation Command Path
 
+- `make phase-start`
 - `make validate`
 - `make validate-check`
+
+Phase-start rule:
+
+- run `make phase-start` before any edits in a new bounded phase
+- if it fails on dirty status, stash or commit interrupted work before starting new work
 
 ## Known Limits
 

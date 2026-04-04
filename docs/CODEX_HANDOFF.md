@@ -31,6 +31,8 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - preserve the existing replay, journal, and snapshot surfaces unless the assignment explicitly changes them
 - treat the paper replay harness as the reference operator path unless the assignment explicitly changes it
 - treat the paper-run matrix as the reference batch operator path unless the assignment explicitly changes it
+- before any edits in a new bounded phase, run `make phase-start` and require it to pass
+- if preflight fails because worktree is dirty, stash or commit interrupted work before starting new work
 - when files were edited, run the autofix step before validation instead of relying on manual import cleanup
 
 ## Current Baseline
@@ -52,5 +54,7 @@ Any future assignment must:
 
 - name the exact bounded phase or validation track
 - state what is in scope and out of scope
+- start with `make phase-start` before any edits
+- stash or commit interrupted work before starting a new assignment
 - explain how the work will be validated
 - stop after validation and commit

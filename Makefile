@@ -1,4 +1,9 @@
-.PHONY: fix format lint typecheck test validate validate-check
+.PHONY: preflight phase-start fix format lint typecheck test validate validate-check
+
+preflight:
+	./scripts/phase_start_preflight.sh
+
+phase-start: preflight
 
 fix:
 	ruff check --fix .

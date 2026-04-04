@@ -116,6 +116,20 @@ Before making changes, read:
 - [docs/PHASE_PLAN.md](/Users/muhammadaatif/cryp/docs/PHASE_PLAN.md)
 - [docs/CODEX_HANDOFF.md](/Users/muhammadaatif/cryp/docs/CODEX_HANDOFF.md)
 
+Before any new bounded phase, run:
+
+```bash
+make phase-start
+```
+
+This preflight fails fast unless all of the following are true:
+
+- you are in the correct repository
+- HEAD is resolvable and shown
+- git status is clean
+
+If preflight fails because work was interrupted, stash or commit that work before starting a new bounded phase.
+
 Work in one bounded phase at a time. Treat [docs/BASELINE.md](/Users/muhammadaatif/cryp/docs/BASELINE.md) as the system reference point, [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md) as the single-run operator-path reference point, and [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md) as the batch operator-path reference point for future work. Validate before advancing. Do not add live trading features until the paper-trading path is stable, replayable, and explicitly approved to widen scope.
 
 After edits, run `make validate` so Ruff autofix runs before format, lint, typecheck, and test. Use `make validate-check` only when you specifically want a non-mutating pass on an already-clean tree.
