@@ -32,6 +32,7 @@ Default operating progression:
 Current validated baseline:
 
 - replay, paper-simulator, monitoring, journaling, and evaluation paths are implemented
+- the paper replay harness is the validated operator command path on top of those modules
 - limited-live remains a documented control boundary, not an active validated operating mode
 - trust is currently grounded in replay and simulation evidence, not exchange execution
 

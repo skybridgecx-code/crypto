@@ -25,9 +25,21 @@ Complete one bounded phase at a time. Validate that phase before starting the ne
 - Validation Track 4: replay regression snapshots
 - Validation Track 5: review packet and operator-summary regression snapshots
 
+## Completed Harness Work
+
+- Paper Run Harness: end-to-end replay runner
+- Harness Validation 1: paper-run summary regression snapshots
+- Harness Validation 2: replay artifact regression snapshots
+- Harness Validation 3: adverse paper-run snapshots
+- Harness Validation 4: event-stream regression snapshots
+
 ## Baseline Freeze
 
 The current repository state is frozen as the validated baseline documented in [docs/BASELINE.md](/Users/muhammadaatif/cryp/docs/BASELINE.md). Future work should treat that document as the reference point and propose new bounded tracks relative to it.
+
+## Harness Freeze
+
+The paper replay harness is frozen as the validated operator path documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md). Future operator-facing work should extend that path rather than introducing a second CLI or parallel harness.
 
 ## Current Validation Path
 

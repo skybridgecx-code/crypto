@@ -43,4 +43,4 @@ The system is designed as a controlled trading platform, not a black-box autonom
 
 ## Current State
 
-The validated baseline now spans Phases 1-10 plus Validation Tracks 1-5. The architecture surface above is implemented in simulation-first form, with snapshot-locked replay outputs over scorecards, event counts, review packets, and replay-derived operator summaries.
+The validated baseline now spans Phases 1-10, Validation Tracks 1-5, the paper replay harness, and Harness Validation 1-4. The architecture surface above is implemented in simulation-first form, with snapshot-locked replay outputs over scorecards, event counts, review packets, replay-derived operator summaries, harness summaries, and harness event-stream views.

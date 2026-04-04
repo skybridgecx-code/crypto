@@ -2,7 +2,7 @@
 
 ## What Matters
 
-This repository is frozen as a validated simulation-first baseline after Phases 1-10 and Validation Tracks 1-5. It is the reference point for future bounded work.
+This repository is frozen as a validated simulation-first baseline after Phases 1-10, Validation Tracks 1-5, the paper-run harness, and Harness Validation 1-4. It is the reference point for future bounded work.
 
 ## Current Architecture Surface
 
@@ -13,6 +13,7 @@ This repository is frozen as a validated simulation-first baseline after Phases 
 - deterministic order normalization and paper execution simulation
 - deterministic monitoring alerts, health snapshots, journaling, replay, and evaluation
 - advisory-only LLM wrappers with strict JSON parsing
+- validated paper replay harness and operator artifacts over the existing journal/replay path
 
 ## Completed Phases
 
@@ -35,14 +36,32 @@ This repository is frozen as a validated simulation-first baseline after Phases 
 - Validation Track 4: replay regression snapshots
 - Validation Track 5: review packet and operator-summary regression snapshots
 
+## Completed Harness Work
+
+- Paper Run Harness: validated end-to-end paper replay operator command
+- Harness Validation 1: summary artifact regression snapshots
+- Harness Validation 2: replay-derived artifact regression snapshots
+- Harness Validation 3: adverse paper-run regression snapshots
+- Harness Validation 4: harness event-stream regression snapshots
+
 ## Snapshot Surfaces
 
 - replay scorecards and event-type counts:
   - [tests/unit/test_replay_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_replay_snapshots.py)
 - replay-derived review packets and operator summaries:
   - [tests/unit/test_review_packet_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_review_packet_snapshots.py)
+- paper-run harness summary snapshots:
+  - [tests/unit/test_paper_run_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_snapshots.py)
+- paper-run harness replay-derived artifact snapshots:
+  - [tests/unit/test_paper_run_replay_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_replay_snapshots.py)
+- paper-run harness event-stream snapshots:
+  - [tests/unit/test_paper_run_event_stream_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_event_stream_snapshots.py)
 - checked-in snapshot artifacts:
   - [tests/fixtures/snapshots](/Users/muhammadaatif/cryp/tests/fixtures/snapshots)
+
+## Operator Path
+
+The validated operator command path is documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md). Future operator-facing work should extend that path instead of creating a second CLI or parallel runtime entrypoint.
 
 ## Validation Command Path
 
