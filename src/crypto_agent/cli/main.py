@@ -321,7 +321,7 @@ def _build_operator_report(
         f"incomplete_execution_count: {operator_summary['incomplete_execution_count']}",
         f"alert_count: {operator_summary['alert_count']}",
         f"kill_switch_activations: {operator_summary['kill_switch_activations']}",
-        "review_rejected_event_count: " f"{operator_summary['review_rejected_event_count']}",
+        f"review_rejected_event_count: {operator_summary['review_rejected_event_count']}",
         f"review_filled_event_count: {operator_summary['review_filled_event_count']}",
         f"first_event_type: {operator_summary['first_event_type']}",
         f"last_event_type: {operator_summary['last_event_type']}",
