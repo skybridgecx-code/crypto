@@ -83,6 +83,7 @@ Artifacts are written to:
 - `runs/<run-id>/report.md`
 
 The frozen harness baseline is documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md).
+The canonical operator-surface summary is documented in [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md).
 
 ## Paper Run Matrix
 
@@ -113,6 +114,7 @@ Before making changes, read:
 - [docs/BASELINE.md](/Users/muhammadaatif/cryp/docs/BASELINE.md)
 - [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md)
 - [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md)
+- [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md)
 - [docs/OPERATING_MODEL.md](/Users/muhammadaatif/cryp/docs/OPERATING_MODEL.md)
 - [docs/RISK_POLICY.md](/Users/muhammadaatif/cryp/docs/RISK_POLICY.md)
 - [docs/PHASE_PLAN.md](/Users/muhammadaatif/cryp/docs/PHASE_PLAN.md)
@@ -132,6 +134,6 @@ This preflight fails fast unless all of the following are true:
 
 If preflight fails because work was interrupted, stash or commit that work before starting a new bounded phase.
 
-Work in one bounded phase at a time. Treat [docs/BASELINE.md](/Users/muhammadaatif/cryp/docs/BASELINE.md) as the system reference point, [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md) as the single-run operator-path reference point, and [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md) as the batch operator-path reference point for future work. Validate before advancing. Do not add live trading features until the paper-trading path is stable, replayable, and explicitly approved to widen scope.
+Work in one bounded phase at a time. Treat [docs/BASELINE.md](/Users/muhammadaatif/cryp/docs/BASELINE.md) as the system reference point and [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md) as the canonical operator-path summary for single-run and batch work. Validate before advancing. Do not add live trading features until the paper-trading path is stable, replayable, and explicitly approved to widen scope.
 
 After edits, run `make validate` so Ruff autofix runs before format, lint, typecheck, and test. Use `make validate-check` only when you specifically want a non-mutating pass on an already-clean tree.

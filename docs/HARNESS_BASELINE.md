@@ -4,6 +4,8 @@
 
 The paper replay harness is now the validated single-run operator path on top of the frozen simulation-first baseline. Future single-run operator work should extend this path, not fork a second one.
 
+The canonical operator-facing summary across single-run and batch paths is documented in [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md).
+
 ## Operator Command Path
 
 - console entrypoint: `crypto-agent-paper-run`

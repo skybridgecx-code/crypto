@@ -4,6 +4,8 @@
 
 The paper-run matrix is now the validated batch operator path on top of the frozen single-run harness. Future batch operator work should extend this path, not create a second batch runner.
 
+The canonical operator-facing summary across single-run and batch paths is documented in [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md).
+
 ## Operator Command Path
 
 - console entrypoint: `crypto-agent-paper-matrix-run`

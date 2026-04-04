@@ -5,6 +5,7 @@ Read first:
 - `docs/BASELINE.md`
 - `docs/HARNESS_BASELINE.md`
 - `docs/MATRIX_BASELINE.md`
+- `docs/OPERATOR_SURFACES.md`
 - `docs/ARCHITECTURE.md`
 - `docs/OPERATING_MODEL.md`
 - `docs/RISK_POLICY.md`
@@ -31,6 +32,7 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - preserve the existing replay, journal, and snapshot surfaces unless the assignment explicitly changes them
 - treat the paper replay harness as the reference operator path unless the assignment explicitly changes it
 - treat the paper-run matrix as the reference batch operator path unless the assignment explicitly changes it
+- treat `docs/OPERATOR_SURFACES.md` as the canonical operator-facing summary of those validated paths
 - before any edits in a new bounded phase, run `make phase-start` and require it to pass
 - if preflight fails because worktree is dirty, stash or commit interrupted work before starting new work
 - when files were edited, run the autofix step before validation instead of relying on manual import cleanup
@@ -47,6 +49,7 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - harness summaries, replay artifacts, event-stream views, and single-run operator reports are snapshot-locked
 - matrix manifests and replay-derived batch aggregates are snapshot-locked
 - matrix operator reports and report snapshots are snapshot-locked
+- `docs/OPERATOR_SURFACES.md` summarizes the frozen operator surfaces and workflow in one place
 - `make validate` is the default validation path after edits because it runs Ruff autofix before format, lint, typecheck, and test
 - `make validate-check` is the non-mutating verification path for an already-clean tree
 - live trading, exchange integration, UI, and production deployment are still out of scope

@@ -80,7 +80,7 @@ This repository is frozen as a validated simulation-first baseline after Phases 
 
 ## Operator Path
 
-The validated single-run operator command path is documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md). The validated batch operator path is documented in [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md). Future operator-facing work should extend those paths instead of creating parallel CLIs or runtime entrypoints.
+The validated single-run operator command path is documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md). The validated batch operator path is documented in [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md). The canonical operator-facing summary of both paths is documented in [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md). Future operator-facing work should extend those paths instead of creating parallel CLIs or runtime entrypoints.
 
 ## Validation Command Path
 
