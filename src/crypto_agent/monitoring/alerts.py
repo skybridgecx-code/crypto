@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from crypto_agent.config import Settings
 from crypto_agent.execution.models import ExecutionReport
 from crypto_agent.monitoring.models import AlertEvent, AlertSeverity
+from crypto_agent.policy.kill_switch import KillSwitchContext, evaluate_kill_switch
 
 
 def generate_execution_alerts(
@@ -58,4 +60,63 @@ def generate_execution_alerts(
             )
         )
 
+    return alerts
+
+
+def generate_kill_switch_alerts(
+    context: KillSwitchContext,
+    settings: Settings,
+    observed_at: datetime | None = None,
+) -> list[AlertEvent]:
+    state = evaluate_kill_switch(context, settings)
+    if not state.active:
+        return []
+
+    when = observed_at or datetime.now(UTC)
+    messages = {
+        "manual_halt": ("manual_halt", AlertSeverity.CRITICAL, "Manual halt activated."),
+        "missing_market_data_heartbeat": (
+            "missing_market_data_heartbeat",
+            AlertSeverity.CRITICAL,
+            "Market data heartbeat is missing.",
+        ),
+        "position_mismatch": (
+            "position_mismatch",
+            AlertSeverity.CRITICAL,
+            "Position state mismatched expected execution state.",
+        ),
+        "journal_write_failed": (
+            "journal_write_failed",
+            AlertSeverity.CRITICAL,
+            "Append-only journal write failed.",
+        ),
+        "repeated_order_rejects": (
+            "repeated_order_rejects",
+            AlertSeverity.WARNING,
+            "Repeated order rejects exceeded the configured threshold.",
+        ),
+        "slippage_breaches": (
+            "slippage_breaches",
+            AlertSeverity.WARNING,
+            "Slippage breaches exceeded the configured threshold.",
+        ),
+        "drawdown_breach": (
+            "drawdown_breach",
+            AlertSeverity.CRITICAL,
+            "Drawdown exceeded the configured threshold.",
+        ),
+    }
+
+    alerts: list[AlertEvent] = []
+    for reason in state.reason_codes:
+        code, severity, message = messages[reason]
+        alerts.append(
+            AlertEvent(
+                code=code,
+                severity=severity,
+                message=message,
+                observed_at=when,
+                details={"kill_switch_active": True},
+            )
+        )
     return alerts

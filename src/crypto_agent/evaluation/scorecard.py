@@ -36,6 +36,8 @@ def _collect_proposal_execution_state(
         if proposal_id is None:
             continue
 
+        state[proposal_id]
+
         if event.event_type is EventType.POLICY_DECISION_MADE:
             if str(payload["action"]) == PolicyAction.ALLOW.value:
                 state[proposal_id]["allowed"] = True
