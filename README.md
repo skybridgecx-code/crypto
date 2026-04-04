@@ -2,13 +2,13 @@
 
 Controlled, auditable, risk-aware crypto trading system built in bounded phases.
 
-Phase 0 defines the architecture and operating model. Phase 1 establishes the local repository foundation only:
+Phase 0 defines the architecture and operating model. The repository currently includes the first three bounded implementation phases:
 
 - Python packaging and quality gates
-- configuration skeleton
-- event envelope contract
-- initial docs
-- initial unit tests
+- configuration and shared contracts
+- event and schema artifacts
+- market-data models and replay skeleton
+- initial docs and tests
 
 This repository is intentionally simulation-first. Live trading is out of scope until paper-mode validation, replayability, and guardrail coverage are in place.
 
@@ -22,18 +22,21 @@ This repository is intentionally simulation-first. Live trading is out of scope 
 
 ## Current Scope
 
-Implemented in Phase 1:
+Implemented so far:
 
 - repository scaffold and module boundaries
 - `pyproject.toml`, `Makefile`, and `.env.example`
 - architecture and operating model docs
-- initial `config.py` and `events/envelope.py`
-- unit tests for config loading and the shared event envelope
+- typed config, enums, IDs, and core event/order/proposal contracts
+- checked-in JSON schema artifacts for core contracts
+- market-data models, replay loading, and paper-feed adapter skeleton
+- unit tests for config, contracts, replay loading, and market-data quality checks
 
 Explicitly not implemented yet:
 
 - exchange integrations
 - trading strategies
+- feature computation
 - risk sizing
 - execution routing
 - live trading
