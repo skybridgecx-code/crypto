@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import pytest
-
 from crypto_agent.features.liquidity import (
     compute_average_dollar_volume,
     compute_average_range_bps,

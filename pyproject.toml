@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 crypto-agent-paper-run = "crypto_agent.cli.main:main"
+crypto-agent-paper-matrix-run = "crypto_agent.cli.matrix:main"
 
 [project.optional-dependencies]
 dev = [
