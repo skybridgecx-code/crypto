@@ -1,0 +1,51 @@
+{
+  "fixture": "paper_candles_high_volatility.jsonl",
+  "operator_summary": {
+    "alert_count": 0,
+    "approval_count": 0,
+    "complete_execution_count": 0,
+    "denial_count": 0,
+    "event_count": 0,
+    "fill_event_count": 0,
+    "first_event_type": null,
+    "fixture": "paper_candles_high_volatility.jsonl",
+    "halt_count": 0,
+    "incomplete_execution_count": 0,
+    "kill_switch_activations": 0,
+    "last_event_type": null,
+    "order_intent_count": 0,
+    "order_reject_count": 0,
+    "orders_submitted_count": 0,
+    "partial_fill_intent_count": 0,
+    "proposal_count": 0,
+    "review_filled_event_count": 0,
+    "review_rejected_event_count": 0,
+    "run_id": "empty"
+  },
+  "review_packet": {
+    "event_count": 0,
+    "event_types": [],
+    "filled_event_count": 0,
+    "rejected_event_count": 0
+  },
+  "scorecard": {
+    "approval_count": 0,
+    "average_slippage_bps": 0.0,
+    "complete_execution_count": 0,
+    "denial_count": 0,
+    "event_count": 0,
+    "fill_event_count": 0,
+    "filled_intent_count": 0,
+    "halt_count": 0,
+    "incomplete_execution_count": 0,
+    "max_slippage_bps": 0.0,
+    "order_intent_count": 0,
+    "order_reject_count": 0,
+    "orders_submitted_count": 0,
+    "partial_fill_intent_count": 0,
+    "proposal_count": 0,
+    "run_id": "empty",
+    "total_fee_usd": 0.0,
+    "total_fill_notional_usd": 0.0
+  }
+}

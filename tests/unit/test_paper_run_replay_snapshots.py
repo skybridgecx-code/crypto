@@ -14,8 +14,15 @@ FIXTURES_DIR = Path("tests/fixtures")
 SNAPSHOTS_DIR = FIXTURES_DIR / "snapshots"
 
 
-def _paper_settings_for(tmp_path: Path):
+def _paper_settings_for(
+    tmp_path: Path,
+    *,
+    policy_overrides: dict[str, object] | None = None,
+):
     settings = load_settings(Path("config/paper.yaml"))
+    policy = settings.policy
+    if policy_overrides is not None:
+        policy = policy.model_copy(update=policy_overrides)
     return settings.model_copy(
         update={
             "paths": settings.paths.model_copy(
@@ -23,7 +30,8 @@ def _paper_settings_for(tmp_path: Path):
                     "runs_dir": tmp_path / "runs",
                     "journals_dir": tmp_path / "journals",
                 }
-            )
+            ),
+            "policy": policy,
         }
     )
 
@@ -108,4 +116,147 @@ def test_harness_generated_journal_replay_artifact_snapshots(
     } == _load_snapshot(snapshot_name)
     assert scorecard == result.scorecard.model_dump(mode="json")
     assert review_packet == result.review_packet
+    assert operator_summary == result.operator_summary
+
+
+@pytest.mark.parametrize(
+    (
+        "fixture_name",
+        "run_id",
+        "snapshot_name",
+        "equity_usd",
+        "policy_overrides",
+        "expected_event_types",
+        "expected_order_reject_count",
+        "expected_halt_count",
+        "expected_alert_count",
+        "expected_partial_fill_count",
+    ),
+    [
+        (
+            "paper_candles_high_volatility.jsonl",
+            "high-vol-no-signal-paper-run",
+            "paper_run_high_vol_no_signal.replay_artifacts.snapshot.json",
+            100_000.0,
+            None,
+            [],
+            0,
+            0,
+            0,
+            0,
+        ),
+        (
+            "paper_candles_breakout_long.jsonl",
+            "breakout-reject-low-equity-paper-run",
+            "paper_run_breakout_reject_low_equity.replay_artifacts.snapshot.json",
+            1.0,
+            None,
+            [
+                "trade.proposal.created",
+                "risk.check.completed",
+                "policy.decision.made",
+                "order.intent.created",
+                "order.submitted",
+                "order.rejected",
+                "alert.raised",
+            ],
+            1,
+            0,
+            1,
+            0,
+        ),
+        (
+            "paper_candles_breakout_long.jsonl",
+            "breakout-halt-drawdown-zero-paper-run",
+            "paper_run_breakout_halt_drawdown_zero.replay_artifacts.snapshot.json",
+            100_000.0,
+            {"max_drawdown_fraction": 0.0},
+            [
+                "trade.proposal.created",
+                "risk.check.completed",
+                "policy.decision.made",
+                "kill_switch.activated",
+                "alert.raised",
+            ],
+            0,
+            1,
+            1,
+            0,
+        ),
+    ],
+)
+def test_harness_generated_adverse_journal_replay_artifact_snapshots(
+    tmp_path: Path,
+    fixture_name: str,
+    run_id: str,
+    snapshot_name: str,
+    equity_usd: float,
+    policy_overrides: dict[str, object] | None,
+    expected_event_types: list[str],
+    expected_order_reject_count: int,
+    expected_halt_count: int,
+    expected_alert_count: int,
+    expected_partial_fill_count: int,
+) -> None:
+    result = run_paper_replay(
+        FIXTURES_DIR / fixture_name,
+        settings=_paper_settings_for(tmp_path, policy_overrides=policy_overrides),
+        run_id=run_id,
+        equity_usd=equity_usd,
+    )
+
+    replay_result = replay_journal(result.journal_path)
+    scorecard = replay_result.scorecard.model_dump(mode="json")
+    review_packet = build_review_packet(replay_result.events)
+    operator_summary = _operator_summary(
+        fixture_name=fixture_name,
+        scorecard=scorecard,
+        review_packet=review_packet,
+    )
+
+    assert {
+        "fixture": fixture_name,
+        "scorecard": scorecard,
+        "review_packet": review_packet,
+        "operator_summary": operator_summary,
+    } == _load_snapshot(snapshot_name)
+    assert review_packet["event_types"] == expected_event_types
+    assert scorecard["order_reject_count"] == expected_order_reject_count
+    assert scorecard["halt_count"] == expected_halt_count
+    assert operator_summary["alert_count"] == expected_alert_count
+    assert scorecard["partial_fill_intent_count"] == expected_partial_fill_count
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "run_id"),
+    [
+        ("paper_candles_breakout_long.jsonl", "breakout-partial-fill-paper-run"),
+        ("paper_candles_mean_reversion_short.jsonl", "mean-reversion-partial-fill-paper-run"),
+    ],
+)
+def test_harness_replay_artifacts_preserve_partial_fill_alert_paths(
+    tmp_path: Path,
+    fixture_name: str,
+    run_id: str,
+) -> None:
+    result = run_paper_replay(
+        FIXTURES_DIR / fixture_name,
+        settings=_paper_settings_for(tmp_path),
+        run_id=run_id,
+    )
+
+    replay_result = replay_journal(result.journal_path)
+    scorecard = replay_result.scorecard.model_dump(mode="json")
+    review_packet = build_review_packet(replay_result.events)
+    operator_summary = _operator_summary(
+        fixture_name=fixture_name,
+        scorecard=scorecard,
+        review_packet=review_packet,
+    )
+
+    assert scorecard["partial_fill_intent_count"] == 1
+    assert scorecard["order_reject_count"] == 0
+    assert scorecard["halt_count"] == 0
+    assert operator_summary["alert_count"] == 1
+    assert review_packet["event_types"][-1] == "alert.raised"
     assert operator_summary == result.operator_summary
