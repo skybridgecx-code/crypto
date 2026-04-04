@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 import pytest
+
 from crypto_agent.market_data.models import BookLevel, Candle, OrderBookSnapshot
 
 

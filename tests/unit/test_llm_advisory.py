@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from crypto_agent.config import load_settings
 from crypto_agent.evaluation.replay import replay_journal
 from crypto_agent.events.journal import AppendOnlyJournal, build_execution_events

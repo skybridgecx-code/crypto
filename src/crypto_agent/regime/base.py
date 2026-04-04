@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from crypto_agent.features.models import FeatureSnapshot
 
 
-class RegimeLabel(str, Enum):
+class RegimeLabel(StrEnum):
     TREND = "trend"
     RANGE = "range"
     HIGH_VOLATILITY = "high_volatility"

@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class Mode(str, Enum):
+class Mode(StrEnum):
     RESEARCH_ONLY = "research_only"
     PAPER = "paper"
     LIMITED_LIVE = "limited_live"
     HALTED = "halted"
 
 
-class EventType(str, Enum):
+class EventType(StrEnum):
     MARKET_TICK_RECEIVED = "market.tick.received"
     MARKET_CANDLE_CLOSED = "market.candle.closed"
     FEATURES_COMPUTED = "features.computed"
@@ -28,33 +28,33 @@ class EventType(str, Enum):
     REVIEW_PACKET_CREATED = "review.packet.created"
 
 
-class Side(str, Enum):
+class Side(StrEnum):
     BUY = "buy"
     SELL = "sell"
 
 
-class OrderType(str, Enum):
+class OrderType(StrEnum):
     MARKET = "market"
     LIMIT = "limit"
 
 
-class TimeInForce(str, Enum):
+class TimeInForce(StrEnum):
     GTC = "gtc"
     IOC = "ioc"
     FOK = "fok"
 
 
-class PolicyAction(str, Enum):
+class PolicyAction(StrEnum):
     ALLOW = "allow"
     DENY = "deny"
     HALT = "halt"
 
 
-class LiquidityRole(str, Enum):
+class LiquidityRole(StrEnum):
     MAKER = "maker"
     TAKER = "taker"
 
 
-class FillStatus(str, Enum):
+class FillStatus(StrEnum):
     PARTIALLY_FILLED = "partially_filled"
     FILLED = "filled"
