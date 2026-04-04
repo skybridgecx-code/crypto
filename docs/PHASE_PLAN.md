@@ -38,6 +38,8 @@ Complete one bounded phase at a time. Validate that phase before starting the ne
 - Paper Run Matrix: fixed five-case batch replay runner
 - Matrix Validation 1: manifest regression snapshots
 - Matrix Validation 2: replay aggregate regression snapshots
+- Matrix Report Pack: operator-readable batch report artifact
+- Matrix Report Validation: report regression snapshot coverage
 
 ## Baseline Freeze
 

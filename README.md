@@ -2,7 +2,7 @@
 
 Controlled, auditable, risk-aware crypto trading system built in bounded phases.
 
-Phase 0 defines the architecture and operating model. The repository currently includes all ten bounded implementation phases, Validation Tracks 1-5, the paper replay harness, Harness Validation 1-4, the paper-run matrix, Matrix Validation 1-2, and a frozen record of the validated system state:
+Phase 0 defines the architecture and operating model. The repository currently includes all ten bounded implementation phases, Validation Tracks 1-5, the paper replay harness, Harness Validation 1-4, the paper-run matrix, Matrix Validation 1-2, Matrix Report Pack, Matrix Report Validation, and a frozen record of the validated system state:
 
 - Python packaging and quality gates
 - configuration and shared contracts
@@ -17,7 +17,7 @@ Phase 0 defines the architecture and operating model. The repository currently i
 - deterministic advisory-only LLM wrappers and prompts
 - replay regression snapshots for scorecards, event counts, review packets, and operator summaries
 - validated paper replay harness artifacts and snapshot coverage over summary, replay, and event-stream views
-- validated paper-run matrix manifest and replay-aggregate artifacts with snapshot coverage
+- validated paper-run matrix manifest, replay-aggregate, and operator-report artifacts with snapshot coverage
 - initial docs and tests
 
 This repository is intentionally simulation-first. Live trading is out of scope until paper-mode validation, replayability, and guardrail coverage are in place.
@@ -50,7 +50,7 @@ Implemented so far:
 - unit tests for config, contracts, replay loading, market-data quality checks, signals, risk policy, execution, journaling, evaluation, LLM parsing, incident drills, and replay snapshot regression coverage
 - validation tracks for incident drills, mixed replay runs, multi-run replay suites, replay scorecard snapshots, and review/operator-summary snapshots
 - validated paper replay harness with regression snapshots for summary outputs, replay-derived artifacts, adverse runs, and event-stream views
-- validated paper-run matrix with regression snapshots for manifest and replay-derived batch aggregates
+- validated paper-run matrix with regression snapshots for manifest, replay-derived batch aggregates, and operator-readable report artifacts
 
 Explicitly not implemented yet:
 
@@ -96,6 +96,7 @@ Artifacts are written to:
 - `journals/<run-id>.jsonl` for each generated run
 - `runs/<run-id>/summary.json` for each generated run
 - `runs/<matrix-run-id>/manifest.json` for the batch manifest
+- `runs/<matrix-run-id>/report.md` for the batch operator report
 
 The frozen matrix baseline is documented in [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md).
 

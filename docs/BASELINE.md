@@ -2,7 +2,7 @@
 
 ## What Matters
 
-This repository is frozen as a validated simulation-first baseline after Phases 1-10, Validation Tracks 1-5, the paper-run harness, Harness Validation 1-4, the paper-run matrix, and Matrix Validation 1-2. It is the reference point for future bounded work.
+This repository is frozen as a validated simulation-first baseline after Phases 1-10, Validation Tracks 1-5, the paper-run harness, Harness Validation 1-4, the paper-run matrix, Matrix Validation 1-2, Matrix Report Pack, and Matrix Report Validation. It is the reference point for future bounded work.
 
 ## Current Architecture Surface
 
@@ -50,6 +50,8 @@ This repository is frozen as a validated simulation-first baseline after Phases 
 - Paper Run Matrix: validated fixed-matrix batch replay runner
 - Matrix Validation 1: manifest regression snapshots
 - Matrix Validation 2: replay-derived batch aggregate snapshots
+- Matrix Report Pack: operator-readable batch report artifact (`report.md`)
+- Matrix Report Validation: report regression snapshot coverage
 
 ## Snapshot Surfaces
 
@@ -67,6 +69,8 @@ This repository is frozen as a validated simulation-first baseline after Phases 
   - [tests/unit/test_paper_run_matrix_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_snapshots.py)
 - paper-run matrix replay-aggregate snapshots:
   - [tests/unit/test_paper_run_matrix_replay_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_replay_snapshots.py)
+- paper-run matrix report snapshots:
+  - [tests/unit/test_paper_run_matrix_report_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_report_snapshots.py)
 - checked-in snapshot artifacts:
   - [tests/fixtures/snapshots](/Users/muhammadaatif/cryp/tests/fixtures/snapshots)
 

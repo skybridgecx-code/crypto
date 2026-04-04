@@ -37,6 +37,7 @@ Outputs:
 - normal per-run journals at `journals/<run-id>.jsonl`
 - normal per-run summaries at `runs/<run-id>/summary.json`
 - aggregate manifest at `runs/<matrix-run-id>/manifest.json`
+- operator-readable batch report at `runs/<matrix-run-id>/report.md`
 
 The manifest records:
 
@@ -45,6 +46,12 @@ The manifest records:
 - journal path
 - summary path
 - top-level outcome counts derived from existing summary surfaces
+
+The report records:
+
+- aggregate manifest counts
+- aggregate replay-derived totals
+- per-run manifest and replay sections for operator review
 
 ## Artifact Locations
 
@@ -61,6 +68,8 @@ The manifest records:
   - [tests/unit/test_paper_run_matrix_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_snapshots.py)
 - matrix replay-aggregate snapshots rebuilt from manifest-referenced journals:
   - [tests/unit/test_paper_run_matrix_replay_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_replay_snapshots.py)
+- matrix report snapshots for `runs/<matrix-run-id>/report.md`:
+  - [tests/unit/test_paper_run_matrix_report_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_report_snapshots.py)
 
 ## Validation Command Path
 
@@ -79,10 +88,12 @@ Phase-start rule:
 - sequential local execution only
 - no live execution
 - no second batch runner
+- no second report path
 - batch outputs remain deterministic control artifacts, not live execution evidence
 
 ## Non-Goals
 
 - do not treat the matrix runner as a scheduler, orchestrator, or production job system
 - do not bypass the existing single-run harness, journal path, or replay path
+- do not fork a parallel batch report artifact path
 - do not add API, UI, or live venue behavior under matrix work unless explicitly assigned
