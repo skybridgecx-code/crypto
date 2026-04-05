@@ -35,7 +35,10 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - treat `docs/OPERATOR_SURFACES.md` as the canonical operator-facing summary of those validated paths
 - before any edits in a new bounded phase, run `make phase-start` and require it to pass
 - if preflight fails because worktree is dirty, stash or commit interrupted work before starting new work
-- when files were edited, run the autofix step before validation instead of relying on manual import cleanup
+- after bounded work, run `make phase-finish` before treating the phase as complete
+- if `make phase-finish` reports a dirty tree, commit intended changes and autofixes or revert unrelated churn before closing the phase
+- after commit or cleanup, run `make phase-close-check` on the final clean tree
+- when files were edited, rely on `make validate` inside `make phase-finish` instead of manual import cleanup
 
 ## Current Baseline
 
@@ -52,7 +55,9 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - matrix operator reports and report snapshots are snapshot-locked
 - `docs/OPERATOR_SURFACES.md` summarizes the frozen operator surfaces and workflow in one place
 - `make validate` is the default validation path after edits because it runs Ruff autofix before format, lint, typecheck, and test
-- `make validate-check` is the non-mutating verification path for an already-clean tree
+- `make validate-check` is the final verification path for an already-clean tree
+- `make phase-finish` is the required phase-end guardrail because it runs validation and then blocks phase completion on a dirty tree
+- `make phase-close-check` is the final clean-tree confirmation path after commit or cleanup
 - live trading, exchange integration, UI, and production deployment are still out of scope
 
 ## Future Work Rule
@@ -63,5 +68,8 @@ Any future assignment must:
 - state what is in scope and out of scope
 - start with `make phase-start` before any edits
 - stash or commit interrupted work before starting a new assignment
+- run `make phase-finish` before considering the assignment complete
+- commit intended changes and autofixes or revert unrelated churn if `make phase-finish` reports a dirty tree
+- run `make phase-close-check` on the final clean tree
 - explain how the work will be validated
 - stop after validation and commit

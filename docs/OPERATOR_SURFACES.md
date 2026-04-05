@@ -122,13 +122,14 @@ For any future bounded phase or validation track that touches operator surfaces:
 
 1. `make phase-start`
 2. do the bounded phase only
-3. `make validate`
-4. commit Ruff autofix changes if they are part of the intended scoped change; otherwise revert unrelated autofix churn before commit
-5. optionally run `make validate-check` when a non-mutating verification pass is specifically needed on the final clean tree
+3. `make phase-finish`
+4. if `make phase-finish` reports a dirty tree, commit intended Ruff autofix changes or revert unrelated churn before treating the phase as complete
+5. `make phase-close-check`
 
 Additional rule:
 
 - if `make phase-start` fails because the worktree is dirty, stash or commit interrupted work before starting new work
+- if work is interrupted after `make phase-finish`, stash or commit it before starting the next bounded phase
 
 ## Known Limits
 

@@ -78,13 +78,19 @@ The report records:
 ## Validation Command Path
 
 - `make phase-start`
-- `make validate`
-- `make validate-check`
+- `make phase-finish`
+- `make phase-close-check`
 
 Phase-start rule:
 
 - run `make phase-start` before any edits in a new bounded phase
 - if it fails on dirty status, stash or commit interrupted work before starting new work
+
+Phase-end rule:
+
+- run `make phase-finish` after the bounded matrix change is implemented
+- if it reports a dirty tree, commit intended changes and autofixes or revert unrelated churn before treating the phase as complete
+- run `make phase-close-check` on the final clean tree before closing the phase
 
 ## Known Limits
 

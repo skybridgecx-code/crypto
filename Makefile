@@ -1,9 +1,15 @@
-.PHONY: preflight phase-start fix format lint typecheck test validate validate-check
+.PHONY: preflight phase-start phase-finish phase-close-check fix format lint typecheck test validate validate-check
 
 preflight:
 	./scripts/phase_start_preflight.sh
 
 phase-start: preflight
+
+phase-finish:
+	./scripts/phase_finish_guardrail.sh
+
+phase-close-check:
+	./scripts/phase_close_check.sh
 
 fix:
 	ruff check --fix .

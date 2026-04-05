@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from crypto_agent.enums import EventType, FillStatus, LiquidityRole, Mode, PolicyAction, Side
 from crypto_agent.events.envelope import EventEnvelope
 from crypto_agent.types import FillEvent, OrderIntent, PolicyDecision, TradeProposal

@@ -149,4 +149,15 @@ If preflight fails because work was interrupted, stash or commit that work befor
 
 Work in one bounded phase at a time. Treat [docs/BASELINE.md](/Users/muhammadaatif/cryp/docs/BASELINE.md) as the system reference point and [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md) as the canonical operator-path summary for single-run and batch work. Validate before advancing. Do not add live trading features until the paper-trading path is stable, replayable, and explicitly approved to widen scope.
 
-After edits, run `make validate` so Ruff autofix runs before format, lint, typecheck, and test. Use `make validate-check` only when you specifically want a non-mutating pass on an already-clean tree.
+Required bounded-phase workflow:
+
+1. `make phase-start`
+2. do the bounded phase only
+3. `make phase-finish`
+4. if `make phase-finish` reports a dirty tree, commit intended changes and autofixes or revert unrelated churn before considering the phase complete
+5. `make phase-close-check`
+
+Command roles:
+
+- `make validate` remains the edited-tree-safe validation path and is run inside `make phase-finish`
+- `make validate-check` remains the final verification path on an already-clean tree and is run inside `make phase-close-check`

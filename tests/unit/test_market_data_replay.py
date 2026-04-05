@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import pytest
-
 from crypto_agent.market_data.replay import assess_candle_quality, load_candle_replay, load_jsonl
 
 FIXTURES_DIR = Path("tests/fixtures")
