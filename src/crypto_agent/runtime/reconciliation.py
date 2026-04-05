@@ -59,6 +59,15 @@ def write_reconciliation_report(
     return report_path
 
 
+def load_reconciliation_report(
+    path: str | Path,
+) -> ForwardPaperReconciliationReport:
+    report_path = Path(path)
+    return ForwardPaperReconciliationReport.model_validate(
+        json.loads(report_path.read_text(encoding="utf-8"))
+    )
+
+
 def write_recovery_status(
     path: str | Path,
     recovery_status: ForwardPaperRecoveryStatus,

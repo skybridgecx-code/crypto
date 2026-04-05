@@ -32,12 +32,19 @@ from crypto_agent.market_data.replay import load_candle_replay
 from crypto_agent.policy.live_controls import (
     LiveControlConfig,
     LiveControlDecision,
+    LiveControlStatusArtifact,
     ManualControlState,
     build_live_control_status_artifact,
     default_live_control_config,
     default_manual_control_state,
     evaluate_post_run_controls,
     evaluate_preflight_controls,
+)
+from crypto_agent.policy.live_gate import (
+    build_live_gate_decision,
+    build_live_gate_report,
+    build_live_gate_threshold_summary,
+    default_live_gate_config,
 )
 from crypto_agent.policy.readiness import LiveReadinessStatus, default_live_readiness_status
 from crypto_agent.runtime.history import append_forward_paper_history
@@ -51,9 +58,15 @@ from crypto_agent.runtime.models import (
 )
 from crypto_agent.runtime.reconciliation import (
     RuntimeAccountMismatchError,
+    load_reconciliation_report,
     reconcile_forward_paper_runtime,
 )
 from crypto_agent.runtime.session_registry import upsert_forward_paper_registry_entry
+from crypto_agent.runtime.shadow_evaluation import build_forward_paper_shadow_evaluation
+from crypto_agent.runtime.soak import (
+    build_forward_paper_soak_evaluation,
+    load_runtime_session_summaries,
+)
 
 
 class RuntimeAlreadyActiveError(RuntimeError):
@@ -146,6 +159,10 @@ def _load_control_decision(path: Path) -> LiveControlDecision:
     return LiveControlDecision.model_validate(json.loads(path.read_text(encoding="utf-8")))
 
 
+def _load_live_control_status(path: Path) -> LiveControlStatusArtifact:
+    return LiveControlStatusArtifact.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+
 def _requested_symbols_from_replay(path: Path) -> list[str]:
     return sorted({candle.symbol for candle in load_candle_replay(path)})
 
@@ -185,6 +202,11 @@ def build_forward_paper_runtime_paths(
         live_control_status_path=runtime_dir / "live_control_status.json",
         readiness_status_path=runtime_dir / "live_readiness_status.json",
         manual_control_state_path=runtime_dir / "manual_control_state.json",
+        soak_evaluation_path=runtime_dir / "soak_evaluation.json",
+        shadow_evaluation_path=runtime_dir / "shadow_evaluation.json",
+        live_gate_decision_path=runtime_dir / "live_gate_decision.json",
+        live_gate_threshold_summary_path=runtime_dir / "live_gate_threshold_summary.json",
+        live_gate_report_path=runtime_dir / "live_gate_report.md",
     )
 
 
@@ -266,6 +288,11 @@ def _initial_runtime_status(
         live_control_status_path=paths.live_control_status_path,
         readiness_status_path=paths.readiness_status_path,
         manual_control_state_path=paths.manual_control_state_path,
+        soak_evaluation_path=paths.soak_evaluation_path,
+        shadow_evaluation_path=paths.shadow_evaluation_path,
+        live_gate_decision_path=paths.live_gate_decision_path,
+        live_gate_threshold_summary_path=paths.live_gate_threshold_summary_path,
+        live_gate_report_path=paths.live_gate_report_path,
     )
 
 
@@ -900,6 +927,60 @@ def _persist_control_status(
     return updated_status
 
 
+def _materialize_live_gate_artifacts(
+    *,
+    status: ForwardPaperRuntimeStatus,
+    paths: ForwardPaperRuntimePaths,
+    generated_at: datetime,
+) -> None:
+    sessions = load_runtime_session_summaries(status.sessions_dir)
+    soak_evaluation = build_forward_paper_soak_evaluation(
+        runtime_id=status.runtime_id,
+        sessions=sessions,
+        generated_at=generated_at,
+    )
+    shadow_evaluation = build_forward_paper_shadow_evaluation(
+        runtime_id=status.runtime_id,
+        sessions=sessions,
+        generated_at=generated_at,
+    )
+    control_status = _load_live_control_status(status.live_control_status_path)
+    readiness = _load_readiness_status(status.readiness_status_path)
+    manual_controls = _load_manual_control_state(status.manual_control_state_path)
+    reconciliation_report = load_reconciliation_report(status.reconciliation_report_path)
+    gate_config = default_live_gate_config(runtime_id=status.runtime_id, updated_at=generated_at)
+    threshold_summary = build_live_gate_threshold_summary(
+        runtime_id=status.runtime_id,
+        generated_at=generated_at,
+        config=gate_config,
+        soak=soak_evaluation,
+        shadow=shadow_evaluation,
+        reconciliation=reconciliation_report,
+        control_status=control_status,
+        readiness=readiness,
+        manual_controls=manual_controls,
+    )
+    decision = build_live_gate_decision(
+        runtime_id=status.runtime_id,
+        generated_at=generated_at,
+        threshold_summary=threshold_summary,
+        soak_evaluation_path=paths.soak_evaluation_path,
+        shadow_evaluation_path=paths.shadow_evaluation_path,
+        threshold_summary_path=paths.live_gate_threshold_summary_path,
+    )
+    report = build_live_gate_report(
+        decision=decision,
+        threshold_summary=threshold_summary,
+        soak=soak_evaluation,
+        shadow=shadow_evaluation,
+    )
+    _write_json_artifact(paths.soak_evaluation_path, soak_evaluation)
+    _write_json_artifact(paths.shadow_evaluation_path, shadow_evaluation)
+    _write_json_artifact(paths.live_gate_threshold_summary_path, threshold_summary)
+    _write_json_artifact(paths.live_gate_decision_path, decision)
+    paths.live_gate_report_path.write_text(report, encoding="utf-8")
+
+
 def _materialize_execution_mode_artifacts(
     *,
     execution_mode: Literal["paper", "shadow", "sandbox"],
@@ -1458,6 +1539,12 @@ def run_forward_paper_runtime(
             )
             raise
 
+    _materialize_live_gate_artifacts(
+        status=status,
+        paths=paths,
+        generated_at=_normalize_datetime(now_fn()),
+    )
+
     return ForwardPaperRuntimeResult(
         runtime_id=status.runtime_id,
         registry_path=status.registry_path,
@@ -1475,6 +1562,11 @@ def run_forward_paper_runtime(
         live_control_status_path=status.live_control_status_path,
         readiness_status_path=status.readiness_status_path,
         manual_control_state_path=status.manual_control_state_path,
+        soak_evaluation_path=status.soak_evaluation_path,
+        shadow_evaluation_path=status.shadow_evaluation_path,
+        live_gate_decision_path=status.live_gate_decision_path,
+        live_gate_threshold_summary_path=status.live_gate_threshold_summary_path,
+        live_gate_report_path=status.live_gate_report_path,
         session_count=len(completed_sessions),
         session_summaries=completed_sessions,
     )

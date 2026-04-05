@@ -36,6 +36,11 @@ class ForwardPaperRuntimePaths(BaseModel):
     live_control_status_path: Path
     readiness_status_path: Path
     manual_control_state_path: Path
+    soak_evaluation_path: Path
+    shadow_evaluation_path: Path
+    live_gate_decision_path: Path
+    live_gate_threshold_summary_path: Path
+    live_gate_report_path: Path
 
 
 class RuntimeAccountPosition(BaseModel):
@@ -196,6 +201,159 @@ class ForwardPaperSessionSummary(BaseModel):
         return _normalize_datetime(value)
 
 
+class ForwardPaperSoakSessionRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    session_number: int = Field(ge=1)
+    status: Literal["running", "completed", "interrupted", "failed"]
+    session_outcome: (
+        Literal[
+            "executed",
+            "blocked_controls",
+            "skipped_stale_feed",
+            "skipped_degraded_feed",
+            "skipped_unavailable_feed",
+        ]
+        | None
+    ) = None
+    execution_mode: Literal["paper", "shadow", "sandbox"] = "paper"
+    run_id: str | None = None
+    return_fraction: float | None = None
+    ending_equity_usd: float | None = None
+    control_action: Literal["go", "no_go", "manual_approval_required"] | None = None
+    control_reason_codes: list[str] = Field(default_factory=list)
+
+
+class ForwardPaperSoakEvaluation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    generated_at: datetime
+    session_count: int = Field(ge=0)
+    completed_session_count: int = Field(default=0, ge=0)
+    executed_session_count: int = Field(default=0, ge=0)
+    blocked_session_count: int = Field(default=0, ge=0)
+    skipped_session_count: int = Field(default=0, ge=0)
+    failed_session_count: int = Field(default=0, ge=0)
+    interrupted_session_count: int = Field(default=0, ge=0)
+    cumulative_net_realized_pnl_usd: float = 0.0
+    latest_ending_equity_usd: float | None = None
+    average_return_fraction: float = 0.0
+    worst_session_return_fraction: float | None = None
+    best_session_return_fraction: float | None = None
+    rows: list[ForwardPaperSoakSessionRow] = Field(default_factory=list)
+
+    @field_validator("generated_at")
+    @classmethod
+    def normalize_generated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
+class ForwardPaperShadowEvaluationRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    session_number: int = Field(ge=1)
+    run_id: str | None = None
+    session_outcome: (
+        Literal[
+            "executed",
+            "blocked_controls",
+            "skipped_stale_feed",
+            "skipped_degraded_feed",
+            "skipped_unavailable_feed",
+        ]
+        | None
+    ) = None
+    control_action: Literal["go", "no_go", "manual_approval_required"] | None = None
+    request_count: int = Field(default=0, ge=0)
+    rejected_request_count: int = Field(default=0, ge=0)
+    would_send_count: int = Field(default=0, ge=0)
+    duplicate_count: int = Field(default=0, ge=0)
+    accepted_count: int = Field(default=0, ge=0)
+    rejected_count: int = Field(default=0, ge=0)
+    status_count: int = Field(default=0, ge=0)
+    terminal_status_count: int = Field(default=0, ge=0)
+    filled_status_count: int = Field(default=0, ge=0)
+    canceled_status_count: int = Field(default=0, ge=0)
+    all_artifacts_present: bool = True
+
+
+class ForwardPaperShadowEvaluation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    generated_at: datetime
+    shadow_session_count: int = Field(default=0, ge=0)
+    shadow_executed_session_count: int = Field(default=0, ge=0)
+    request_count: int = Field(default=0, ge=0)
+    rejected_request_count: int = Field(default=0, ge=0)
+    would_send_count: int = Field(default=0, ge=0)
+    duplicate_count: int = Field(default=0, ge=0)
+    accepted_count: int = Field(default=0, ge=0)
+    rejected_count: int = Field(default=0, ge=0)
+    status_count: int = Field(default=0, ge=0)
+    terminal_status_count: int = Field(default=0, ge=0)
+    filled_status_count: int = Field(default=0, ge=0)
+    canceled_status_count: int = Field(default=0, ge=0)
+    missing_request_artifact_count: int = Field(default=0, ge=0)
+    missing_result_artifact_count: int = Field(default=0, ge=0)
+    missing_status_artifact_count: int = Field(default=0, ge=0)
+    all_shadow_artifacts_present: bool = True
+    rows: list[ForwardPaperShadowEvaluationRow] = Field(default_factory=list)
+
+    @field_validator("generated_at")
+    @classmethod
+    def normalize_generated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
+class LiveGateThresholdCheck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    check_id: str
+    category: Literal["blocking", "readiness"]
+    description: str
+    passed: bool
+    actual: str
+    expected: str
+    reason_code: str | None = None
+
+
+class LiveGateThresholdSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    generated_at: datetime
+    blocking_passed: bool
+    readiness_passed: bool
+    checks: list[LiveGateThresholdCheck] = Field(default_factory=list)
+
+    @field_validator("generated_at")
+    @classmethod
+    def normalize_generated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
+class LiveGateDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    generated_at: datetime
+    state: Literal["ready", "not_ready", "blocked"]
+    summary: str
+    reason_codes: list[str] = Field(default_factory=list)
+    soak_evaluation_path: Path
+    shadow_evaluation_path: Path
+    threshold_summary_path: Path
+
+    @field_validator("generated_at")
+    @classmethod
+    def normalize_generated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
 class ForwardPaperRuntimeStatus(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -241,6 +399,11 @@ class ForwardPaperRuntimeStatus(BaseModel):
     live_control_status_path: Path
     readiness_status_path: Path
     manual_control_state_path: Path
+    soak_evaluation_path: Path
+    shadow_evaluation_path: Path
+    live_gate_decision_path: Path
+    live_gate_threshold_summary_path: Path
+    live_gate_report_path: Path
     control_status: Literal["go", "no_go", "manual_approval_required"] = "go"
     control_block_reasons: list[str] = Field(default_factory=list)
 
@@ -281,6 +444,11 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
     live_control_status_path: Path
     readiness_status_path: Path
     manual_control_state_path: Path
+    soak_evaluation_path: Path
+    shadow_evaluation_path: Path
+    live_gate_decision_path: Path
+    live_gate_threshold_summary_path: Path
+    live_gate_report_path: Path
     starting_equity_usd: float = Field(gt=0)
     session_interval_seconds: int = Field(gt=0)
     status: Literal["idle", "running"]
@@ -349,5 +517,10 @@ class ForwardPaperRuntimeResult(BaseModel):
     live_control_status_path: Path
     readiness_status_path: Path
     manual_control_state_path: Path
+    soak_evaluation_path: Path
+    shadow_evaluation_path: Path
+    live_gate_decision_path: Path
+    live_gate_threshold_summary_path: Path
+    live_gate_report_path: Path
     session_count: int = Field(ge=0)
     session_summaries: list[ForwardPaperSessionSummary] = Field(default_factory=list)

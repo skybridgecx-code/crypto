@@ -81,6 +81,11 @@ def test_runtime_recovery_writes_recovery_status_and_preserves_continuity(
         live_control_status_path=paths.live_control_status_path,
         readiness_status_path=paths.readiness_status_path,
         manual_control_state_path=paths.manual_control_state_path,
+        soak_evaluation_path=paths.soak_evaluation_path,
+        shadow_evaluation_path=paths.shadow_evaluation_path,
+        live_gate_decision_path=paths.live_gate_decision_path,
+        live_gate_threshold_summary_path=paths.live_gate_threshold_summary_path,
+        live_gate_report_path=paths.live_gate_report_path,
     )
     paths.status_path.write_text(
         json.dumps(status.model_dump(mode="json"), indent=2, sort_keys=True),
