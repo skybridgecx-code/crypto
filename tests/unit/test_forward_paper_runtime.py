@@ -106,6 +106,9 @@ def test_forward_paper_runtime_runs_repeated_sessions_and_persists_status(
     assert result.status_path.exists()
     assert result.history_path.exists()
     assert result.sessions_dir.exists()
+    assert result.account_state_path.exists()
+    assert result.reconciliation_report_path.exists()
+    assert result.recovery_status_path.exists()
     assert result.session_count == 2
     assert [session.session_id for session in result.session_summaries] == [
         "session-0001",
@@ -116,6 +119,8 @@ def test_forward_paper_runtime_runs_repeated_sessions_and_persists_status(
     assert status.completed_session_count == 2
     assert status.failed_session_count == 0
     assert status.interrupted_session_count == 0
+    assert status.reconciliation_status == "clean"
+    assert status.mismatch_detected is False
     assert status.next_session_number == 3
     assert status.last_session_id == "session-0002"
     assert status.next_scheduled_at == _tick(2026, 4, 5, 9, 2)
@@ -137,6 +142,10 @@ def test_forward_paper_runtime_runs_repeated_sessions_and_persists_status(
         assert linked_run_summary["run_id"] == summary.run_id
         assert linked_run_summary["scorecard"] == summary.scorecard.model_dump(mode="json")
         assert linked_run_summary["pnl"] == summary.pnl.model_dump(mode="json")
+
+    assert result.session_summaries[1].pnl.starting_equity_usd == pytest.approx(
+        result.session_summaries[0].pnl.ending_equity_usd
+    )
 
 
 def test_forward_paper_runtime_recovers_interrupted_session_on_restart(
@@ -177,6 +186,9 @@ def test_forward_paper_runtime_recovers_interrupted_session_on_restart(
         history_path=paths.history_path,
         sessions_dir=paths.sessions_dir,
         registry_path=paths.registry_path,
+        account_state_path=paths.account_state_path,
+        reconciliation_report_path=paths.reconciliation_report_path,
+        recovery_status_path=paths.recovery_status_path,
     )
     paths.status_path.write_text(
         json.dumps(status.model_dump(mode="json"), indent=2, sort_keys=True),
@@ -245,6 +257,9 @@ def test_forward_paper_runtime_prevents_duplicate_active_session_without_recover
         history_path=paths.history_path,
         sessions_dir=paths.sessions_dir,
         registry_path=paths.registry_path,
+        account_state_path=paths.account_state_path,
+        reconciliation_report_path=paths.reconciliation_report_path,
+        recovery_status_path=paths.recovery_status_path,
     )
     paths.status_path.write_text(
         json.dumps(status.model_dump(mode="json"), indent=2, sort_keys=True),
@@ -291,5 +306,8 @@ def test_cli_forward_paper_runtime_runs_single_session_and_prints_status(
     assert Path(output["status_path"]).exists()
     assert Path(output["history_path"]).exists()
     assert Path(output["sessions_dir"]).exists()
+    assert Path(output["account_state_path"]).exists()
+    assert Path(output["reconciliation_report_path"]).exists()
+    assert Path(output["recovery_status_path"]).exists()
     assert output["session_count"] == 1
     assert output["session_ids"] == ["session-0001"]

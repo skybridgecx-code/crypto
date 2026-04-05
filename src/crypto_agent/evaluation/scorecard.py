@@ -12,13 +12,14 @@ from crypto_agent.evaluation.models import (
     TradeLedgerEntry,
 )
 from crypto_agent.events.envelope import EventEnvelope
+from crypto_agent.portfolio.positions import Position
 from crypto_agent.types import FillEvent, TradeProposal
 
 POSITION_EPSILON = 1e-12
 
 
 @dataclass
-class _PnLPosition:
+class InventoryPosition:
     quantity: float = 0.0
     average_entry_price: float = 0.0
 
@@ -183,14 +184,14 @@ def build_scorecard(events: list[EventEnvelope]) -> EvaluationScorecard:
     )
 
 
-def _apply_fill_to_pnl_position(
-    position: _PnLPosition,
+def apply_fill_to_inventory_position(
+    position: InventoryPosition,
     fill: FillEvent,
-) -> tuple[_PnLPosition, float]:
+) -> tuple[InventoryPosition, float]:
     signed_fill_quantity = fill.quantity if fill.side is Side.BUY else -fill.quantity
 
     if abs(position.quantity) < POSITION_EPSILON:
-        return _PnLPosition(
+        return InventoryPosition(
             quantity=signed_fill_quantity,
             average_entry_price=fill.price,
         ), 0.0
@@ -201,7 +202,7 @@ def _apply_fill_to_pnl_position(
             abs(position.quantity) * position.average_entry_price
             + abs(signed_fill_quantity) * fill.price
         ) / abs(new_quantity)
-        return _PnLPosition(
+        return InventoryPosition(
             quantity=new_quantity,
             average_entry_price=average_entry_price,
         ), 0.0
@@ -214,15 +215,15 @@ def _apply_fill_to_pnl_position(
 
     remaining_quantity = position.quantity + signed_fill_quantity
     if abs(remaining_quantity) < POSITION_EPSILON:
-        return _PnLPosition(), gross_realized_pnl_usd
+        return InventoryPosition(), gross_realized_pnl_usd
 
     if position.quantity * remaining_quantity > 0:
-        return _PnLPosition(
+        return InventoryPosition(
             quantity=remaining_quantity,
             average_entry_price=position.average_entry_price,
         ), gross_realized_pnl_usd
 
-    return _PnLPosition(
+    return InventoryPosition(
         quantity=remaining_quantity,
         average_entry_price=fill.price,
     ), gross_realized_pnl_usd
@@ -233,6 +234,7 @@ def build_replay_pnl(
     *,
     final_close_by_symbol: dict[str, float],
     starting_equity_usd: float,
+    starting_positions: list[Position] | None = None,
 ) -> ReplayPnLSummary:
     fills = sorted(
         (
@@ -243,13 +245,28 @@ def build_replay_pnl(
         key=lambda fill: (fill.timestamp, fill.intent_id, fill.fill_id),
     )
 
-    positions: dict[str, _PnLPosition] = {}
+    positions: dict[str, InventoryPosition] = {
+        position.symbol: InventoryPosition(
+            quantity=position.quantity,
+            average_entry_price=position.entry_price,
+        )
+        for position in (starting_positions or [])
+        if abs(position.quantity) >= POSITION_EPSILON
+    }
+    starting_unrealized_pnl_usd = fsum(
+        position.quantity * (position.mark_price - position.entry_price)
+        for position in (starting_positions or [])
+        if abs(position.quantity) >= POSITION_EPSILON
+    )
     gross_realized_pnl_values: list[float] = []
     fee_values: list[float] = []
 
     for fill in fills:
-        current_position = positions.get(fill.symbol, _PnLPosition())
-        next_position, gross_realized_pnl_usd = _apply_fill_to_pnl_position(current_position, fill)
+        current_position = positions.get(fill.symbol, InventoryPosition())
+        next_position, gross_realized_pnl_usd = apply_fill_to_inventory_position(
+            current_position,
+            fill,
+        )
         gross_realized_pnl_values.append(gross_realized_pnl_usd)
         fee_values.append(fill.fee_usd)
 
@@ -269,7 +286,11 @@ def build_replay_pnl(
         for symbol, position in positions.items()
     )
     net_realized_pnl_usd = gross_realized_pnl_usd - total_fee_usd
-    ending_equity_usd = starting_equity_usd + net_realized_pnl_usd + ending_unrealized_pnl_usd
+    ending_equity_usd = (
+        starting_equity_usd
+        + net_realized_pnl_usd
+        + (ending_unrealized_pnl_usd - starting_unrealized_pnl_usd)
+    )
 
     return ReplayPnLSummary(
         starting_equity_usd=starting_equity_usd,
@@ -342,10 +363,13 @@ def build_trade_ledger(
         key=lambda item: (item[1].timestamp, item[1].intent_id, item[1].fill_id),
     )
 
-    positions: dict[str, _PnLPosition] = {}
+    positions: dict[str, InventoryPosition] = {}
     for linked_proposal_id, fill in fills:
-        current_position = positions.get(fill.symbol, _PnLPosition())
-        next_position, gross_realized_pnl_usd = _apply_fill_to_pnl_position(current_position, fill)
+        current_position = positions.get(fill.symbol, InventoryPosition())
+        next_position, gross_realized_pnl_usd = apply_fill_to_inventory_position(
+            current_position,
+            fill,
+        )
 
         if abs(next_position.quantity) < POSITION_EPSILON:
             positions.pop(fill.symbol, None)

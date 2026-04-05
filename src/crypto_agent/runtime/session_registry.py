@@ -60,12 +60,17 @@ def registry_entry_from_status(
         sessions_dir=status.sessions_dir,
         live_market_status_path=status.live_market_status_path,
         venue_constraints_path=status.venue_constraints_path,
+        account_state_path=status.account_state_path,
+        reconciliation_report_path=status.reconciliation_report_path,
+        recovery_status_path=status.recovery_status_path,
         starting_equity_usd=status.starting_equity_usd,
         session_interval_seconds=status.session_interval_seconds,
         status=status.status,
         next_session_number=status.next_session_number,
         active_session_id=status.active_session_id,
         last_session_id=status.last_session_id,
+        reconciliation_status=status.reconciliation_status,
+        mismatch_detected=status.mismatch_detected,
         updated_at=status.updated_at,
     )
 

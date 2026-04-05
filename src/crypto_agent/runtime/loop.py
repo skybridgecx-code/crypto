@@ -18,10 +18,15 @@ from crypto_agent.market_data.live_models import LiveFeedHealth, LiveMarketState
 from crypto_agent.runtime.history import append_forward_paper_history
 from crypto_agent.runtime.models import (
     ForwardPaperHistoryEvent,
+    ForwardPaperRuntimeAccountState,
     ForwardPaperRuntimePaths,
     ForwardPaperRuntimeResult,
     ForwardPaperRuntimeStatus,
     ForwardPaperSessionSummary,
+)
+from crypto_agent.runtime.reconciliation import (
+    RuntimeAccountMismatchError,
+    reconcile_forward_paper_runtime,
 )
 from crypto_agent.runtime.session_registry import upsert_forward_paper_registry_entry
 
@@ -89,7 +94,15 @@ def build_forward_paper_runtime_paths(
         registry_path=runs_dir / "forward_paper_registry.json",
         live_market_status_path=runtime_dir / "live_market_status.json",
         venue_constraints_path=runtime_dir / "venue_constraints.json",
+        account_state_path=runtime_dir / "account_state.json",
+        reconciliation_report_path=runtime_dir / "reconciliation_report.json",
+        recovery_status_path=runtime_dir / "recovery_status.json",
     )
+
+
+def _persist_runtime_status(status: ForwardPaperRuntimeStatus) -> None:
+    _write_runtime_status(status)
+    upsert_forward_paper_registry_entry(status.registry_path, status)
 
 
 def _write_live_market_state(paths: ForwardPaperRuntimePaths, state: LiveMarketState) -> None:
@@ -144,6 +157,9 @@ def _initial_runtime_status(
         registry_path=paths.registry_path,
         live_market_status_path=paths.live_market_status_path,
         venue_constraints_path=paths.venue_constraints_path,
+        account_state_path=paths.account_state_path,
+        reconciliation_report_path=paths.reconciliation_report_path,
+        recovery_status_path=paths.recovery_status_path,
     )
 
 
@@ -161,7 +177,12 @@ def _ensure_runtime_status(
     session_interval_seconds: int,
     now: datetime,
     recover_interrupted: bool,
-) -> ForwardPaperRuntimeStatus:
+) -> tuple[
+    ForwardPaperRuntimeStatus,
+    ForwardPaperRuntimeAccountState,
+    str | None,
+    str | None,
+]:
     if settings.mode is not Mode.PAPER:
         raise ValueError("Forward paper runtime requires settings.mode to be paper.")
 
@@ -201,9 +222,14 @@ def _ensure_runtime_status(
             now=now,
             paths=paths,
         )
-        _write_runtime_status(status)
-        upsert_forward_paper_registry_entry(paths.registry_path, status)
-        return status
+        _persist_runtime_status(status)
+        reconciled_status, reconciled_account_state, _, _ = reconcile_forward_paper_runtime(
+            status=status,
+            paths=paths,
+            reconciled_at=now,
+        )
+        _persist_runtime_status(reconciled_status)
+        return reconciled_status, reconciled_account_state, None, None
 
     status = _load_runtime_status(paths.status_path)
     if status.market_source != market_source:
@@ -222,25 +248,44 @@ def _ensure_runtime_status(
         raise ValueError("Existing runtime starting_equity_usd does not match requested value")
     if status.session_interval_seconds != session_interval_seconds:
         raise ValueError("Existing runtime interval does not match requested value")
+    recovered_session_id = None
+    recovery_note = None
     if status.status == "running" and status.active_session_id is not None:
         if not recover_interrupted:
             raise RuntimeAlreadyActiveError(
                 f"Forward paper runtime is already active: {runtime_id}"
             )
-        status = _recover_interrupted_session(status=status, recovered_at=now)
+        status, recovered_session_id, recovery_note = _recover_interrupted_session(
+            status=status,
+            recovered_at=now,
+        )
 
-    _write_runtime_status(status)
-    upsert_forward_paper_registry_entry(paths.registry_path, status)
-    return status
+    reconciled_status, account_state, _, _ = reconcile_forward_paper_runtime(
+        status=status,
+        paths=paths,
+        reconciled_at=now,
+        recovered_session_id=recovered_session_id,
+        recovery_note=recovery_note,
+    )
+    _persist_runtime_status(reconciled_status)
+    if reconciled_status.mismatch_detected:
+        raise RuntimeAccountMismatchError(
+            f"Forward paper runtime account state mismatch detected: {runtime_id}"
+        )
+    return reconciled_status, account_state, recovered_session_id, recovery_note
 
 
 def _recover_interrupted_session(
     *,
     status: ForwardPaperRuntimeStatus,
     recovered_at: datetime,
-) -> ForwardPaperRuntimeStatus:
+) -> tuple[ForwardPaperRuntimeStatus, str | None, str | None]:
     if status.active_session_id is None:
-        return status.model_copy(update={"status": "idle", "updated_at": recovered_at})
+        return (
+            status.model_copy(update={"status": "idle", "updated_at": recovered_at}),
+            None,
+            None,
+        )
 
     session_path = _session_summary_path(status.sessions_dir, status.active_session_id)
     if session_path.exists():
@@ -298,9 +343,8 @@ def _recover_interrupted_session(
             "updated_at": recovered_at,
         }
     )
-    _write_runtime_status(recovered_status)
-    upsert_forward_paper_registry_entry(recovered_status.registry_path, recovered_status)
-    return recovered_status
+    _persist_runtime_status(recovered_status)
+    return recovered_status, session_summary.session_id, session_summary.recovery_note
 
 
 def _start_session(
@@ -350,8 +394,7 @@ def _start_session(
             "updated_at": scheduled_at,
         }
     )
-    _write_runtime_status(running_status)
-    upsert_forward_paper_registry_entry(running_status.registry_path, running_status)
+    _persist_runtime_status(running_status)
     return running_status, session_summary, session_path
 
 
@@ -468,8 +511,7 @@ def _complete_status(
             "updated_at": completed_at,
         }
     )
-    _write_runtime_status(completed_status)
-    upsert_forward_paper_registry_entry(completed_status.registry_path, completed_status)
+    _persist_runtime_status(completed_status)
     return completed_status
 
 
@@ -572,7 +614,7 @@ def run_forward_paper_runtime(
         [_normalize_datetime(tick) for tick in tick_times] if tick_times is not None else None
     )
     initial_now = scheduled_ticks[0] if scheduled_ticks else _normalize_datetime(now_fn())
-    status = _ensure_runtime_status(
+    status, account_state, recovered_session_id, recovery_note = _ensure_runtime_status(
         settings=settings,
         market_source=market_source,
         replay_path=replay_fixture_path,
@@ -615,7 +657,8 @@ def run_forward_paper_runtime(
                     replay_fixture_path,
                     settings=settings,
                     run_id=run_id,
-                    equity_usd=equity_usd,
+                    equity_usd=account_state.ending_equity_usd,
+                    starting_portfolio=account_state.to_portfolio_state(),
                 )
                 completed_at = _normalize_datetime(now_fn())
                 completed_session = _completed_session_summary(
@@ -661,15 +704,15 @@ def run_forward_paper_runtime(
                         "updated_at": scheduled_at,
                     }
                 )
-                _write_runtime_status(status)
-                upsert_forward_paper_registry_entry(status.registry_path, status)
+                _persist_runtime_status(status)
 
                 if market_state.feed_health.status == "healthy":
                     result = run_paper_replay(
                         session_market_input_path,
                         settings=settings,
                         run_id=run_id,
-                        equity_usd=equity_usd,
+                        equity_usd=account_state.ending_equity_usd,
+                        starting_portfolio=account_state.to_portfolio_state(),
                     )
                     completed_at = _normalize_datetime(now_fn())
                     completed_session = _completed_session_summary(
@@ -710,6 +753,21 @@ def run_forward_paper_runtime(
                 session_summary=completed_session,
                 completed_at=completed_session.completed_at or scheduled_at,
             )
+            status, account_state, _, _ = reconcile_forward_paper_runtime(
+                status=status,
+                paths=paths,
+                reconciled_at=completed_session.completed_at or scheduled_at,
+                require_local_match=False,
+                recovered_session_id=recovered_session_id,
+                recovery_note=recovery_note,
+            )
+            recovered_session_id = None
+            recovery_note = None
+            _persist_runtime_status(status)
+            if status.mismatch_detected:
+                raise RuntimeAccountMismatchError(
+                    f"Forward paper runtime account state mismatch detected: {runtime_id}"
+                )
             completed_sessions.append(completed_session)
         except LiveMarketDataUnavailableError as exc:
             completed_at = _normalize_datetime(now_fn())
@@ -759,13 +817,23 @@ def run_forward_paper_runtime(
                     "updated_at": completed_at,
                 }
             )
-            _write_runtime_status(status)
-            upsert_forward_paper_registry_entry(status.registry_path, status)
+            _persist_runtime_status(status)
             status = _complete_status(
                 status=status,
                 session_summary=skipped_session,
                 completed_at=completed_at,
             )
+            status, account_state, _, _ = reconcile_forward_paper_runtime(
+                status=status,
+                paths=paths,
+                reconciled_at=completed_at,
+                require_local_match=False,
+                recovered_session_id=recovered_session_id,
+                recovery_note=recovery_note,
+            )
+            recovered_session_id = None
+            recovery_note = None
+            _persist_runtime_status(status)
             completed_sessions.append(skipped_session)
         except Exception as exc:
             failed_at = _normalize_datetime(now_fn())
@@ -803,6 +871,9 @@ def run_forward_paper_runtime(
         sessions_dir=status.sessions_dir,
         live_market_status_path=status.live_market_status_path,
         venue_constraints_path=status.venue_constraints_path,
+        account_state_path=status.account_state_path,
+        reconciliation_report_path=status.reconciliation_report_path,
+        recovery_status_path=status.recovery_status_path,
         session_count=len(completed_sessions),
         session_summaries=completed_sessions,
     )

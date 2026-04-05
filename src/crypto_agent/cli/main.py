@@ -470,6 +470,7 @@ def run_paper_replay(
     settings: Settings,
     run_id: str | None = None,
     equity_usd: float = 100_000.0,
+    starting_portfolio: PortfolioState | None = None,
     journal_path: str | Path | None = None,
     run_dir: str | Path | None = None,
 ) -> PaperRunResult:
@@ -511,10 +512,15 @@ def run_paper_replay(
     resolved_journal_path.touch(exist_ok=False)
 
     journal = AppendOnlyJournal(resolved_journal_path)
-    portfolio = PortfolioState(
-        equity_usd=equity_usd,
-        available_cash_usd=equity_usd,
+    initial_portfolio = (
+        starting_portfolio.model_copy(deep=True)
+        if starting_portfolio is not None
+        else PortfolioState(
+            equity_usd=equity_usd,
+            available_cash_usd=equity_usd,
+        )
     )
+    portfolio = initial_portfolio.model_copy(deep=True)
     kill_switch_context = KillSwitchContext()
     execution_router = ExecutionRouter()
     breakout_config = BreakoutSignalConfig()
@@ -625,14 +631,15 @@ def run_paper_replay(
     replay_result = replay_journal(
         resolved_journal_path,
         replay_path=replay_fixture_path,
-        starting_equity_usd=equity_usd,
+        starting_equity_usd=initial_portfolio.equity_usd,
+        starting_positions=initial_portfolio.positions,
     )
     scorecard = replay_result.scorecard
     if not replay_result.events:
         scorecard = EvaluationScorecard(run_id=resolved_run_id, event_count=0)
     pnl = replay_result.pnl or ReplayPnLSummary(
-        starting_equity_usd=equity_usd,
-        ending_equity_usd=equity_usd,
+        starting_equity_usd=initial_portfolio.equity_usd,
+        ending_equity_usd=initial_portfolio.equity_usd,
     )
     trade_ledger = build_trade_ledger(replay_result.events, run_id=resolved_run_id)
     review_packet = build_review_packet(replay_result.events)

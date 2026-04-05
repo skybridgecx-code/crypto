@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from crypto_agent.enums import Mode
 from crypto_agent.evaluation.models import EvaluationScorecard, ReplayPnLSummary
 from crypto_agent.market_data.live_models import LiveFeedHealth
+from crypto_agent.portfolio.positions import PortfolioState, Position
 
 
 def _normalize_datetime(value: datetime) -> datetime:
@@ -27,6 +28,106 @@ class ForwardPaperRuntimePaths(BaseModel):
     registry_path: Path
     live_market_status_path: Path
     venue_constraints_path: Path
+    account_state_path: Path
+    reconciliation_report_path: Path
+    recovery_status_path: Path
+
+
+class RuntimeAccountPosition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    quantity: float
+    entry_price: float = Field(gt=0)
+    mark_price: float = Field(gt=0)
+    market_value_usd: float
+    unrealized_pnl_usd: float
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_symbol(cls, value: str) -> str:
+        return value.strip().upper()
+
+
+class ForwardPaperRuntimeAccountState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    as_of_session_id: str | None = None
+    as_of_run_id: str | None = None
+    updated_at: datetime
+    starting_equity_usd: float = Field(gt=0)
+    cash_balance_usd: float
+    gross_position_notional_usd: float = Field(default=0.0, ge=0)
+    gross_realized_pnl_usd: float = 0.0
+    total_fee_usd: float = Field(default=0.0, ge=0)
+    net_realized_pnl_usd: float = 0.0
+    ending_unrealized_pnl_usd: float = 0.0
+    ending_equity_usd: float = Field(gt=0)
+    return_fraction: float = 0.0
+    open_intent_ids: list[str] = Field(default_factory=list)
+    positions: list[RuntimeAccountPosition] = Field(default_factory=list)
+
+    @field_validator("updated_at")
+    @classmethod
+    def normalize_updated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+    def to_portfolio_state(self) -> PortfolioState:
+        return PortfolioState(
+            equity_usd=self.ending_equity_usd,
+            available_cash_usd=self.cash_balance_usd,
+            daily_realized_pnl_usd=self.net_realized_pnl_usd,
+            positions=[
+                Position(
+                    symbol=position.symbol,
+                    quantity=position.quantity,
+                    entry_price=position.entry_price,
+                    mark_price=position.mark_price,
+                )
+                for position in self.positions
+            ],
+        )
+
+
+class ForwardPaperReconciliationReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    reconciled_at: datetime
+    status: Literal["clean", "mismatch"]
+    message: str | None = None
+    checked_session_count: int = Field(default=0, ge=0)
+    executed_session_count: int = Field(default=0, ge=0)
+    last_completed_session_id: str | None = None
+    last_completed_run_id: str | None = None
+    local_account_state_present: bool = False
+    expected_account_state: ForwardPaperRuntimeAccountState
+    local_account_state: ForwardPaperRuntimeAccountState | None = None
+    differences: list[str] = Field(default_factory=list)
+
+    @field_validator("reconciled_at")
+    @classmethod
+    def normalize_reconciled_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
+class ForwardPaperRecoveryStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    checked_at: datetime
+    status: Literal["clean", "recovered", "blocked_mismatch"]
+    reconciliation_status: Literal["clean", "mismatch"]
+    recovered_session_id: str | None = None
+    recovery_note: str | None = None
+    account_state_path: Path
+    reconciliation_report_path: Path
+
+    @field_validator("checked_at")
+    @classmethod
+    def normalize_checked_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
 
 
 class ForwardPaperSessionSummary(BaseModel):
@@ -105,6 +206,10 @@ class ForwardPaperRuntimeStatus(BaseModel):
     last_error_message: str | None = None
     feed_health: LiveFeedHealth | None = None
     venue_constraints_ready: bool = False
+    reconciliation_status: Literal["not_checked", "clean", "mismatch"] = "not_checked"
+    mismatch_detected: bool = False
+    last_reconciled_session_id: str | None = None
+    last_reconciliation_at: datetime | None = None
     updated_at: datetime
     status_path: Path
     history_path: Path
@@ -112,8 +217,16 @@ class ForwardPaperRuntimeStatus(BaseModel):
     registry_path: Path
     live_market_status_path: Path | None = None
     venue_constraints_path: Path | None = None
+    account_state_path: Path
+    reconciliation_report_path: Path
+    recovery_status_path: Path
 
-    @field_validator("active_session_started_at", "next_scheduled_at", "updated_at")
+    @field_validator(
+        "active_session_started_at",
+        "next_scheduled_at",
+        "last_reconciliation_at",
+        "updated_at",
+    )
     @classmethod
     def normalize_timestamps(cls, value: datetime | None) -> datetime | None:
         if value is None:
@@ -136,12 +249,17 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
     sessions_dir: Path
     live_market_status_path: Path | None = None
     venue_constraints_path: Path | None = None
+    account_state_path: Path
+    reconciliation_report_path: Path
+    recovery_status_path: Path
     starting_equity_usd: float = Field(gt=0)
     session_interval_seconds: int = Field(gt=0)
     status: Literal["idle", "running"]
     next_session_number: int = Field(ge=1)
     active_session_id: str | None = None
     last_session_id: str | None = None
+    reconciliation_status: Literal["not_checked", "clean", "mismatch"] = "not_checked"
+    mismatch_detected: bool = False
     updated_at: datetime
 
     @field_validator("updated_at")
@@ -191,5 +309,8 @@ class ForwardPaperRuntimeResult(BaseModel):
     sessions_dir: Path
     live_market_status_path: Path | None = None
     venue_constraints_path: Path | None = None
+    account_state_path: Path
+    reconciliation_report_path: Path
+    recovery_status_path: Path
     session_count: int = Field(ge=0)
     session_summaries: list[ForwardPaperSessionSummary] = Field(default_factory=list)

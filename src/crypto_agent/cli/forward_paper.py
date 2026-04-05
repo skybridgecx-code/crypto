@@ -115,6 +115,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "venue_constraints_path": str(result.venue_constraints_path)
                 if result.venue_constraints_path is not None
                 else None,
+                "account_state_path": str(result.account_state_path),
+                "reconciliation_report_path": str(result.reconciliation_report_path),
+                "recovery_status_path": str(result.recovery_status_path),
                 "session_count": result.session_count,
                 "session_ids": [session.session_id for session in result.session_summaries],
             },
