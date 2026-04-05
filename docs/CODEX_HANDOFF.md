@@ -31,6 +31,7 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - do not rewrite the architecture unless explicitly instructed
 - preserve the existing replay, journal, and snapshot surfaces unless the assignment explicitly changes them
 - treat the paper replay harness as the reference operator path unless the assignment explicitly changes it
+- treat `runs/<run-id>/trade_ledger.json` as part of the frozen single-run operator contract unless the assignment explicitly changes it
 - treat the paper-run matrix as the reference batch operator path unless the assignment explicitly changes it
 - treat `docs/OPERATOR_SURFACES.md` as the canonical operator-facing summary of those validated paths
 - before any edits in a new bounded phase, run `make phase-start` and require it to pass
@@ -46,11 +47,13 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - Validation Tracks 1-5 are implemented
 - the paper replay harness plus Harness Validation 1-4 are implemented
 - Single Run Report Pack and Single-Run Report Validation are implemented
+- Trade Ledger Surface and Trade Ledger Validation are implemented
 - the paper-run matrix plus Matrix Validation 1-2 are implemented
 - Matrix Report Pack and Matrix Report Validation are implemented
 - Paper PnL Surface is implemented
 - replay scorecards, event counts, review packets, and replay-derived operator summaries are snapshot-locked
 - harness summaries, replay artifacts, event-stream views, single-run operator reports, and deterministic PnL surfaces are snapshot-locked
+- single-run trade ledgers and trade-ledger snapshots are snapshot-locked
 - matrix manifests, replay-derived batch aggregates, and replay-derived batch PnL surfaces are snapshot-locked
 - matrix operator reports and report snapshots are snapshot-locked
 - `docs/OPERATOR_SURFACES.md` summarizes the frozen operator surfaces and workflow in one place

@@ -34,6 +34,8 @@ Complete one bounded phase at a time. Validate that phase before starting the ne
 - Harness Validation 4: event-stream regression snapshots
 - Single Run Report Pack: operator-readable single-run report artifact
 - Single-Run Report Validation: report regression snapshot coverage
+- Trade Ledger Surface: operator-readable single-run trade ledger artifact
+- Trade Ledger Validation: trade-ledger regression snapshot coverage
 
 ## Completed Matrix Work
 

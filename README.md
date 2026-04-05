@@ -2,7 +2,7 @@
 
 Controlled, auditable, risk-aware crypto trading system built in bounded phases.
 
-Phase 0 defines the architecture and operating model. The repository currently includes all ten bounded implementation phases, Validation Tracks 1-5, the paper replay harness, Harness Validation 1-4, the paper-run matrix, Matrix Validation 1-2, Matrix Report Pack, Matrix Report Validation, and a frozen record of the validated system state:
+Phase 0 defines the architecture and operating model. The repository currently includes all ten bounded implementation phases, Validation Tracks 1-5, the paper replay harness, Harness Validation 1-4, the paper-run matrix, Matrix Validation 1-2, Matrix Report Pack, Matrix Report Validation, Trade Ledger Surface, Trade Ledger Validation, and a frozen record of the validated system state:
 
 - Python packaging and quality gates
 - configuration and shared contracts
@@ -16,7 +16,7 @@ Phase 0 defines the architecture and operating model. The repository currently i
 - deterministic replay and evaluation workflows
 - deterministic advisory-only LLM wrappers and prompts
 - replay regression snapshots for scorecards, event counts, review packets, and operator summaries
-- validated paper replay harness artifacts and snapshot coverage over summary, replay, event-stream, and operator-report views
+- validated paper replay harness artifacts and snapshot coverage over summary, replay, event-stream, operator-report, and trade-ledger views
 - validated paper-run matrix manifest, replay-aggregate, and operator-report artifacts with snapshot coverage
 - initial docs and tests
 
@@ -51,6 +51,7 @@ Implemented so far:
 - unit tests for config, contracts, replay loading, market-data quality checks, signals, risk policy, execution, journaling, evaluation, LLM parsing, incident drills, and replay snapshot regression coverage
 - validation tracks for incident drills, mixed replay runs, multi-run replay suites, replay scorecard snapshots, and review/operator-summary snapshots
 - validated paper replay harness with regression snapshots for summary outputs, replay-derived artifacts, adverse runs, and event-stream views
+- validated single-run trade ledger with regression snapshots and replay/PnL reconciliation checks
 - validated paper-run matrix with regression snapshots for manifest, replay-derived batch aggregates, and operator-readable report artifacts
 
 Explicitly not implemented yet:
@@ -82,8 +83,9 @@ Artifacts are written to:
 - `journals/<run-id>.jsonl`
 - `runs/<run-id>/summary.json`
 - `runs/<run-id>/report.md`
+- `runs/<run-id>/trade_ledger.json`
 
-The single-run summary and report now include deterministic paper PnL fields:
+The single-run summary, report, and ledger now include deterministic paper PnL and trade-ledger surfaces:
 
 - `starting_equity_usd`
 - `gross_realized_pnl_usd`
@@ -92,6 +94,17 @@ The single-run summary and report now include deterministic paper PnL fields:
 - `ending_unrealized_pnl_usd`
 - `ending_equity_usd`
 - `return_fraction`
+- `proposal_id`
+- `symbol`
+- `side`
+- `strategy_id`
+- `intent_id`
+- `filled_size`
+- `average_fill_price`
+- `total_fee_usd`
+- `gross_realized_pnl_usd`
+- `net_realized_pnl_usd`
+- `ending_status`
 
 The frozen harness baseline is documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md).
 The canonical operator-surface summary is documented in [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md).

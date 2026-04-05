@@ -31,6 +31,7 @@ Single-run artifacts:
 - append-only journal: `journals/<run-id>.jsonl`
 - summary artifact: `runs/<run-id>/summary.json`
 - operator-readable report: `runs/<run-id>/report.md`
+- trade ledger artifact: `runs/<run-id>/trade_ledger.json`
 
 Single-run replay-derived surfaces:
 
@@ -43,6 +44,18 @@ Single-run replay-derived surfaces:
   - `ending_unrealized_pnl_usd`
   - `ending_equity_usd`
   - `return_fraction`
+- trade ledger rows:
+  - `proposal_id`
+  - `symbol`
+  - `side`
+  - `strategy_id`
+  - `intent_id`
+  - `filled_size`
+  - `average_fill_price`
+  - `total_fee_usd`
+  - `gross_realized_pnl_usd`
+  - `net_realized_pnl_usd`
+  - `ending_status`
 - review packet
 - operator summary
 
@@ -102,6 +115,8 @@ Single-run:
   - [tests/unit/test_paper_run_event_stream_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_event_stream_snapshots.py)
 - report snapshots:
   - [tests/unit/test_paper_run_report_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_report_snapshots.py)
+- trade-ledger snapshots:
+  - [tests/unit/test_paper_run_trade_ledger_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_trade_ledger_snapshots.py)
 
 Matrix:
 

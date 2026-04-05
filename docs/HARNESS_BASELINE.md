@@ -32,6 +32,7 @@ The harness is validated only for `paper` mode and existing replay candle fixtur
 - append-only journal at `journals/<run-id>.jsonl`
 - run summary at `runs/<run-id>/summary.json`
 - operator report at `runs/<run-id>/report.md`
+- trade ledger at `runs/<run-id>/trade_ledger.json`
 - replay-derived scorecard
 - replay-derived PnL summary:
   - `starting_equity_usd`
@@ -41,6 +42,18 @@ The harness is validated only for `paper` mode and existing replay candle fixtur
   - `ending_unrealized_pnl_usd`
   - `ending_equity_usd`
   - `return_fraction`
+- replay-derived trade ledger rows:
+  - `proposal_id`
+  - `symbol`
+  - `side`
+  - `strategy_id`
+  - `intent_id`
+  - `filled_size`
+  - `average_fill_price`
+  - `total_fee_usd`
+  - `gross_realized_pnl_usd`
+  - `net_realized_pnl_usd`
+  - `ending_status`
 - replay-derived review packet
 - replay-derived operator summary
 
@@ -57,6 +70,8 @@ The harness is validated only for `paper` mode and existing replay candle fixtur
 
 - single-run operator report:
   - `runs/<run-id>/report.md`
+- single-run trade ledger:
+  - `runs/<run-id>/trade_ledger.json`
 
 ## Validated Fixture Matrix
 
@@ -83,6 +98,19 @@ Adverse paths:
   - [tests/unit/test_paper_run_event_stream_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_event_stream_snapshots.py)
 - single-run operator report snapshots:
   - [tests/unit/test_paper_run_report_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_report_snapshots.py)
+- single-run trade-ledger snapshots:
+  - [tests/unit/test_paper_run_trade_ledger_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_trade_ledger_snapshots.py)
+
+## Ledger Reconciliation Rules
+
+- trade-ledger rows must be derived from the existing journal, replay, and replay-derived PnL path only
+- ledger fee totals must reconcile to replay PnL `total_fee_usd`
+- ledger gross realized PnL totals must reconcile to replay PnL `gross_realized_pnl_usd`
+- ledger net realized PnL totals must reconcile to replay PnL `net_realized_pnl_usd`
+- fill and partial rows must reconcile to `order.filled` events for the linked `intent_id`
+- reject rows must reconcile to `order.rejected` without linked fill events
+- halt rows must remain pre-execution rows with no linked intent or fill activity
+- no-signal runs must write an empty ledger with `row_count: 0`
 
 ## Validation Command Path
 
