@@ -6,6 +6,8 @@ The paper-run matrix is now the validated batch operator path on top of the froz
 
 The canonical operator-facing summary across single-run and batch paths is documented in [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md).
 
+The canonical first-launch live review procedure is documented in [docs/LIVE_LAUNCH_RUNBOOK.md](/Users/muhammadaatif/cryp/docs/LIVE_LAUNCH_RUNBOOK.md).
+
 ## Operator Command Path
 
 - console entrypoint: `crypto-agent-paper-matrix-run`
@@ -172,3 +174,7 @@ Phase-end rule:
 - do not bypass the existing single-run harness, journal path, or replay path
 - do not fork a parallel batch report artifact path
 - do not add API, UI, or live venue behavior under matrix work unless explicitly assigned
+
+## Forward Runtime Note
+
+The forward-runtime live gate remains downstream of the single-run and runtime evidence path. Batch artifacts are not the launch gate source of truth.

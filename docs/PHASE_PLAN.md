@@ -54,6 +54,16 @@ Complete one bounded phase at a time. Validate that phase before starting the ne
 
 The current repository state is frozen as the validated baseline documented in [docs/BASELINE.md](/Users/muhammadaatif/cryp/docs/BASELINE.md). Future work should treat that document as the reference point and propose new bounded tracks relative to it.
 
+## Completed Forward Runtime Work
+
+- Phase A: forward paper runtime
+- Phase B: live market data and venue constraints
+- Phase C: account state, reconciliation, and recovery
+- Phase D: shadow and sandbox execution adapter
+- Phase E: live risk controls and ops guardrails
+- Phase F: soak evaluation, shadow evaluation, and live gate
+- Live Launch Runbook Freeze: canonical first tiny-live review procedure without executable live mode
+
 ## Harness Freeze
 
 The paper replay harness is frozen as the validated operator path documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md). Future operator-facing work should extend that path rather than introducing a second CLI or parallel harness.

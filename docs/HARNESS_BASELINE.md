@@ -6,6 +6,8 @@ The paper replay harness is now the validated single-run operator path on top of
 
 The canonical operator-facing summary across single-run and batch paths is documented in [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md).
 
+The canonical first-launch live review procedure is documented in [docs/LIVE_LAUNCH_RUNBOOK.md](/Users/muhammadaatif/cryp/docs/LIVE_LAUNCH_RUNBOOK.md).
+
 ## Operator Command Path
 
 - console entrypoint: `crypto-agent-paper-run`
@@ -132,6 +134,8 @@ Phase-end rule:
 ## Batch Extension
 
 The validated batch operator path that builds on this harness is documented in [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md). Batch work should extend that matrix runner instead of adding a second batch path.
+
+The forward-runtime live gate consumes frozen single-run outputs as upstream evidence. Future live-readiness work should not bypass these single-run artifacts.
 
 ## Known Limits
 

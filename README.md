@@ -20,7 +20,7 @@ Phase 0 defines the architecture and operating model. The repository currently i
 - validated paper-run matrix manifest, replay-aggregate, comparison, operator-report, and trade-ledger artifacts with snapshot coverage
 - initial docs and tests
 
-This repository is intentionally simulation-first. Live trading is out of scope until paper-mode validation, replayability, and guardrail coverage are in place.
+This repository is intentionally simulation-first. Live trading is out of scope until paper-mode validation, replayability, guardrail coverage, and explicit live-gate review are in place.
 
 ## Principles
 
@@ -53,11 +53,12 @@ Implemented so far:
 - validated paper replay harness with regression snapshots for summary outputs, replay-derived artifacts, adverse runs, and event-stream views
 - validated single-run trade ledger with regression snapshots and replay/PnL reconciliation checks
 - validated paper-run matrix with regression snapshots for manifest, replay-derived batch aggregates, batch comparison artifacts, operator-readable report artifacts, and batch trade-ledger artifacts
+- validated forward-paper runtime with file-backed history, account reconciliation, live market input ingestion, shadow/sandbox execution evidence, live controls, soak evaluation, and live-gate artifacts
 
 Explicitly not implemented yet:
 
-- exchange integrations
-- live trading
+- unrestricted live trading
+- executable `limited_live`
 - production deployment or operator UI
 
 ## Quick Start
@@ -130,6 +131,28 @@ The matrix replay aggregate, comparison, trade ledger, and report now also inclu
 
 The frozen matrix baseline is documented in [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md).
 
+## Forward Runtime Gate
+
+The forward-paper runtime now writes deterministic gate and readiness artifacts under `runs/<runtime-id>/`:
+
+- `forward_paper_status.json`
+- `forward_paper_history.jsonl`
+- `account_state.json`
+- `reconciliation_report.json`
+- `live_control_status.json`
+- `live_readiness_status.json`
+- `manual_control_state.json`
+- `soak_evaluation.json`
+- `shadow_evaluation.json`
+- `live_gate_threshold_summary.json`
+- `live_gate_decision.json`
+- `live_gate_report.md`
+
+These artifacts are part of the frozen operator contract. They do not enable live execution.
+
+The canonical operator summary is documented in [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md).
+The canonical first tiny-live review procedure is documented in [docs/LIVE_LAUNCH_RUNBOOK.md](/Users/muhammadaatif/cryp/docs/LIVE_LAUNCH_RUNBOOK.md).
+
 ## Repo Layout
 
 The package layout follows the bounded module structure in [docs/ARCHITECTURE.md](/Users/muhammadaatif/cryp/docs/ARCHITECTURE.md). Empty directories are intentional placeholders for later phases.
@@ -143,6 +166,7 @@ Before making changes, read:
 - [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md)
 - [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md)
 - [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md)
+- [docs/LIVE_LAUNCH_RUNBOOK.md](/Users/muhammadaatif/cryp/docs/LIVE_LAUNCH_RUNBOOK.md)
 - [docs/OPERATING_MODEL.md](/Users/muhammadaatif/cryp/docs/OPERATING_MODEL.md)
 - [docs/RISK_POLICY.md](/Users/muhammadaatif/cryp/docs/RISK_POLICY.md)
 - [docs/PHASE_PLAN.md](/Users/muhammadaatif/cryp/docs/PHASE_PLAN.md)

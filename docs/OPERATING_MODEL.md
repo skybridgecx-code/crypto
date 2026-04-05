@@ -43,7 +43,14 @@ Current validated baseline:
 - deterministic replay-derived aggregate PnL is part of the validated matrix report path
 - aggregate totals and ranking fields are part of the validated matrix comparison view
 - `no_signal` rows are synthetic at the matrix ledger layer so the fixed batch artifact remains complete even when a per-run single-run ledger is empty
+- the forward-paper runtime writes validated gate and readiness artifacts:
+  - `soak_evaluation.json`
+  - `shadow_evaluation.json`
+  - `live_gate_threshold_summary.json`
+  - `live_gate_decision.json`
+  - `live_gate_report.md`
 - limited-live remains a documented control boundary, not an active validated operating mode
+- the canonical first-launch procedure is frozen in [docs/LIVE_LAUNCH_RUNBOOK.md](/Users/muhammadaatif/cryp/docs/LIVE_LAUNCH_RUNBOOK.md)
 - trust is currently grounded in replay and simulation evidence, not exchange execution
 
 ## Control Boundaries

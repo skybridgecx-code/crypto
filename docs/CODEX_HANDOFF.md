@@ -6,6 +6,7 @@ Read first:
 - `docs/HARNESS_BASELINE.md`
 - `docs/MATRIX_BASELINE.md`
 - `docs/OPERATOR_SURFACES.md`
+- `docs/LIVE_LAUNCH_RUNBOOK.md`
 - `docs/ARCHITECTURE.md`
 - `docs/OPERATING_MODEL.md`
 - `docs/RISK_POLICY.md`
@@ -36,6 +37,12 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - treat `runs/<matrix-run-id>/matrix_comparison.json` as part of the frozen batch operator contract unless the assignment explicitly changes it
 - treat `runs/<matrix-run-id>/matrix_trade_ledger.json` as part of the frozen batch operator contract unless the assignment explicitly changes it
 - treat `docs/OPERATOR_SURFACES.md` as the canonical operator-facing summary of those validated paths
+- treat `runs/<runtime-id>/soak_evaluation.json` as part of the frozen forward-runtime operator contract unless the assignment explicitly changes it
+- treat `runs/<runtime-id>/shadow_evaluation.json` as part of the frozen forward-runtime operator contract unless the assignment explicitly changes it
+- treat `runs/<runtime-id>/live_gate_threshold_summary.json` as part of the frozen forward-runtime operator contract unless the assignment explicitly changes it
+- treat `runs/<runtime-id>/live_gate_decision.json` as part of the frozen forward-runtime operator contract unless the assignment explicitly changes it
+- treat `runs/<runtime-id>/live_gate_report.md` as part of the frozen forward-runtime operator contract unless the assignment explicitly changes it
+- treat [docs/LIVE_LAUNCH_RUNBOOK.md](/Users/muhammadaatif/cryp/docs/LIVE_LAUNCH_RUNBOOK.md) as the canonical first-launch live review procedure
 - before any edits in a new bounded phase, run `make phase-start` and require it to pass
 - if preflight fails because worktree is dirty, stash or commit interrupted work before starting new work
 - after bounded work, run `make phase-finish` before treating the phase as complete
@@ -63,11 +70,20 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - matrix trade ledgers and trade-ledger snapshots are snapshot-locked
 - matrix operator reports and report snapshots are snapshot-locked
 - `docs/OPERATOR_SURFACES.md` summarizes the frozen operator surfaces and workflow in one place
+- Phases A-F are implemented:
+  - forward paper runtime
+  - live market data and venue constraints
+  - account-state reconciliation and recovery
+  - shadow and sandbox execution evidence
+  - live controls and ops guardrails
+  - soak evaluation, shadow evaluation, and live gate artifacts
+- the live-launch runbook is documented in `docs/LIVE_LAUNCH_RUNBOOK.md`
 - `make validate` is the default validation path after edits because it runs Ruff autofix before format, lint, typecheck, and test
 - `make validate-check` is the final verification path for an already-clean tree
 - `make phase-finish` is the required phase-end guardrail because it runs validation and then blocks phase completion on a dirty tree
 - `make phase-close-check` is the final clean-tree confirmation path after commit or cleanup
 - live trading, exchange integration, UI, and production deployment are still out of scope
+- future tiny-live review is documented, but executable live mode is still out of scope
 
 ## Future Work Rule
 

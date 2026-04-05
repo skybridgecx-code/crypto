@@ -8,6 +8,7 @@ It covers:
 
 - the validated single-run operator path
 - the validated batch operator path
+- the validated forward-runtime gate and readiness path
 - the file artifacts each path writes
 - the snapshot-locked validation surfaces that protect those artifacts
 - the required bounded-work workflow before future changes
@@ -140,6 +141,41 @@ Matrix replay-derived surfaces:
 - note:
   - `no_signal` rows are synthetic at the matrix layer so the fixed batch ledger stays complete even when a per-run single-run ledger has `row_count: 0`
 
+## Forward Runtime Gate Path
+
+Command path:
+
+- console entrypoint: `crypto-agent-forward-paper-run`
+- module entrypoint: `crypto_agent.cli.forward_paper:main`
+- core function: `crypto_agent.runtime.loop.run_forward_paper_runtime(...)`
+
+Current executable modes:
+
+- `paper`
+- `shadow`
+- `sandbox`
+
+Gate and readiness artifacts:
+
+- runtime status: `runs/<runtime-id>/forward_paper_status.json`
+- runtime history: `runs/<runtime-id>/forward_paper_history.jsonl`
+- account state: `runs/<runtime-id>/account_state.json`
+- reconciliation report: `runs/<runtime-id>/reconciliation_report.json`
+- live control status: `runs/<runtime-id>/live_control_status.json`
+- readiness status: `runs/<runtime-id>/live_readiness_status.json`
+- manual control state: `runs/<runtime-id>/manual_control_state.json`
+- soak evaluation: `runs/<runtime-id>/soak_evaluation.json`
+- shadow evaluation: `runs/<runtime-id>/shadow_evaluation.json`
+- live-gate threshold summary: `runs/<runtime-id>/live_gate_threshold_summary.json`
+- live-gate decision: `runs/<runtime-id>/live_gate_decision.json`
+- live-gate report: `runs/<runtime-id>/live_gate_report.md`
+
+Canonical first-launch runbook:
+
+- [docs/LIVE_LAUNCH_RUNBOOK.md](/Users/muhammadaatif/cryp/docs/LIVE_LAUNCH_RUNBOOK.md)
+
+The runbook freezes the future tiny-live review procedure only. It does not enable live execution today.
+
 ## Snapshot-Locked Validation Surfaces
 
 Single-run:
@@ -168,6 +204,20 @@ Matrix:
 - trade-ledger snapshots:
   - [tests/unit/test_paper_run_matrix_trade_ledger_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_trade_ledger_snapshots.py)
 
+Forward runtime gate and readiness:
+
+- runtime and recovery validation:
+  - [tests/unit/test_forward_paper_runtime.py](/Users/muhammadaatif/cryp/tests/unit/test_forward_paper_runtime.py)
+  - [tests/unit/test_runtime_recovery.py](/Users/muhammadaatif/cryp/tests/unit/test_runtime_recovery.py)
+- readiness and control validation:
+  - [tests/unit/test_readiness_status.py](/Users/muhammadaatif/cryp/tests/unit/test_readiness_status.py)
+- soak evaluation validation:
+  - [tests/unit/test_soak_evaluation.py](/Users/muhammadaatif/cryp/tests/unit/test_soak_evaluation.py)
+- shadow evaluation validation:
+  - [tests/unit/test_shadow_evaluation.py](/Users/muhammadaatif/cryp/tests/unit/test_shadow_evaluation.py)
+- live-gate validation:
+  - [tests/unit/test_live_gate.py](/Users/muhammadaatif/cryp/tests/unit/test_live_gate.py)
+
 Checked-in snapshot artifacts:
 
 - [tests/fixtures/snapshots](/Users/muhammadaatif/cryp/tests/fixtures/snapshots)
@@ -189,11 +239,11 @@ Additional rule:
 
 ## Known Limits
 
-- paper mode only
-- local replay fixtures only
-- deterministic simulator outputs only
-- no live execution
-- no exchange integration
+- trusted account state remains paper-derived
+- `shadow` remains no-transmit evidence only
+- `sandbox` remains sandbox-only evidence only
+- no executable `limited_live` mode
+- no unrestricted live execution
 - no funding-rate or borrowing-cost accounting
 - no intrabar mark model
 - no API or UI operator surface

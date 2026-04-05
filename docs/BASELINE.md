@@ -2,7 +2,7 @@
 
 ## What Matters
 
-This repository is frozen as a validated simulation-first baseline after Phases 1-10, Validation Tracks 1-5, the paper-run harness, Harness Validation 1-4, Single Run Report Pack, Single-Run Report Validation, Trade Ledger Surface, Trade Ledger Validation, the paper-run matrix, Matrix Validation 1-2, Matrix Report Pack, Matrix Report Validation, Matrix Comparison Surface, Matrix Comparison Validation, Matrix Trade Ledger Surface, Matrix Trade Ledger Validation, and Paper PnL Surface. It is the reference point for future bounded work.
+This repository is frozen as a validated simulation-first baseline after Phases 1-10, Validation Tracks 1-5, the paper-run harness, Harness Validation 1-4, Single Run Report Pack, Single-Run Report Validation, Trade Ledger Surface, Trade Ledger Validation, the paper-run matrix, Matrix Validation 1-2, Matrix Report Pack, Matrix Report Validation, Matrix Comparison Surface, Matrix Comparison Validation, Matrix Trade Ledger Surface, Matrix Trade Ledger Validation, Paper PnL Surface, Phases A-F, and the live-launch runbook freeze. It is the reference point for future bounded work.
 
 ## Current Architecture Surface
 
@@ -19,6 +19,8 @@ This repository is frozen as a validated simulation-first baseline after Phases 
 - advisory-only LLM wrappers with strict JSON parsing
 - validated paper replay harness and operator artifacts over the existing journal/replay path
 - validated paper-run matrix and batch artifacts over the existing harness, journal, and replay path
+- validated forward-paper runtime with reconciliation, shadow/sandbox evidence, live controls, soak evaluation, and live-gate artifacts over the existing file-backed path
+- canonical first-launch tiny-live review procedure documented without enabling live execution
 
 ## Completed Phases
 
@@ -65,6 +67,16 @@ This repository is frozen as a validated simulation-first baseline after Phases 
 - Matrix Trade Ledger Surface: operator-readable batch ledger artifact (`matrix_trade_ledger.json`)
 - Matrix Trade Ledger Validation: batch trade-ledger regression snapshot coverage
 
+## Completed Forward Runtime Work
+
+- Phase A: forward paper runtime
+- Phase B: live market data and venue constraints
+- Phase C: account state, reconciliation, and recovery
+- Phase D: live execution adapter in shadow and sandbox modes
+- Phase E: live risk controls and ops guardrails
+- Phase F: soak evaluation, shadow evaluation, and live gate artifacts
+- Live Launch Runbook Freeze: canonical tiny-live review procedure without executable live mode
+
 ## Snapshot Surfaces
 
 - replay scorecards and event-type counts:
@@ -98,7 +110,7 @@ This repository is frozen as a validated simulation-first baseline after Phases 
 
 ## Operator Path
 
-The validated single-run operator command path is documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md). The validated batch operator path is documented in [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md). The canonical operator-facing summary of both paths is documented in [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md). Future operator-facing work should extend those paths instead of creating parallel CLIs or runtime entrypoints.
+The validated single-run operator command path is documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md). The validated batch operator path is documented in [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md). The canonical operator-facing summary of single-run, batch, and forward-runtime gate paths is documented in [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md). The canonical first-launch review procedure is documented in [docs/LIVE_LAUNCH_RUNBOOK.md](/Users/muhammadaatif/cryp/docs/LIVE_LAUNCH_RUNBOOK.md). Future operator-facing work should extend those paths instead of creating parallel CLIs or runtime entrypoints.
 
 ## Validation Command Path
 
@@ -113,6 +125,7 @@ The validated single-run operator command path is documented in [docs/HARNESS_BA
 - no production deployment path
 - simulator behavior is deterministic and useful for control validation, not live-fill realism
 - limited-live remains a documented future control mode, not a baseline-trusted operating mode
+- the live-launch runbook is documentation-only until a later bounded phase explicitly adds executable limited-live behavior
 
 ## Non-Goals
 
