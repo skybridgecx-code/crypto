@@ -1,0 +1,19 @@
+{
+  "row_count": 1,
+  "rows": [
+    {
+      "average_fill_price": 68311.53139450043,
+      "ending_status": "partial",
+      "filled_size": 0.585651,
+      "gross_realized_pnl_usd": 0.0,
+      "intent_id": "intent-1",
+      "net_realized_pnl_usd": -8.001343334544114,
+      "proposal_id": "proposal-1",
+      "side": "buy",
+      "strategy_id": "breakout_v1",
+      "symbol": "BTCUSDT",
+      "total_fee_usd": 8.001343334544114
+    }
+  ],
+  "run_id": "breakout-partial-paper-run"
+}

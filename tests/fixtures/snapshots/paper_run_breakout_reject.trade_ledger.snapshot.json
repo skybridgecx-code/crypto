@@ -1,0 +1,19 @@
+{
+  "row_count": 1,
+  "rows": [
+    {
+      "average_fill_price": null,
+      "ending_status": "rejected",
+      "filled_size": 0.0,
+      "gross_realized_pnl_usd": 0.0,
+      "intent_id": "intent-1",
+      "net_realized_pnl_usd": 0.0,
+      "proposal_id": "proposal-1",
+      "side": "buy",
+      "strategy_id": "breakout_v1",
+      "symbol": "BTCUSDT",
+      "total_fee_usd": 0.0
+    }
+  ],
+  "run_id": "breakout-reject-paper-run"
+}
