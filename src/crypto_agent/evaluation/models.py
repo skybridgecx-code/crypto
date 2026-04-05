@@ -67,6 +67,32 @@ class TradeLedger(BaseModel):
     rows: list[TradeLedgerEntry] = Field(default_factory=list)
 
 
+class MatrixTradeLedgerEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    matrix_run_id: str
+    run_id: str
+    proposal_id: str | None = None
+    symbol: str | None = None
+    side: Side | None = None
+    strategy_id: str | None = None
+    intent_id: str | None = None
+    filled_size: float = Field(default=0.0, ge=0)
+    average_fill_price: float | None = Field(default=None, gt=0)
+    total_fee_usd: float = Field(default=0.0, ge=0)
+    gross_realized_pnl_usd: float = 0.0
+    net_realized_pnl_usd: float = 0.0
+    ending_status: Literal["filled", "partial", "rejected", "halted", "no_signal"]
+
+
+class MatrixTradeLedger(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    matrix_run_id: str
+    row_count: int = Field(ge=0)
+    rows: list[MatrixTradeLedgerEntry] = Field(default_factory=list)
+
+
 class ReplayResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

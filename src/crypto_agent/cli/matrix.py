@@ -11,7 +11,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from crypto_agent.cli.main import run_paper_replay
 from crypto_agent.config import Settings, load_settings
-from crypto_agent.evaluation.models import EvaluationScorecard, ReplayPnLSummary
+from crypto_agent.evaluation.models import (
+    EvaluationScorecard,
+    MatrixTradeLedger,
+    MatrixTradeLedgerEntry,
+    ReplayPnLSummary,
+    TradeLedger,
+)
 from crypto_agent.evaluation.replay import replay_journal
 from crypto_agent.ids import new_id
 
@@ -40,6 +46,7 @@ class PaperRunMatrixManifest(BaseModel):
 
     matrix_run_id: str
     manifest_path: str
+    matrix_trade_ledger_path: str
     entry_count: int = Field(ge=0)
     aggregate_counts: dict[str, int]
     entries: list[PaperRunMatrixEntry] = Field(default_factory=list)
@@ -171,6 +178,64 @@ def _relative_summary_path(run_id: str) -> str:
     return f"runs/{run_id}/summary.json"
 
 
+def _relative_matrix_trade_ledger_path(matrix_run_id: str) -> str:
+    return f"runs/{matrix_run_id}/matrix_trade_ledger.json"
+
+
+def _build_matrix_trade_ledger(manifest: PaperRunMatrixManifest) -> MatrixTradeLedger:
+    rows: list[MatrixTradeLedgerEntry] = []
+
+    for entry in manifest.entries:
+        summary = json.loads(Path(entry.summary_path).read_text(encoding="utf-8"))
+        trade_ledger = TradeLedger.model_validate(
+            json.loads(Path(summary["trade_ledger_path"]).read_text(encoding="utf-8"))
+        )
+        if trade_ledger.row_count == 0:
+            rows.append(
+                MatrixTradeLedgerEntry(
+                    matrix_run_id=manifest.matrix_run_id,
+                    run_id=entry.run_id,
+                    ending_status="no_signal",
+                )
+            )
+            continue
+
+        rows.extend(
+            MatrixTradeLedgerEntry(
+                matrix_run_id=manifest.matrix_run_id,
+                run_id=entry.run_id,
+                proposal_id=ledger_row.proposal_id,
+                symbol=ledger_row.symbol,
+                side=ledger_row.side,
+                strategy_id=ledger_row.strategy_id,
+                intent_id=ledger_row.intent_id,
+                filled_size=ledger_row.filled_size,
+                average_fill_price=ledger_row.average_fill_price,
+                total_fee_usd=ledger_row.total_fee_usd,
+                gross_realized_pnl_usd=ledger_row.gross_realized_pnl_usd,
+                net_realized_pnl_usd=ledger_row.net_realized_pnl_usd,
+                ending_status=ledger_row.ending_status,
+            )
+            for ledger_row in trade_ledger.rows
+        )
+
+    return MatrixTradeLedger(
+        matrix_run_id=manifest.matrix_run_id,
+        row_count=len(rows),
+        rows=rows,
+    )
+
+
+def _write_matrix_trade_ledger(manifest: PaperRunMatrixManifest) -> Path:
+    trade_ledger = _build_matrix_trade_ledger(manifest)
+    trade_ledger_path = Path(manifest.matrix_trade_ledger_path)
+    trade_ledger_path.write_text(
+        json.dumps(trade_ledger.model_dump(mode="json"), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return trade_ledger_path
+
+
 def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
     replay_runs: list[
         tuple[PaperRunMatrixEntry, EvaluationScorecard, ReplayPnLSummary, int, int]
@@ -248,6 +313,7 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
         f"matrix_run_id: {manifest.matrix_run_id}",
         f"entry_count: {manifest.entry_count}",
         f"manifest_path: runs/{manifest.matrix_run_id}/manifest.json",
+        f"matrix_trade_ledger_path: {_relative_matrix_trade_ledger_path(manifest.matrix_run_id)}",
         f"report_path: runs/{manifest.matrix_run_id}/report.md",
         "",
         "## Aggregate Manifest Counts",
@@ -374,6 +440,7 @@ def run_paper_replay_matrix(
     manifest = PaperRunMatrixManifest(
         matrix_run_id=resolved_matrix_run_id,
         manifest_path=str(resolved_manifest_path),
+        matrix_trade_ledger_path=str(resolved_manifest_path.with_name("matrix_trade_ledger.json")),
         entry_count=len(entries),
         aggregate_counts=_aggregate_counts(entries),
         entries=entries,
@@ -382,6 +449,7 @@ def run_paper_replay_matrix(
         json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True),
         encoding="utf-8",
     )
+    _write_matrix_trade_ledger(manifest)
     _write_operator_report(manifest)
     return manifest
 

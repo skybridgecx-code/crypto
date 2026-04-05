@@ -32,6 +32,7 @@ def _normalize_manifest(manifest: dict[str, object]) -> dict[str, object]:
     normalized = dict(manifest)
     matrix_run_id = str(normalized["matrix_run_id"])
     normalized["manifest_path"] = f"runs/{matrix_run_id}/manifest.json"
+    normalized["matrix_trade_ledger_path"] = f"runs/{matrix_run_id}/matrix_trade_ledger.json"
     normalized_entries: list[dict[str, object]] = []
     for raw_entry in manifest["entries"]:
         entry = dict(raw_entry)
