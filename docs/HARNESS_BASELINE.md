@@ -33,6 +33,14 @@ The harness is validated only for `paper` mode and existing replay candle fixtur
 - run summary at `runs/<run-id>/summary.json`
 - operator report at `runs/<run-id>/report.md`
 - replay-derived scorecard
+- replay-derived PnL summary:
+  - `starting_equity_usd`
+  - `gross_realized_pnl_usd`
+  - `total_fee_usd`
+  - `net_realized_pnl_usd`
+  - `ending_unrealized_pnl_usd`
+  - `ending_equity_usd`
+  - `return_fraction`
 - replay-derived review packet
 - replay-derived operator summary
 
@@ -69,6 +77,8 @@ Adverse paths:
   - [tests/unit/test_paper_run_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_snapshots.py)
 - replay-derived scorecard, review packet, and operator-summary snapshots:
   - [tests/unit/test_paper_run_replay_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_replay_snapshots.py)
+- deterministic paper PnL tests:
+  - [tests/unit/test_paper_run_pnl.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_pnl.py)
 - replay-derived event-count and event-sequence snapshots:
   - [tests/unit/test_paper_run_event_stream_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_event_stream_snapshots.py)
 - single-run operator report snapshots:
@@ -95,6 +105,8 @@ The validated batch operator path that builds on this harness is documented in [
 - no exchange connectivity or reconciliation
 - no second operator path
 - harness outputs are deterministic control artifacts, not live-fill realism
+- ending marks use the replay fixture's final available close for each symbol
+- no funding-rate, borrow-cost, or intrabar mark accounting
 - replay fixtures remain narrow and synthetic relative to real market conditions
 
 ## Non-Goals

@@ -35,6 +35,14 @@ Single-run artifacts:
 Single-run replay-derived surfaces:
 
 - replay scorecard
+- replay PnL summary:
+  - `starting_equity_usd`
+  - `gross_realized_pnl_usd`
+  - `total_fee_usd`
+  - `net_realized_pnl_usd`
+  - `ending_unrealized_pnl_usd`
+  - `ending_equity_usd`
+  - `return_fraction`
 - review packet
 - operator summary
 
@@ -79,6 +87,8 @@ Matrix replay-derived surfaces:
 
 - per-run replay scorecard summaries rebuilt from manifest-referenced journals
 - aggregate replay totals across the fixed matrix
+- per-run replay PnL summaries rebuilt from manifest-referenced journals
+- aggregate replay PnL totals across the fixed matrix
 
 ## Snapshot-Locked Validation Surfaces
 
@@ -127,6 +137,8 @@ Additional rule:
 - deterministic simulator outputs only
 - no live execution
 - no exchange integration
+- no funding-rate or borrowing-cost accounting
+- no intrabar mark model
 - no API or UI operator surface
 - no second single-run path
 - no second batch path

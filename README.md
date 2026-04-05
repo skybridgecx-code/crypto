@@ -46,6 +46,7 @@ Implemented so far:
 - deterministic order normalization, simulator fills, rejections, partial fills, and idempotent paper submission
 - deterministic health snapshots, alerts, event serialization, and append-only journal helpers
 - deterministic journal replay and scorecard generation over the existing event stream
+- deterministic replay-derived paper PnL and ending-equity accounting over the existing journal plus final replay close
 - advisory-only LLM prompt payloads and strict JSON parsing wrappers
 - unit tests for config, contracts, replay loading, market-data quality checks, signals, risk policy, execution, journaling, evaluation, LLM parsing, incident drills, and replay snapshot regression coverage
 - validation tracks for incident drills, mixed replay runs, multi-run replay suites, replay scorecard snapshots, and review/operator-summary snapshots
@@ -82,6 +83,16 @@ Artifacts are written to:
 - `runs/<run-id>/summary.json`
 - `runs/<run-id>/report.md`
 
+The single-run summary and report now include deterministic paper PnL fields:
+
+- `starting_equity_usd`
+- `gross_realized_pnl_usd`
+- `total_fee_usd`
+- `net_realized_pnl_usd`
+- `ending_unrealized_pnl_usd`
+- `ending_equity_usd`
+- `return_fraction`
+
 The frozen harness baseline is documented in [docs/HARNESS_BASELINE.md](/Users/muhammadaatif/cryp/docs/HARNESS_BASELINE.md).
 The canonical operator-surface summary is documented in [docs/OPERATOR_SURFACES.md](/Users/muhammadaatif/cryp/docs/OPERATOR_SURFACES.md).
 
@@ -99,6 +110,8 @@ Artifacts are written to:
 - `runs/<run-id>/summary.json` for each generated run
 - `runs/<matrix-run-id>/manifest.json` for the batch manifest
 - `runs/<matrix-run-id>/report.md` for the batch operator report
+
+The matrix replay aggregate and report now also include deterministic aggregate PnL totals derived from the per-run journals plus the replay fixtures' final closes.
 
 The frozen matrix baseline is documented in [docs/MATRIX_BASELINE.md](/Users/muhammadaatif/cryp/docs/MATRIX_BASELINE.md).
 

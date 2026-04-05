@@ -34,8 +34,10 @@ Current validated baseline:
 - replay, paper-simulator, monitoring, journaling, and evaluation paths are implemented
 - the paper replay harness is the validated single-run operator command path on top of those modules
 - the single-run operator report (`runs/<run-id>/report.md`) is part of the validated single-run path
+- deterministic replay-derived PnL and ending equity are part of the validated single-run summary/report path
 - the paper-run matrix is the validated fixed batch operator path built on top of the single-run harness
 - the matrix operator report (`runs/<matrix-run-id>/report.md`) is part of the validated batch path
+- deterministic replay-derived aggregate PnL is part of the validated matrix report path
 - limited-live remains a documented control boundary, not an active validated operating mode
 - trust is currently grounded in replay and simulation evidence, not exchange execution
 

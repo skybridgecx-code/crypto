@@ -53,7 +53,9 @@ The report records:
 
 - aggregate manifest counts
 - aggregate replay-derived totals
+- aggregate replay-derived PnL totals
 - per-run manifest and replay sections for operator review
+- per-run replay-derived PnL sections for operator review
 
 ## Artifact Locations
 
@@ -91,6 +93,8 @@ Phase-start rule:
 - no live execution
 - no second batch runner
 - no second report path
+- no separate accounting path beyond replayed journals plus final replay closes
+- no funding-rate, borrow-cost, or intrabar mark accounting
 - batch outputs remain deterministic control artifacts, not live execution evidence
 
 ## Non-Goals
