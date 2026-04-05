@@ -1,0 +1,81 @@
+{
+  "matrix_run_id": "paper-run-matrix-demo",
+  "row_count": 5,
+  "rows": [
+    {
+      "average_fill_price": 68311.53139450043,
+      "ending_status": "partial",
+      "filled_size": 0.585651,
+      "gross_realized_pnl_usd": 0.0,
+      "intent_id": "intent-1",
+      "matrix_run_id": "paper-run-matrix-demo",
+      "net_realized_pnl_usd": -8.001343334544114,
+      "proposal_id": "proposal-1",
+      "run_id": "paper-run-matrix-demo-breakout-paper-run",
+      "side": "buy",
+      "strategy_id": "breakout_v1",
+      "symbol": "BTCUSDT",
+      "total_fee_usd": 8.001343334544114
+    },
+    {
+      "average_fill_price": 68041.59775,
+      "ending_status": "partial",
+      "filled_size": 0.587846,
+      "gross_realized_pnl_usd": 0.0,
+      "intent_id": "intent-2",
+      "matrix_run_id": "paper-run-matrix-demo",
+      "net_realized_pnl_usd": -7.9995962141893,
+      "proposal_id": "proposal-2",
+      "run_id": "paper-run-matrix-demo-mean-reversion-paper-run",
+      "side": "sell",
+      "strategy_id": "mean_reversion_v1",
+      "symbol": "BTCUSDT",
+      "total_fee_usd": 7.9995962141893
+    },
+    {
+      "average_fill_price": null,
+      "ending_status": "no_signal",
+      "filled_size": 0.0,
+      "gross_realized_pnl_usd": 0.0,
+      "intent_id": null,
+      "matrix_run_id": "paper-run-matrix-demo",
+      "net_realized_pnl_usd": 0.0,
+      "proposal_id": null,
+      "run_id": "paper-run-matrix-demo-high-vol-no-signal-paper-run",
+      "side": null,
+      "strategy_id": null,
+      "symbol": null,
+      "total_fee_usd": 0.0
+    },
+    {
+      "average_fill_price": null,
+      "ending_status": "rejected",
+      "filled_size": 0.0,
+      "gross_realized_pnl_usd": 0.0,
+      "intent_id": "intent-4",
+      "matrix_run_id": "paper-run-matrix-demo",
+      "net_realized_pnl_usd": 0.0,
+      "proposal_id": "proposal-4",
+      "run_id": "paper-run-matrix-demo-breakout-reject-low-equity-paper-run",
+      "side": "buy",
+      "strategy_id": "breakout_v1",
+      "symbol": "BTCUSDT",
+      "total_fee_usd": 0.0
+    },
+    {
+      "average_fill_price": null,
+      "ending_status": "halted",
+      "filled_size": 0.0,
+      "gross_realized_pnl_usd": 0.0,
+      "intent_id": null,
+      "matrix_run_id": "paper-run-matrix-demo",
+      "net_realized_pnl_usd": 0.0,
+      "proposal_id": "proposal-5",
+      "run_id": "paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run",
+      "side": "buy",
+      "strategy_id": "breakout_v1",
+      "symbol": "BTCUSDT",
+      "total_fee_usd": 0.0
+    }
+  ]
+}
