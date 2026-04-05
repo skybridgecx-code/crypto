@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from crypto_agent.cli.main import run_paper_replay
 from crypto_agent.config import load_settings
 

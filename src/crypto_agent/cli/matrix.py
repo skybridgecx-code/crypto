@@ -314,11 +314,10 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
                 f"{_format_float(scorecard.total_fill_notional_usd)}",
                 f"replay_total_fee_usd: {_format_float(scorecard.total_fee_usd)}",
                 f"replay_starting_equity_usd: {_format_float(pnl.starting_equity_usd)}",
-                "replay_gross_realized_pnl_usd: " f"{_format_float(pnl.gross_realized_pnl_usd)}",
+                f"replay_gross_realized_pnl_usd: {_format_float(pnl.gross_realized_pnl_usd)}",
                 f"replay_pnl_total_fee_usd: {_format_float(pnl.total_fee_usd)}",
                 f"replay_net_realized_pnl_usd: {_format_float(pnl.net_realized_pnl_usd)}",
-                "replay_ending_unrealized_pnl_usd: "
-                f"{_format_float(pnl.ending_unrealized_pnl_usd)}",
+                f"replay_ending_unrealized_pnl_usd: {_format_float(pnl.ending_unrealized_pnl_usd)}",
                 f"replay_ending_equity_usd: {_format_float(pnl.ending_equity_usd)}",
                 f"replay_return_fraction: {_format_float(pnl.return_fraction)}",
                 "",
