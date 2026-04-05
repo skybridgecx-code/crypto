@@ -44,6 +44,8 @@ Complete one bounded phase at a time. Validate that phase before starting the ne
 - Matrix Validation 2: replay aggregate regression snapshots
 - Matrix Report Pack: operator-readable batch report artifact
 - Matrix Report Validation: report regression snapshot coverage
+- Matrix Trade Ledger Surface: operator-readable batch trade ledger artifact
+- Matrix Trade Ledger Validation: batch trade-ledger regression snapshot coverage
 - Paper PnL Surface: deterministic replay-derived PnL and ending-equity accounting
 
 ## Baseline Freeze

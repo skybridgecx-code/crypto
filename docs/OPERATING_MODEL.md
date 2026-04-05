@@ -37,8 +37,10 @@ Current validated baseline:
 - deterministic replay-derived PnL and ending equity are part of the validated single-run summary/report path
 - the single-run trade ledger (`runs/<run-id>/trade_ledger.json`) is part of the validated single-run path
 - the paper-run matrix is the validated fixed batch operator path built on top of the single-run harness
+- the matrix trade ledger (`runs/<matrix-run-id>/matrix_trade_ledger.json`) is part of the validated batch path
 - the matrix operator report (`runs/<matrix-run-id>/report.md`) is part of the validated batch path
 - deterministic replay-derived aggregate PnL is part of the validated matrix report path
+- `no_signal` rows are synthetic at the matrix ledger layer so the fixed batch artifact remains complete even when a per-run single-run ledger is empty
 - limited-live remains a documented control boundary, not an active validated operating mode
 - trust is currently grounded in replay and simulation evidence, not exchange execution
 

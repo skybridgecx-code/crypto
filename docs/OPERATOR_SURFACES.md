@@ -94,6 +94,7 @@ Matrix artifacts:
 - per-run journals: `journals/<run-id>.jsonl`
 - per-run summaries: `runs/<run-id>/summary.json`
 - batch manifest: `runs/<matrix-run-id>/manifest.json`
+- batch trade ledger: `runs/<matrix-run-id>/matrix_trade_ledger.json`
 - batch operator report: `runs/<matrix-run-id>/report.md`
 
 Matrix replay-derived surfaces:
@@ -102,6 +103,22 @@ Matrix replay-derived surfaces:
 - aggregate replay totals across the fixed matrix
 - per-run replay PnL summaries rebuilt from manifest-referenced journals
 - aggregate replay PnL totals across the fixed matrix
+- matrix trade-ledger rows rebuilt from manifest-referenced per-run ledgers:
+  - `matrix_run_id`
+  - `run_id`
+  - `proposal_id`
+  - `symbol`
+  - `side`
+  - `strategy_id`
+  - `intent_id`
+  - `filled_size`
+  - `average_fill_price`
+  - `total_fee_usd`
+  - `gross_realized_pnl_usd`
+  - `net_realized_pnl_usd`
+  - `ending_status`
+- note:
+  - `no_signal` rows are synthetic at the matrix layer so the fixed batch ledger stays complete even when a per-run single-run ledger has `row_count: 0`
 
 ## Snapshot-Locked Validation Surfaces
 
@@ -126,6 +143,8 @@ Matrix:
   - [tests/unit/test_paper_run_matrix_replay_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_replay_snapshots.py)
 - report snapshots:
   - [tests/unit/test_paper_run_matrix_report_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_report_snapshots.py)
+- trade-ledger snapshots:
+  - [tests/unit/test_paper_run_matrix_trade_ledger_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_trade_ledger_snapshots.py)
 
 Checked-in snapshot artifacts:
 

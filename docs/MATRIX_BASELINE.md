@@ -39,6 +39,7 @@ Outputs:
 - normal per-run journals at `journals/<run-id>.jsonl`
 - normal per-run summaries at `runs/<run-id>/summary.json`
 - aggregate manifest at `runs/<matrix-run-id>/manifest.json`
+- aggregate matrix ledger at `runs/<matrix-run-id>/matrix_trade_ledger.json`
 - operator-readable batch report at `runs/<matrix-run-id>/report.md`
 
 The manifest records:
@@ -57,6 +58,30 @@ The report records:
 - per-run manifest and replay sections for operator review
 - per-run replay-derived PnL sections for operator review
 
+The matrix trade ledger records:
+
+- `matrix_run_id`
+- `run_id`
+- `proposal_id`
+- `symbol`
+- `side`
+- `strategy_id`
+- `intent_id`
+- `filled_size`
+- `average_fill_price`
+- `total_fee_usd`
+- `gross_realized_pnl_usd`
+- `net_realized_pnl_usd`
+- `ending_status`
+
+Ledger reconciliation expectations:
+
+- non-empty matrix rows must reconcile back to the referenced per-run single-run ledgers
+- per-run ledger fee totals must reconcile to replay-derived per-run `total_fee_usd`
+- per-run ledger gross/net realized pnl totals must reconcile to replay-derived per-run PnL
+- aggregate matrix ledger fee/gross/net totals must reconcile to the summed per-run replay PnL totals
+- `no_signal` rows are synthetic at the matrix layer only, so a no-signal run still appears in the batch ledger even though its per-run single-run ledger has `row_count: 0`
+
 ## Artifact Locations
 
 - per-run journals:
@@ -74,6 +99,8 @@ The report records:
   - [tests/unit/test_paper_run_matrix_replay_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_replay_snapshots.py)
 - matrix report snapshots for `runs/<matrix-run-id>/report.md`:
   - [tests/unit/test_paper_run_matrix_report_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_report_snapshots.py)
+- matrix trade-ledger snapshots for `runs/<matrix-run-id>/matrix_trade_ledger.json`:
+  - [tests/unit/test_paper_run_matrix_trade_ledger_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_trade_ledger_snapshots.py)
 
 ## Validation Command Path
 
@@ -98,6 +125,7 @@ Phase-end rule:
 - sequential local execution only
 - no live execution
 - no second batch runner
+- no second batch ledger path
 - no second report path
 - no separate accounting path beyond replayed journals plus final replay closes
 - no funding-rate, borrow-cost, or intrabar mark accounting

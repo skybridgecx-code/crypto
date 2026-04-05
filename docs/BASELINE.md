@@ -2,7 +2,7 @@
 
 ## What Matters
 
-This repository is frozen as a validated simulation-first baseline after Phases 1-10, Validation Tracks 1-5, the paper-run harness, Harness Validation 1-4, Single Run Report Pack, Single-Run Report Validation, Trade Ledger Surface, Trade Ledger Validation, the paper-run matrix, Matrix Validation 1-2, Matrix Report Pack, Matrix Report Validation, and Paper PnL Surface. It is the reference point for future bounded work.
+This repository is frozen as a validated simulation-first baseline after Phases 1-10, Validation Tracks 1-5, the paper-run harness, Harness Validation 1-4, Single Run Report Pack, Single-Run Report Validation, Trade Ledger Surface, Trade Ledger Validation, the paper-run matrix, Matrix Validation 1-2, Matrix Report Pack, Matrix Report Validation, Matrix Trade Ledger Surface, Matrix Trade Ledger Validation, and Paper PnL Surface. It is the reference point for future bounded work.
 
 ## Current Architecture Surface
 
@@ -14,6 +14,7 @@ This repository is frozen as a validated simulation-first baseline after Phases 
 - deterministic monitoring alerts, health snapshots, journaling, replay, and evaluation
 - deterministic replay-derived paper PnL and ending-equity accounting
 - deterministic replay-derived single-run trade ledger artifacts
+- deterministic replay-derived matrix trade ledger artifacts
 - advisory-only LLM wrappers with strict JSON parsing
 - validated paper replay harness and operator artifacts over the existing journal/replay path
 - validated paper-run matrix and batch artifacts over the existing harness, journal, and replay path
@@ -58,6 +59,8 @@ This repository is frozen as a validated simulation-first baseline after Phases 
 - Matrix Validation 2: replay-derived batch aggregate snapshots
 - Matrix Report Pack: operator-readable batch report artifact (`report.md`)
 - Matrix Report Validation: report regression snapshot coverage
+- Matrix Trade Ledger Surface: operator-readable batch ledger artifact (`matrix_trade_ledger.json`)
+- Matrix Trade Ledger Validation: batch trade-ledger regression snapshot coverage
 
 ## Snapshot Surfaces
 
@@ -83,6 +86,8 @@ This repository is frozen as a validated simulation-first baseline after Phases 
   - [tests/unit/test_paper_run_matrix_replay_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_replay_snapshots.py)
 - paper-run matrix report snapshots:
   - [tests/unit/test_paper_run_matrix_report_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_report_snapshots.py)
+- paper-run matrix trade-ledger snapshots:
+  - [tests/unit/test_paper_run_matrix_trade_ledger_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_trade_ledger_snapshots.py)
 - checked-in snapshot artifacts:
   - [tests/fixtures/snapshots](/Users/muhammadaatif/cryp/tests/fixtures/snapshots)
 
