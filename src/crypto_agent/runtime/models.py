@@ -366,6 +366,7 @@ class ForwardPaperRuntimeStatus(BaseModel):
     live_interval: str | None = None
     live_lookback_candles: int | None = Field(default=None, ge=2)
     feed_stale_after_seconds: int | None = Field(default=None, gt=0)
+    binance_base_url: str | None = None
     starting_equity_usd: float = Field(gt=0)
     session_interval_seconds: int = Field(gt=0)
     status: Literal["idle", "running"] = "idle"

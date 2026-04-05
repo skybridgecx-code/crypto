@@ -322,3 +322,154 @@ def test_forward_paper_runtime_live_mode_skips_stale_feed_and_preserves_history(
         "executed",
         "skipped_stale_feed",
     ]
+
+
+def test_binance_adapter_uses_overridden_base_url() -> None:
+    adapter_default = BinanceSpotLiveMarketDataAdapter()
+    assert adapter_default.base_url == "https://api.binance.com"
+
+    adapter_override = BinanceSpotLiveMarketDataAdapter(base_url="https://api.binance.us")
+    assert adapter_override.base_url == "https://api.binance.us"
+
+
+def test_forward_paper_runtime_persists_binance_base_url_in_status(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    fetcher = ScriptedFetcher(
+        [
+            _exchange_info(),
+            [
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 13, 55),
+                    close_time_ms=_millis(2026, 4, 5, 13, 56),
+                    open_price="100.0",
+                    high_price="101.0",
+                    low_price="99.5",
+                    close_price="100.5",
+                    volume="1000",
+                ),
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 13, 56),
+                    close_time_ms=_millis(2026, 4, 5, 13, 57),
+                    open_price="100.5",
+                    high_price="101.5",
+                    low_price="100.0",
+                    close_price="101.0",
+                    volume="1001",
+                ),
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 13, 57),
+                    close_time_ms=_millis(2026, 4, 5, 13, 58),
+                    open_price="101.0",
+                    high_price="102.0",
+                    low_price="100.7",
+                    close_price="101.5",
+                    volume="1002",
+                ),
+            ],
+            {
+                "symbol": "BTCUSDT",
+                "bidPrice": "101.40",
+                "bidQty": "1.0",
+                "askPrice": "101.50",
+                "askQty": "1.0",
+            },
+        ]
+    )
+    adapter = BinanceSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="live-base-url-test",
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 5, 13, 58)],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=2,
+        feed_stale_after_seconds=120,
+        live_adapter=adapter,
+        binance_base_url="https://api.binance.us",
+    )
+
+    status = ForwardPaperRuntimeStatus.model_validate(
+        json.loads(result.status_path.read_text(encoding="utf-8"))
+    )
+    assert status.binance_base_url == "https://api.binance.us"
+
+
+def test_forward_paper_runtime_unavailable_feed_451_enriches_message(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    fetcher = ScriptedFetcher([RuntimeError("HTTP Error 451: ")])
+
+    adapter = BinanceSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="live-451-test",
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 5, 14, 0)],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=2,
+        feed_stale_after_seconds=120,
+        live_adapter=adapter,
+        binance_base_url="https://api.binance.us",
+    )
+
+    session = result.session_summaries[0]
+    assert session.session_outcome == "skipped_unavailable_feed"
+
+    status = ForwardPaperRuntimeStatus.model_validate(
+        json.loads(result.status_path.read_text(encoding="utf-8"))
+    )
+    assert status.feed_health is not None
+    assert status.feed_health.status == "degraded"
+    assert status.feed_health.message is not None
+    assert "451" in status.feed_health.message
+    assert "legal/geo/IP restriction" in status.feed_health.message
+    assert "https://api.binance.us" in status.feed_health.message
+
+
+def test_forward_paper_runtime_unavailable_feed_non_451_enriches_message(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    fetcher = ScriptedFetcher([RuntimeError("connection refused")])
+
+    adapter = BinanceSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="live-unavail-test",
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 5, 14, 0)],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=2,
+        feed_stale_after_seconds=120,
+        live_adapter=adapter,
+    )
+
+    session = result.session_summaries[0]
+    assert session.session_outcome == "skipped_unavailable_feed"
+
+    status = ForwardPaperRuntimeStatus.model_validate(
+        json.loads(result.status_path.read_text(encoding="utf-8"))
+    )
+    assert status.feed_health is not None
+    assert status.feed_health.status == "degraded"
+    assert status.feed_health.message is not None
+    assert "https://api.binance.com" in status.feed_health.message
+    assert "--binance-base-url" in status.feed_health.message

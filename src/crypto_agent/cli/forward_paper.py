@@ -178,6 +178,14 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Future limited-live gate status. Does not enable live execution.",
     )
+    parser.add_argument(
+        "--binance-base-url",
+        default=None,
+        help=(
+            "Override the Binance REST base URL (default: https://api.binance.com). "
+            "Use to point at an alternate endpoint when the default is geo/IP restricted."
+        ),
+    )
     return parser
 
 
@@ -266,6 +274,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         live_control_config=controls,
         readiness_status=readiness,
         manual_control_state=manual_controls,
+        binance_base_url=args.binance_base_url,
     )
     print(
         json.dumps(

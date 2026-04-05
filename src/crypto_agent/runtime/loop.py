@@ -254,6 +254,7 @@ def _initial_runtime_status(
     live_interval: str | None,
     live_lookback_candles: int | None,
     feed_stale_after_seconds: int | None,
+    binance_base_url: str | None,
     starting_equity_usd: float,
     session_interval_seconds: int,
     now: datetime,
@@ -269,6 +270,7 @@ def _initial_runtime_status(
         live_interval=live_interval,
         live_lookback_candles=live_lookback_candles,
         feed_stale_after_seconds=feed_stale_after_seconds,
+        binance_base_url=binance_base_url,
         starting_equity_usd=starting_equity_usd,
         session_interval_seconds=session_interval_seconds,
         status="idle",
@@ -306,6 +308,7 @@ def _ensure_runtime_status(
     live_interval: str | None,
     live_lookback_candles: int | None,
     feed_stale_after_seconds: int | None,
+    binance_base_url: str | None,
     runtime_id: str,
     starting_equity_usd: float,
     session_interval_seconds: int,
@@ -355,6 +358,7 @@ def _ensure_runtime_status(
             live_interval=live_interval,
             live_lookback_candles=live_lookback_candles,
             feed_stale_after_seconds=feed_stale_after_seconds,
+            binance_base_url=binance_base_url,
             starting_equity_usd=starting_equity_usd,
             session_interval_seconds=session_interval_seconds,
             now=now,
@@ -1101,6 +1105,7 @@ def run_forward_paper_runtime(
     live_lookback_candles: int | None = None,
     feed_stale_after_seconds: int | None = None,
     live_adapter: BinanceSpotLiveMarketDataAdapter | None = None,
+    binance_base_url: str | None = None,
     sandbox_execution_adapter: SandboxExecutionAdapter | None = None,
     live_control_config: LiveControlConfig | None = None,
     readiness_status: LiveReadinessStatus | None = None,
@@ -1120,6 +1125,7 @@ def run_forward_paper_runtime(
         live_interval=live_interval,
         live_lookback_candles=live_lookback_candles,
         feed_stale_after_seconds=feed_stale_after_seconds,
+        binance_base_url=binance_base_url,
         runtime_id=runtime_id,
         starting_equity_usd=equity_usd,
         session_interval_seconds=session_interval_seconds,
@@ -1156,9 +1162,16 @@ def run_forward_paper_runtime(
     )
 
     completed_sessions: list[ForwardPaperSessionSummary] = []
-    resolved_live_adapter = (live_adapter if market_source == "binance_spot" else None) or (
-        BinanceSpotLiveMarketDataAdapter() if market_source == "binance_spot" else None
-    )
+    if live_adapter is not None and market_source == "binance_spot":
+        resolved_live_adapter: BinanceSpotLiveMarketDataAdapter | None = live_adapter
+    elif market_source == "binance_spot":
+        resolved_live_adapter = (
+            BinanceSpotLiveMarketDataAdapter(base_url=binance_base_url)
+            if binance_base_url is not None
+            else BinanceSpotLiveMarketDataAdapter()
+        )
+    else:
+        resolved_live_adapter = None
 
     for scheduled_at in scheduled_times:
         status, running_session, session_path = _start_session(
@@ -1495,6 +1508,20 @@ def run_forward_paper_runtime(
             completed_sessions.append(completed_session)
         except LiveMarketDataUnavailableError as exc:
             completed_at = _normalize_datetime(now_fn())
+            exc_msg = str(exc)
+            configured_base_url = status.binance_base_url or "https://api.binance.com"
+            if "451" in exc_msg:
+                feed_message = (
+                    f"{exc_msg} | venue_access: feed unavailable — HTTP 451 indicates a "
+                    f"legal/geo/IP restriction at the configured endpoint "
+                    f"({configured_base_url}); verify network path or set --binance-base-url"
+                )
+            else:
+                feed_message = (
+                    f"{exc_msg} | venue_access: feed unavailable on first call to "
+                    f"{configured_base_url}; check network access or use --binance-base-url "
+                    f"to override the endpoint"
+                )
             unavailable_health = LiveFeedHealth(
                 status="degraded",
                 observed_at=completed_at,
@@ -1506,7 +1533,7 @@ def run_forward_paper_runtime(
                     (status.feed_health.consecutive_failure_count if status.feed_health else 0) + 1
                 ),
                 stale_after_seconds=status.feed_stale_after_seconds or 60,
-                message=str(exc),
+                message=feed_message,
             )
             skipped_session = _skipped_session_summary(
                 session_summary=running_session.model_copy(
