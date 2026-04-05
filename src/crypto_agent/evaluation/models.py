@@ -149,6 +149,44 @@ class MatrixComparison(BaseModel):
     rankings: MatrixComparisonRanking
 
 
+class OperatorSingleRunIndexEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_type: Literal["single_run"] = "single_run"
+    order: int = Field(ge=0)
+    run_id: str
+    journal_path: str
+    summary_path: str
+    report_path: str
+    trade_ledger_path: str
+    paths_exist: dict[str, bool] = Field(default_factory=dict)
+    all_paths_exist: bool = True
+
+
+class OperatorMatrixRunIndexEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_type: Literal["matrix_run"] = "matrix_run"
+    order: int = Field(ge=0)
+    matrix_run_id: str
+    manifest_path: str
+    report_path: str
+    matrix_trade_ledger_path: str
+    matrix_comparison_path: str
+    paths_exist: dict[str, bool] = Field(default_factory=dict)
+    all_paths_exist: bool = True
+
+
+class OperatorRunIndex(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    index_path: str
+    single_run_count: int = Field(ge=0)
+    matrix_run_count: int = Field(ge=0)
+    single_runs: list[OperatorSingleRunIndexEntry] = Field(default_factory=list)
+    matrix_runs: list[OperatorMatrixRunIndexEntry] = Field(default_factory=list)
+
+
 class ReplayResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

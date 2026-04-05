@@ -257,6 +257,95 @@ def _event_type_sequence(review_packet: dict[str, Any]) -> str:
     return ", ".join(event_types) if event_types else "<none>"
 
 
+def write_operator_run_index(runs_dir: Path) -> Path:
+    from crypto_agent.evaluation.models import (
+        OperatorMatrixRunIndexEntry,
+        OperatorRunIndex,
+        OperatorSingleRunIndexEntry,
+    )
+
+    single_runs: list[OperatorSingleRunIndexEntry] = []
+    matrix_runs: list[OperatorMatrixRunIndexEntry] = []
+
+    if not runs_dir.exists():
+        runs_dir.mkdir(parents=True, exist_ok=True)
+
+    for run_dir in sorted(path for path in runs_dir.iterdir() if path.is_dir()):
+        summary_path = run_dir / "summary.json"
+        manifest_path = run_dir / "manifest.json"
+
+        if summary_path.exists():
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            report_path = run_dir / "report.md"
+            trade_ledger_path = Path(str(summary["trade_ledger_path"]))
+            journal_path = Path(str(summary["journal_path"]))
+            path_exists = {
+                "journal_path": journal_path.exists(),
+                "summary_path": summary_path.exists(),
+                "report_path": report_path.exists(),
+                "trade_ledger_path": trade_ledger_path.exists(),
+            }
+            single_runs.append(
+                OperatorSingleRunIndexEntry(
+                    order=0,
+                    run_id=str(summary["run_id"]),
+                    journal_path=str(journal_path),
+                    summary_path=str(summary_path),
+                    report_path=str(report_path),
+                    trade_ledger_path=str(trade_ledger_path),
+                    paths_exist=path_exists,
+                    all_paths_exist=all(path_exists.values()),
+                )
+            )
+
+        if manifest_path.exists():
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            report_path = run_dir / "report.md"
+            matrix_trade_ledger_path = Path(str(manifest["matrix_trade_ledger_path"]))
+            matrix_comparison_path = Path(str(manifest["matrix_comparison_path"]))
+            path_exists = {
+                "manifest_path": manifest_path.exists(),
+                "report_path": report_path.exists(),
+                "matrix_trade_ledger_path": matrix_trade_ledger_path.exists(),
+                "matrix_comparison_path": matrix_comparison_path.exists(),
+            }
+            matrix_runs.append(
+                OperatorMatrixRunIndexEntry(
+                    order=0,
+                    matrix_run_id=str(manifest["matrix_run_id"]),
+                    manifest_path=str(manifest_path),
+                    report_path=str(report_path),
+                    matrix_trade_ledger_path=str(matrix_trade_ledger_path),
+                    matrix_comparison_path=str(matrix_comparison_path),
+                    paths_exist=path_exists,
+                    all_paths_exist=all(path_exists.values()),
+                )
+            )
+
+    single_runs = [
+        entry.model_copy(update={"order": index})
+        for index, entry in enumerate(sorted(single_runs, key=lambda entry: entry.run_id))
+    ]
+    matrix_runs = [
+        entry.model_copy(update={"order": index})
+        for index, entry in enumerate(sorted(matrix_runs, key=lambda entry: entry.matrix_run_id))
+    ]
+
+    index_path = runs_dir / "operator_run_index.json"
+    operator_index = OperatorRunIndex(
+        index_path=str(index_path),
+        single_run_count=len(single_runs),
+        matrix_run_count=len(matrix_runs),
+        single_runs=single_runs,
+        matrix_runs=matrix_runs,
+    )
+    index_path.write_text(
+        json.dumps(operator_index.model_dump(mode="json"), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return index_path
+
+
 def _build_operator_report(
     *,
     run_id: str,
@@ -581,6 +670,7 @@ def run_paper_replay(
         review_packet=review_packet,
         operator_summary=operator_summary,
     )
+    write_operator_run_index(settings.paths.runs_dir)
 
     return PaperRunResult(
         run_id=resolved_run_id,

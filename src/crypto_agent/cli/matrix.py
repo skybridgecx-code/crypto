@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from crypto_agent.cli.main import run_paper_replay
+from crypto_agent.cli.main import run_paper_replay, write_operator_run_index
 from crypto_agent.config import Settings, load_settings
 from crypto_agent.evaluation.models import (
     EvaluationScorecard,
@@ -562,6 +562,7 @@ def run_paper_replay_matrix(
     _write_matrix_comparison(manifest)
     _write_matrix_trade_ledger(manifest)
     _write_operator_report(manifest)
+    write_operator_run_index(settings.paths.runs_dir)
     return manifest
 
 
