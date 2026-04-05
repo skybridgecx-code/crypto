@@ -61,12 +61,28 @@ def _build_matrix_replay_payload(manifest_payload: dict[str, object]) -> dict[st
         "max_slippage_bps": 0.0,
         "empty_replay_scorecard_count": 0,
     }
+    aggregate_pnl = {
+        "starting_equity_usd": 0.0,
+        "gross_realized_pnl_usd": 0.0,
+        "total_fee_usd": 0.0,
+        "net_realized_pnl_usd": 0.0,
+        "ending_unrealized_pnl_usd": 0.0,
+        "ending_equity_usd": 0.0,
+        "return_fraction": 0.0,
+    }
 
     for raw_entry in manifest_payload["entries"]:
         entry = dict(raw_entry)
         journal_path = Path(str(entry["journal_path"]))
-        replay_result = replay_journal(journal_path)
+        summary_path = Path(str(entry["summary_path"]))
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        replay_result = replay_journal(
+            journal_path,
+            replay_path=str(summary["replay_path"]),
+            starting_equity_usd=float(summary["pnl"]["starting_equity_usd"]),
+        )
         scorecard = replay_result.scorecard.model_dump(mode="json")
+        pnl = replay_result.pnl.model_dump(mode="json") if replay_result.pnl is not None else None
         event_type_counts = Counter(event.event_type.value for event in replay_result.events)
 
         runs.append(
@@ -79,6 +95,7 @@ def _build_matrix_replay_payload(manifest_payload: dict[str, object]) -> dict[st
                     run_id=str(entry["run_id"]),
                 ),
                 "replay_scorecard": scorecard,
+                "replay_pnl": pnl,
                 "alert_count": event_type_counts["alert.raised"],
                 "kill_switch_activations": event_type_counts["kill_switch.activated"],
             }
@@ -109,15 +126,29 @@ def _build_matrix_replay_payload(manifest_payload: dict[str, object]) -> dict[st
         if str(scorecard["run_id"]) == "empty":
             aggregate_totals["empty_replay_scorecard_count"] += 1
 
-    aggregate_totals["total_fill_notional_usd"] = fsum(total_fill_notionals)
+        aggregate_totals["total_fill_notional_usd"] = fsum(total_fill_notionals)
     aggregate_totals["total_fee_usd"] = fsum(total_fees)
     aggregate_totals["max_slippage_bps"] = max(max_slippages, default=0.0)
+    for run in runs:
+        pnl = run["replay_pnl"]
+        assert pnl is not None
+        aggregate_pnl["starting_equity_usd"] += float(pnl["starting_equity_usd"])
+        aggregate_pnl["gross_realized_pnl_usd"] += float(pnl["gross_realized_pnl_usd"])
+        aggregate_pnl["total_fee_usd"] += float(pnl["total_fee_usd"])
+        aggregate_pnl["net_realized_pnl_usd"] += float(pnl["net_realized_pnl_usd"])
+        aggregate_pnl["ending_unrealized_pnl_usd"] += float(pnl["ending_unrealized_pnl_usd"])
+        aggregate_pnl["ending_equity_usd"] += float(pnl["ending_equity_usd"])
+    if aggregate_pnl["starting_equity_usd"] > 0:
+        aggregate_pnl["return_fraction"] = (
+            aggregate_pnl["ending_equity_usd"] - aggregate_pnl["starting_equity_usd"]
+        ) / aggregate_pnl["starting_equity_usd"]
 
     return {
         "matrix_run_id": manifest_payload["matrix_run_id"],
         "entry_count": manifest_payload["entry_count"],
         "runs": runs,
         "aggregate_totals": aggregate_totals,
+        "aggregate_pnl": aggregate_pnl,
     }
 
 

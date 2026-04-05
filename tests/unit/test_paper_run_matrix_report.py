@@ -7,6 +7,7 @@ from pathlib import Path
 
 from crypto_agent.cli.matrix import (
     MANIFEST_COUNT_KEYS,
+    REPLAY_PNL_KEYS,
     REPLAY_TOTAL_KEYS,
     run_paper_replay_matrix,
 )
@@ -82,6 +83,7 @@ def test_matrix_report_artifact_shape_and_reconciliation(tmp_path: Path) -> None
     assert report.startswith("# Paper Run Matrix Operator Report\n")
     assert "## Aggregate Manifest Counts" in report
     assert "## Aggregate Replay Totals" in report
+    assert "## Aggregate Replay PnL" in report
     assert "## Per-Run Details" in report
     assert f"matrix_run_id: {manifest.matrix_run_id}" in report
     assert f"entry_count: {manifest.entry_count}" in report
@@ -99,10 +101,17 @@ def test_matrix_report_artifact_shape_and_reconciliation(tmp_path: Path) -> None
     total_fill_notionals: list[float] = []
     total_fees: list[float] = []
     max_slippages: list[float] = []
+    replay_pnl_totals = {key: 0.0 for key in REPLAY_PNL_KEYS}
     for entry in manifest_payload["entries"]:
         section = run_sections[str(entry["run_id"])]
-        replay_result = replay_journal(str(entry["journal_path"]))
+        summary = json.loads(Path(str(entry["summary_path"])).read_text(encoding="utf-8"))
+        replay_result = replay_journal(
+            str(entry["journal_path"]),
+            replay_path=str(summary["replay_path"]),
+            starting_equity_usd=float(summary["pnl"]["starting_equity_usd"]),
+        )
         scorecard = replay_result.scorecard
+        pnl = replay_result.pnl
         event_type_counts = Counter(event.event_type.value for event in replay_result.events)
 
         assert section["fixture"] == str(entry["fixture"])
@@ -154,6 +163,16 @@ def test_matrix_report_artifact_shape_and_reconciliation(tmp_path: Path) -> None
             scorecard.total_fill_notional_usd
         )
         assert section["replay_total_fee_usd"] == _format_float(scorecard.total_fee_usd)
+        assert pnl is not None
+        assert section["replay_starting_equity_usd"] == _format_float(pnl.starting_equity_usd)
+        assert section["replay_gross_realized_pnl_usd"] == _format_float(pnl.gross_realized_pnl_usd)
+        assert section["replay_pnl_total_fee_usd"] == _format_float(pnl.total_fee_usd)
+        assert section["replay_net_realized_pnl_usd"] == _format_float(pnl.net_realized_pnl_usd)
+        assert section["replay_ending_unrealized_pnl_usd"] == _format_float(
+            pnl.ending_unrealized_pnl_usd
+        )
+        assert section["replay_ending_equity_usd"] == _format_float(pnl.ending_equity_usd)
+        assert section["replay_return_fraction"] == _format_float(pnl.return_fraction)
 
         replay_totals["event_count"] += scorecard.event_count
         replay_totals["proposal_count"] += scorecard.proposal_count
@@ -175,11 +194,26 @@ def test_matrix_report_artifact_shape_and_reconciliation(tmp_path: Path) -> None
         total_fill_notionals.append(scorecard.total_fill_notional_usd)
         total_fees.append(scorecard.total_fee_usd)
         max_slippages.append(scorecard.max_slippage_bps)
+        replay_pnl_totals["starting_equity_usd"] += pnl.starting_equity_usd
+        replay_pnl_totals["gross_realized_pnl_usd"] += pnl.gross_realized_pnl_usd
+        replay_pnl_totals["total_fee_usd"] += pnl.total_fee_usd
+        replay_pnl_totals["net_realized_pnl_usd"] += pnl.net_realized_pnl_usd
+        replay_pnl_totals["ending_unrealized_pnl_usd"] += pnl.ending_unrealized_pnl_usd
+        replay_pnl_totals["ending_equity_usd"] += pnl.ending_equity_usd
 
     aggregate_replay = _section_key_values(report, "## Aggregate Replay Totals")
     for key in REPLAY_TOTAL_KEYS:
         assert aggregate_replay[key] == str(replay_totals[key])
 
+    if replay_pnl_totals["starting_equity_usd"] > 0:
+        replay_pnl_totals["return_fraction"] = (
+            replay_pnl_totals["ending_equity_usd"] - replay_pnl_totals["starting_equity_usd"]
+        ) / replay_pnl_totals["starting_equity_usd"]
+
     assert aggregate_replay["total_fill_notional_usd"] == _format_float(fsum(total_fill_notionals))
     assert aggregate_replay["total_fee_usd"] == _format_float(fsum(total_fees))
     assert aggregate_replay["max_slippage_bps"] == _format_float(max(max_slippages, default=0.0))
+
+    aggregate_pnl = _section_key_values(report, "## Aggregate Replay PnL")
+    for key in REPLAY_PNL_KEYS:
+        assert aggregate_pnl[key] == _format_float(replay_pnl_totals[key])

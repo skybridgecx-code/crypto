@@ -23,6 +23,15 @@
     "review_rejected_event_count": 0,
     "run_id": "breakout-halt-drawdown-zero-paper-run"
   },
+  "pnl": {
+    "ending_equity_usd": 100000.0,
+    "ending_unrealized_pnl_usd": 0.0,
+    "gross_realized_pnl_usd": 0.0,
+    "net_realized_pnl_usd": 0.0,
+    "return_fraction": 0.0,
+    "starting_equity_usd": 100000.0,
+    "total_fee_usd": 0.0
+  },
   "quality_issue_count": 0,
   "replay_path": "tests/fixtures/paper_candles_breakout_long.jsonl",
   "review_packet": {

@@ -36,6 +36,15 @@ max_slippage_bps: 0
 total_fill_notional_usd: 0
 total_fee_usd: 0
 
+## PnL
+starting_equity_usd: 100000
+gross_realized_pnl_usd: 0
+total_fee_usd: 0
+net_realized_pnl_usd: 0
+ending_unrealized_pnl_usd: 0
+ending_equity_usd: 100000
+return_fraction: 0
+
 ## Review Packet
 event_count: 0
 filled_event_count: 0

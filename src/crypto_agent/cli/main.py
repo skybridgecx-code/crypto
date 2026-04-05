@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from crypto_agent.config import Settings, load_settings
 from crypto_agent.enums import EventType, Mode, PolicyAction, Side
-from crypto_agent.evaluation.models import EvaluationScorecard
+from crypto_agent.evaluation.models import EvaluationScorecard, ReplayPnLSummary
 from crypto_agent.evaluation.replay import replay_journal
 from crypto_agent.events.envelope import EventEnvelope
 from crypto_agent.events.journal import (
@@ -47,6 +47,7 @@ class PaperRunResult(BaseModel):
     summary_path: Path
     report_path: Path
     scorecard: EvaluationScorecard
+    pnl: ReplayPnLSummary
     review_packet: dict[str, object]
     operator_summary: dict[str, object]
     quality_issue_count: int = Field(ge=0)
@@ -256,6 +257,7 @@ def _build_operator_report(
     replay_path: Path,
     quality_issue_count: int,
     scorecard: EvaluationScorecard,
+    pnl: ReplayPnLSummary,
     review_packet: dict[str, Any],
     operator_summary: dict[str, object],
 ) -> str:
@@ -298,6 +300,15 @@ def _build_operator_report(
         f"total_fill_notional_usd: {_format_float(scorecard.total_fill_notional_usd)}",
         f"total_fee_usd: {_format_float(scorecard.total_fee_usd)}",
         "",
+        "## PnL",
+        f"starting_equity_usd: {_format_float(pnl.starting_equity_usd)}",
+        f"gross_realized_pnl_usd: {_format_float(pnl.gross_realized_pnl_usd)}",
+        f"total_fee_usd: {_format_float(pnl.total_fee_usd)}",
+        f"net_realized_pnl_usd: {_format_float(pnl.net_realized_pnl_usd)}",
+        f"ending_unrealized_pnl_usd: {_format_float(pnl.ending_unrealized_pnl_usd)}",
+        f"ending_equity_usd: {_format_float(pnl.ending_equity_usd)}",
+        f"return_fraction: {_format_float(pnl.return_fraction)}",
+        "",
         "## Review Packet",
         f"event_count: {review_packet['event_count']}",
         f"filled_event_count: {review_packet['filled_event_count']}",
@@ -337,6 +348,7 @@ def _write_operator_report(
     report_path: Path,
     quality_issue_count: int,
     scorecard: EvaluationScorecard,
+    pnl: ReplayPnLSummary,
     review_packet: dict[str, Any],
     operator_summary: dict[str, object],
 ) -> None:
@@ -347,6 +359,7 @@ def _write_operator_report(
             replay_path=replay_path,
             quality_issue_count=quality_issue_count,
             scorecard=scorecard,
+            pnl=pnl,
             review_packet=review_packet,
             operator_summary=operator_summary,
         ),
@@ -511,10 +524,18 @@ def run_paper_replay(
                     )
                 )
 
-    replay_result = replay_journal(resolved_journal_path)
+    replay_result = replay_journal(
+        resolved_journal_path,
+        replay_path=replay_fixture_path,
+        starting_equity_usd=equity_usd,
+    )
     scorecard = replay_result.scorecard
     if not replay_result.events:
         scorecard = EvaluationScorecard(run_id=resolved_run_id, event_count=0)
+    pnl = replay_result.pnl or ReplayPnLSummary(
+        starting_equity_usd=equity_usd,
+        ending_equity_usd=equity_usd,
+    )
     review_packet = build_review_packet(replay_result.events)
     operator_summary = _operator_summary(
         fixture_name=replay_fixture_path.name,
@@ -529,6 +550,7 @@ def run_paper_replay(
         "journal_path": str(resolved_journal_path),
         "quality_issue_count": len(quality_issues),
         "scorecard": scorecard.model_dump(mode="json"),
+        "pnl": pnl.model_dump(mode="json"),
         "review_packet": review_packet,
         "operator_summary": operator_summary,
     }
@@ -540,6 +562,7 @@ def run_paper_replay(
         report_path=report_path,
         quality_issue_count=len(quality_issues),
         scorecard=scorecard,
+        pnl=pnl,
         review_packet=review_packet,
         operator_summary=operator_summary,
     )
@@ -551,6 +574,7 @@ def run_paper_replay(
         summary_path=summary_path,
         report_path=report_path,
         scorecard=scorecard,
+        pnl=pnl,
         review_packet=review_packet,
         operator_summary=operator_summary,
         quality_issue_count=len(quality_issues),
@@ -596,6 +620,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "journal_path": str(result.journal_path),
                 "summary_path": str(result.summary_path),
                 "report_path": str(result.report_path),
+                "pnl": result.pnl.model_dump(mode="json"),
                 "scorecard": result.scorecard.model_dump(mode="json"),
             },
             indent=2,

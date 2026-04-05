@@ -1,4 +1,13 @@
 {
+  "aggregate_pnl": {
+    "ending_equity_usd": 399976.2456886772,
+    "ending_unrealized_pnl_usd": -8.753371774071383,
+    "gross_realized_pnl_usd": 0.0,
+    "net_realized_pnl_usd": -16.000939548733413,
+    "return_fraction": -6.188562359298264e-05,
+    "starting_equity_usd": 400001.0,
+    "total_fee_usd": 16.000939548733413
+  },
   "aggregate_totals": {
     "alert_count": 4,
     "approval_count": 3,
@@ -29,6 +38,15 @@
       "journal_path": "journals/paper-run-matrix-demo-breakout-paper-run.jsonl",
       "kill_switch_activations": 0,
       "manifest_run_id": "paper-run-matrix-demo-breakout-paper-run",
+      "replay_pnl": {
+        "ending_equity_usd": 99985.24528394488,
+        "ending_unrealized_pnl_usd": -6.753372720571861,
+        "gross_realized_pnl_usd": 0.0,
+        "net_realized_pnl_usd": -8.001343334544114,
+        "return_fraction": -0.00014754716055118478,
+        "starting_equity_usd": 100000.0,
+        "total_fee_usd": 8.001343334544114
+      },
       "replay_run_id": "paper-run-matrix-demo-breakout-paper-run",
       "replay_scorecard": {
         "approval_count": 1,
@@ -57,6 +75,15 @@
       "journal_path": "journals/paper-run-matrix-demo-mean-reversion-paper-run.jsonl",
       "kill_switch_activations": 0,
       "manifest_run_id": "paper-run-matrix-demo-mean-reversion-paper-run",
+      "replay_pnl": {
+        "ending_equity_usd": 99990.00040473232,
+        "ending_unrealized_pnl_usd": -1.999999053499521,
+        "gross_realized_pnl_usd": 0.0,
+        "net_realized_pnl_usd": -7.9995962141893,
+        "return_fraction": -9.999595267683616e-05,
+        "starting_equity_usd": 100000.0,
+        "total_fee_usd": 7.9995962141893
+      },
       "replay_run_id": "paper-run-matrix-demo-mean-reversion-paper-run",
       "replay_scorecard": {
         "approval_count": 1,
@@ -85,6 +112,15 @@
       "journal_path": "journals/paper-run-matrix-demo-high-vol-no-signal-paper-run.jsonl",
       "kill_switch_activations": 0,
       "manifest_run_id": "paper-run-matrix-demo-high-vol-no-signal-paper-run",
+      "replay_pnl": {
+        "ending_equity_usd": 100000.0,
+        "ending_unrealized_pnl_usd": 0.0,
+        "gross_realized_pnl_usd": 0.0,
+        "net_realized_pnl_usd": 0.0,
+        "return_fraction": 0.0,
+        "starting_equity_usd": 100000.0,
+        "total_fee_usd": 0.0
+      },
       "replay_run_id": "empty",
       "replay_scorecard": {
         "approval_count": 0,
@@ -113,6 +149,15 @@
       "journal_path": "journals/paper-run-matrix-demo-breakout-reject-low-equity-paper-run.jsonl",
       "kill_switch_activations": 0,
       "manifest_run_id": "paper-run-matrix-demo-breakout-reject-low-equity-paper-run",
+      "replay_pnl": {
+        "ending_equity_usd": 1.0,
+        "ending_unrealized_pnl_usd": 0.0,
+        "gross_realized_pnl_usd": 0.0,
+        "net_realized_pnl_usd": 0.0,
+        "return_fraction": 0.0,
+        "starting_equity_usd": 1.0,
+        "total_fee_usd": 0.0
+      },
       "replay_run_id": "paper-run-matrix-demo-breakout-reject-low-equity-paper-run",
       "replay_scorecard": {
         "approval_count": 1,
@@ -141,6 +186,15 @@
       "journal_path": "journals/paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run.jsonl",
       "kill_switch_activations": 1,
       "manifest_run_id": "paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run",
+      "replay_pnl": {
+        "ending_equity_usd": 100000.0,
+        "ending_unrealized_pnl_usd": 0.0,
+        "gross_realized_pnl_usd": 0.0,
+        "net_realized_pnl_usd": 0.0,
+        "return_fraction": 0.0,
+        "starting_equity_usd": 100000.0,
+        "total_fee_usd": 0.0
+      },
       "replay_run_id": "paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run",
       "replay_scorecard": {
         "approval_count": 0,

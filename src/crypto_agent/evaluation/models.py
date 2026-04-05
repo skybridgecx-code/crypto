@@ -28,8 +28,21 @@ class EvaluationScorecard(BaseModel):
     total_fee_usd: float = Field(default=0.0, ge=0)
 
 
+class ReplayPnLSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    starting_equity_usd: float = Field(gt=0)
+    gross_realized_pnl_usd: float = 0.0
+    total_fee_usd: float = Field(default=0.0, ge=0)
+    net_realized_pnl_usd: float = 0.0
+    ending_unrealized_pnl_usd: float = 0.0
+    ending_equity_usd: float
+    return_fraction: float = 0.0
+
+
 class ReplayResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     events: list[EventEnvelope]
     scorecard: EvaluationScorecard
+    pnl: ReplayPnLSummary | None = None

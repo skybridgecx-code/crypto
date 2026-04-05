@@ -37,6 +37,15 @@ total_fill_notional_usd: 80004.6977436671
 total_fee_usd: 16.0009395487
 max_slippage_bps: 1.6883447292
 
+## Aggregate Replay PnL
+starting_equity_usd: 400001
+gross_realized_pnl_usd: 0
+total_fee_usd: 16.0009395487
+net_realized_pnl_usd: -16.0009395487
+ending_unrealized_pnl_usd: -8.7533717741
+ending_equity_usd: 399976.2456886772
+return_fraction: -0.0000618856
+
 ## Per-Run Details
 ### run_id: paper-run-matrix-demo-breakout-paper-run
 fixture: paper_candles_breakout_long.jsonl
@@ -71,6 +80,13 @@ replay_average_slippage_bps: 1.6883447292
 replay_max_slippage_bps: 1.6883447292
 replay_total_fill_notional_usd: 40006.7166727206
 replay_total_fee_usd: 8.0013433345
+replay_starting_equity_usd: 100000
+replay_gross_realized_pnl_usd: 0
+replay_pnl_total_fee_usd: 8.0013433345
+replay_net_realized_pnl_usd: -8.0013433345
+replay_ending_unrealized_pnl_usd: -6.7533727206
+replay_ending_equity_usd: 99985.2452839449
+replay_return_fraction: -0.0001475472
 
 ### run_id: paper-run-matrix-demo-mean-reversion-paper-run
 fixture: paper_candles_mean_reversion_short.jsonl
@@ -105,6 +121,13 @@ replay_average_slippage_bps: 0.5
 replay_max_slippage_bps: 0.5
 replay_total_fill_notional_usd: 39997.9810709465
 replay_total_fee_usd: 7.9995962142
+replay_starting_equity_usd: 100000
+replay_gross_realized_pnl_usd: 0
+replay_pnl_total_fee_usd: 7.9995962142
+replay_net_realized_pnl_usd: -7.9995962142
+replay_ending_unrealized_pnl_usd: -1.9999990535
+replay_ending_equity_usd: 99990.0004047323
+replay_return_fraction: -0.000099996
 
 ### run_id: paper-run-matrix-demo-high-vol-no-signal-paper-run
 fixture: paper_candles_high_volatility.jsonl
@@ -139,6 +162,13 @@ replay_average_slippage_bps: 0
 replay_max_slippage_bps: 0
 replay_total_fill_notional_usd: 0
 replay_total_fee_usd: 0
+replay_starting_equity_usd: 100000
+replay_gross_realized_pnl_usd: 0
+replay_pnl_total_fee_usd: 0
+replay_net_realized_pnl_usd: 0
+replay_ending_unrealized_pnl_usd: 0
+replay_ending_equity_usd: 100000
+replay_return_fraction: 0
 
 ### run_id: paper-run-matrix-demo-breakout-reject-low-equity-paper-run
 fixture: paper_candles_breakout_long.jsonl
@@ -173,6 +203,13 @@ replay_average_slippage_bps: 0
 replay_max_slippage_bps: 0
 replay_total_fill_notional_usd: 0
 replay_total_fee_usd: 0
+replay_starting_equity_usd: 1
+replay_gross_realized_pnl_usd: 0
+replay_pnl_total_fee_usd: 0
+replay_net_realized_pnl_usd: 0
+replay_ending_unrealized_pnl_usd: 0
+replay_ending_equity_usd: 1
+replay_return_fraction: 0
 
 ### run_id: paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run
 fixture: paper_candles_breakout_long.jsonl
@@ -207,3 +244,10 @@ replay_average_slippage_bps: 0
 replay_max_slippage_bps: 0
 replay_total_fill_notional_usd: 0
 replay_total_fee_usd: 0
+replay_starting_equity_usd: 100000
+replay_gross_realized_pnl_usd: 0
+replay_pnl_total_fee_usd: 0
+replay_net_realized_pnl_usd: 0
+replay_ending_unrealized_pnl_usd: 0
+replay_ending_equity_usd: 100000
+replay_return_fraction: 0

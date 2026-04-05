@@ -66,6 +66,11 @@ def _run_sections(report: str) -> dict[str, dict[str, str]]:
     return sections
 
 
+def _format_float(value: float) -> str:
+    text = f"{value:.10f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
 def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
     manifest = run_paper_replay_matrix(
         settings=_paper_settings_for(tmp_path),
@@ -81,6 +86,8 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
     aggregate_manifest = _section_key_values(report, "## Aggregate Manifest Counts")
     for key, value in manifest.aggregate_counts.items():
         assert aggregate_manifest[key] == str(value)
+    aggregate_pnl = _section_key_values(report, "## Aggregate Replay PnL")
+    assert float(aggregate_pnl["starting_equity_usd"]) > 0
 
     run_sections = _run_sections(report)
     expected_run_ids = [str(entry["run_id"]) for entry in manifest_payload["entries"]]
@@ -89,8 +96,14 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
     for entry in manifest_payload["entries"]:
         run_id = str(entry["run_id"])
         section = run_sections[run_id]
-        replay_result = replay_journal(str(entry["journal_path"]))
+        summary = json.loads(Path(str(entry["summary_path"])).read_text(encoding="utf-8"))
+        replay_result = replay_journal(
+            str(entry["journal_path"]),
+            replay_path=str(summary["replay_path"]),
+            starting_equity_usd=float(summary["pnl"]["starting_equity_usd"]),
+        )
         scorecard = replay_result.scorecard
+        pnl = replay_result.pnl
         event_type_counts = Counter(event.event_type.value for event in replay_result.events)
 
         assert section["manifest_event_count"] == str(entry["outcome_counts"]["event_count"])
@@ -113,3 +126,13 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
             scorecard.partial_fill_intent_count
         )
         assert section["replay_alert_count"] == str(event_type_counts["alert.raised"])
+        assert pnl is not None
+        assert section["replay_starting_equity_usd"] == _format_float(pnl.starting_equity_usd)
+        assert section["replay_gross_realized_pnl_usd"] == _format_float(pnl.gross_realized_pnl_usd)
+        assert section["replay_pnl_total_fee_usd"] == _format_float(pnl.total_fee_usd)
+        assert section["replay_net_realized_pnl_usd"] == _format_float(pnl.net_realized_pnl_usd)
+        assert section["replay_ending_unrealized_pnl_usd"] == _format_float(
+            pnl.ending_unrealized_pnl_usd
+        )
+        assert section["replay_ending_equity_usd"] == _format_float(pnl.ending_equity_usd)
+        assert section["replay_return_fraction"] == _format_float(pnl.return_fraction)

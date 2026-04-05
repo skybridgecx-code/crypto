@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from crypto_agent.cli.main import main
 from crypto_agent.events.journal import AppendOnlyJournal
 
@@ -127,6 +126,7 @@ def test_cli_paper_run_summary_snapshots_and_journal_shape(
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
 
     assert _normalize_summary(summary, run_id=run_id) == _load_snapshot(snapshot_name)
+    assert summary["pnl"] == output["pnl"]
     assert summary["scorecard"] == output["scorecard"]
     assert len(events) == int(summary["scorecard"]["event_count"])
     assert events[0].event_type.value == "trade.proposal.created"
@@ -242,6 +242,7 @@ def test_cli_paper_run_adverse_summary_snapshots_and_event_flags(
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
 
     assert _normalize_summary(summary, run_id=run_id) == _load_snapshot(snapshot_name)
+    assert summary["pnl"] == output["pnl"]
     assert len(events) == int(summary["scorecard"]["event_count"])
     assert [event.event_type.value for event in events] == expected_event_types
     assert summary["scorecard"]["order_reject_count"] == expected_order_reject_count

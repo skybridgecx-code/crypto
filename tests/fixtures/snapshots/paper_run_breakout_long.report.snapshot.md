@@ -36,6 +36,15 @@ max_slippage_bps: 1.6883447292
 total_fill_notional_usd: 40006.7166727206
 total_fee_usd: 8.0013433345
 
+## PnL
+starting_equity_usd: 100000
+gross_realized_pnl_usd: 0
+total_fee_usd: 8.0013433345
+net_realized_pnl_usd: -8.0013433345
+ending_unrealized_pnl_usd: -6.7533727206
+ending_equity_usd: 99985.2452839449
+return_fraction: -0.0001475472
+
 ## Review Packet
 event_count: 8
 filled_event_count: 2

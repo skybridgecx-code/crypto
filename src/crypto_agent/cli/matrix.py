@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from crypto_agent.cli.main import run_paper_replay
 from crypto_agent.config import Settings, load_settings
-from crypto_agent.evaluation.models import EvaluationScorecard
+from crypto_agent.evaluation.models import EvaluationScorecard, ReplayPnLSummary
 from crypto_agent.evaluation.replay import replay_journal
 from crypto_agent.ids import new_id
 
@@ -74,6 +74,16 @@ REPLAY_TOTAL_KEYS: tuple[str, ...] = (
     "alert_count",
     "kill_switch_activations",
     "empty_replay_scorecard_count",
+)
+
+REPLAY_PNL_KEYS: tuple[str, ...] = (
+    "starting_equity_usd",
+    "gross_realized_pnl_usd",
+    "total_fee_usd",
+    "net_realized_pnl_usd",
+    "ending_unrealized_pnl_usd",
+    "ending_equity_usd",
+    "return_fraction",
 )
 
 
@@ -162,7 +172,9 @@ def _relative_summary_path(run_id: str) -> str:
 
 
 def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
-    replay_runs: list[tuple[PaperRunMatrixEntry, EvaluationScorecard, int, int]] = []
+    replay_runs: list[
+        tuple[PaperRunMatrixEntry, EvaluationScorecard, ReplayPnLSummary, int, int]
+    ] = []
     total_fill_notionals: list[float] = []
     total_fees: list[float] = []
     max_slippages: list[float] = []
@@ -174,15 +186,25 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
             "max_slippage_bps": 0.0,
         }
     )
+    replay_pnl_totals: dict[str, float] = {key: 0.0 for key in REPLAY_PNL_KEYS}
 
     for entry in manifest.entries:
-        replay_result = replay_journal(entry.journal_path)
+        summary = json.loads(Path(entry.summary_path).read_text(encoding="utf-8"))
+        replay_result = replay_journal(
+            entry.journal_path,
+            replay_path=str(summary["replay_path"]),
+            starting_equity_usd=float(summary["pnl"]["starting_equity_usd"]),
+        )
         scorecard = replay_result.scorecard
+        pnl = replay_result.pnl or ReplayPnLSummary(
+            starting_equity_usd=float(summary["pnl"]["starting_equity_usd"]),
+            ending_equity_usd=float(summary["pnl"]["starting_equity_usd"]),
+        )
         event_counts = Counter(event.event_type.value for event in replay_result.events)
         alert_count = int(event_counts["alert.raised"])
         kill_switch_activations = int(event_counts["kill_switch.activated"])
 
-        replay_runs.append((entry, scorecard, alert_count, kill_switch_activations))
+        replay_runs.append((entry, scorecard, pnl, alert_count, kill_switch_activations))
 
         replay_totals["event_count"] += scorecard.event_count
         replay_totals["proposal_count"] += scorecard.proposal_count
@@ -205,10 +227,20 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
         total_fill_notionals.append(scorecard.total_fill_notional_usd)
         total_fees.append(scorecard.total_fee_usd)
         max_slippages.append(scorecard.max_slippage_bps)
+        replay_pnl_totals["starting_equity_usd"] += pnl.starting_equity_usd
+        replay_pnl_totals["gross_realized_pnl_usd"] += pnl.gross_realized_pnl_usd
+        replay_pnl_totals["total_fee_usd"] += pnl.total_fee_usd
+        replay_pnl_totals["net_realized_pnl_usd"] += pnl.net_realized_pnl_usd
+        replay_pnl_totals["ending_unrealized_pnl_usd"] += pnl.ending_unrealized_pnl_usd
+        replay_pnl_totals["ending_equity_usd"] += pnl.ending_equity_usd
 
     replay_totals["total_fill_notional_usd"] = fsum(total_fill_notionals)
     replay_totals["total_fee_usd"] = fsum(total_fees)
     replay_totals["max_slippage_bps"] = max(max_slippages, default=0.0)
+    if replay_pnl_totals["starting_equity_usd"] > 0:
+        replay_pnl_totals["return_fraction"] = (
+            replay_pnl_totals["ending_equity_usd"] - replay_pnl_totals["starting_equity_usd"]
+        ) / replay_pnl_totals["starting_equity_usd"]
 
     lines = [
         "# Paper Run Matrix Operator Report",
@@ -230,11 +262,20 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
             f"total_fee_usd: {_format_float(float(replay_totals['total_fee_usd']))}",
             f"max_slippage_bps: {_format_float(float(replay_totals['max_slippage_bps']))}",
             "",
+            "## Aggregate Replay PnL",
+        ]
+    )
+    lines.extend(
+        f"{key}: {_format_float(float(replay_pnl_totals[key]))}" for key in REPLAY_PNL_KEYS
+    )
+    lines.extend(
+        [
+            "",
             "## Per-Run Details",
         ]
     )
 
-    for entry, scorecard, alert_count, kill_switch_activations in replay_runs:
+    for entry, scorecard, pnl, alert_count, kill_switch_activations in replay_runs:
         lines.extend(
             [
                 f"### run_id: {entry.run_id}",
@@ -272,6 +313,14 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
                 "replay_total_fill_notional_usd: "
                 f"{_format_float(scorecard.total_fill_notional_usd)}",
                 f"replay_total_fee_usd: {_format_float(scorecard.total_fee_usd)}",
+                f"replay_starting_equity_usd: {_format_float(pnl.starting_equity_usd)}",
+                "replay_gross_realized_pnl_usd: " f"{_format_float(pnl.gross_realized_pnl_usd)}",
+                f"replay_pnl_total_fee_usd: {_format_float(pnl.total_fee_usd)}",
+                f"replay_net_realized_pnl_usd: {_format_float(pnl.net_realized_pnl_usd)}",
+                "replay_ending_unrealized_pnl_usd: "
+                f"{_format_float(pnl.ending_unrealized_pnl_usd)}",
+                f"replay_ending_equity_usd: {_format_float(pnl.ending_equity_usd)}",
+                f"replay_return_fraction: {_format_float(pnl.return_fraction)}",
                 "",
             ]
         )

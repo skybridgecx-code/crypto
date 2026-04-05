@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from crypto_agent.cli.main import run_paper_replay
 from crypto_agent.config import load_settings
 from crypto_agent.evaluation.replay import replay_journal
@@ -161,6 +160,7 @@ def test_single_run_report_snapshots_and_reconciliation(
     overview = _section_key_values(report, "# Paper Run Operator Report")
     event_counts = _section_key_values(report, "## Event Counts")
     scorecard_section = _section_key_values(report, "## Scorecard")
+    pnl_section = _section_key_values(report, "## PnL")
     review_section = _section_key_values(report, "## Review Packet")
     operator_section = _section_key_values(report, "## Operator Summary")
 
@@ -217,6 +217,22 @@ def test_single_run_report_snapshots_and_reconciliation(
     assert scorecard_section["total_fee_usd"] == _format_float(
         replay_result.scorecard.total_fee_usd
     )
+
+    assert pnl_section["starting_equity_usd"] == _format_float(
+        summary["pnl"]["starting_equity_usd"]
+    )
+    assert pnl_section["gross_realized_pnl_usd"] == _format_float(
+        summary["pnl"]["gross_realized_pnl_usd"]
+    )
+    assert pnl_section["total_fee_usd"] == _format_float(summary["pnl"]["total_fee_usd"])
+    assert pnl_section["net_realized_pnl_usd"] == _format_float(
+        summary["pnl"]["net_realized_pnl_usd"]
+    )
+    assert pnl_section["ending_unrealized_pnl_usd"] == _format_float(
+        summary["pnl"]["ending_unrealized_pnl_usd"]
+    )
+    assert pnl_section["ending_equity_usd"] == _format_float(summary["pnl"]["ending_equity_usd"])
+    assert pnl_section["return_fraction"] == _format_float(summary["pnl"]["return_fraction"])
 
     assert review_section["event_count"] == str(summary["review_packet"]["event_count"])
     assert review_section["filled_event_count"] == str(
