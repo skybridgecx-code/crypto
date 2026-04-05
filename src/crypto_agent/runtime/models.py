@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from crypto_agent.enums import Mode
 from crypto_agent.evaluation.models import EvaluationScorecard, ReplayPnLSummary
+from crypto_agent.market_data.live_models import LiveFeedHealth
 
 
 def _normalize_datetime(value: datetime) -> datetime:
@@ -24,6 +25,8 @@ class ForwardPaperRuntimePaths(BaseModel):
     history_path: Path
     sessions_dir: Path
     registry_path: Path
+    live_market_status_path: Path
+    venue_constraints_path: Path
 
 
 class ForwardPaperSessionSummary(BaseModel):
@@ -33,8 +36,24 @@ class ForwardPaperSessionSummary(BaseModel):
     session_id: str
     session_number: int = Field(ge=1)
     mode: Mode = Mode.PAPER
+    market_source: Literal["replay", "binance_spot"] = "replay"
+    live_symbol: str | None = None
+    live_interval: str | None = None
     status: Literal["running", "completed", "interrupted", "failed"]
-    replay_path: Path
+    replay_path: Path | None = None
+    market_input_path: Path | None = None
+    market_state_path: Path | None = None
+    venue_constraints_path: Path | None = None
+    feed_health: LiveFeedHealth | None = None
+    session_outcome: (
+        Literal[
+            "executed",
+            "skipped_stale_feed",
+            "skipped_degraded_feed",
+            "skipped_unavailable_feed",
+        ]
+        | None
+    ) = None
     scheduled_at: datetime
     started_at: datetime
     completed_at: datetime | None = None
@@ -66,7 +85,12 @@ class ForwardPaperRuntimeStatus(BaseModel):
 
     runtime_id: str
     mode: Mode = Mode.PAPER
-    replay_path: Path
+    market_source: Literal["replay", "binance_spot"] = "replay"
+    replay_path: Path | None = None
+    live_symbol: str | None = None
+    live_interval: str | None = None
+    live_lookback_candles: int | None = Field(default=None, ge=2)
+    feed_stale_after_seconds: int | None = Field(default=None, gt=0)
     starting_equity_usd: float = Field(gt=0)
     session_interval_seconds: int = Field(gt=0)
     status: Literal["idle", "running"] = "idle"
@@ -79,11 +103,15 @@ class ForwardPaperRuntimeStatus(BaseModel):
     failed_session_count: int = Field(default=0, ge=0)
     next_scheduled_at: datetime | None = None
     last_error_message: str | None = None
+    feed_health: LiveFeedHealth | None = None
+    venue_constraints_ready: bool = False
     updated_at: datetime
     status_path: Path
     history_path: Path
     sessions_dir: Path
     registry_path: Path
+    live_market_status_path: Path | None = None
+    venue_constraints_path: Path | None = None
 
     @field_validator("active_session_started_at", "next_scheduled_at", "updated_at")
     @classmethod
@@ -98,11 +126,16 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
 
     runtime_id: str
     mode: Mode = Mode.PAPER
-    replay_path: Path
+    market_source: Literal["replay", "binance_spot"] = "replay"
+    replay_path: Path | None = None
+    live_symbol: str | None = None
+    live_interval: str | None = None
     runtime_dir: Path
     status_path: Path
     history_path: Path
     sessions_dir: Path
+    live_market_status_path: Path | None = None
+    venue_constraints_path: Path | None = None
     starting_equity_usd: float = Field(gt=0)
     session_interval_seconds: int = Field(gt=0)
     status: Literal["idle", "running"]
@@ -156,5 +189,7 @@ class ForwardPaperRuntimeResult(BaseModel):
     status_path: Path
     history_path: Path
     sessions_dir: Path
+    live_market_status_path: Path | None = None
+    venue_constraints_path: Path | None = None
     session_count: int = Field(ge=0)
     session_summaries: list[ForwardPaperSessionSummary] = Field(default_factory=list)
