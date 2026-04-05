@@ -77,6 +77,10 @@ def test_runtime_recovery_writes_recovery_status_and_preserves_continuity(
         reconciliation_report_path=paths.reconciliation_report_path,
         recovery_status_path=paths.recovery_status_path,
         execution_state_dir=paths.execution_state_dir,
+        live_control_config_path=paths.live_control_config_path,
+        live_control_status_path=paths.live_control_status_path,
+        readiness_status_path=paths.readiness_status_path,
+        manual_control_state_path=paths.manual_control_state_path,
     )
     paths.status_path.write_text(
         json.dumps(status.model_dump(mode="json"), indent=2, sort_keys=True),

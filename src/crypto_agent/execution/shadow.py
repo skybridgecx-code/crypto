@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 from crypto_agent.enums import EventType
 from crypto_agent.events.journal import AppendOnlyJournal
@@ -48,15 +49,15 @@ def _dedupe_requests(requests: list[VenueOrderRequest]) -> list[VenueOrderReques
     return list(deduped.values())
 
 
-def build_shadow_execution_artifacts(
+def build_execution_request_artifact(
     *,
     session_id: str,
     run_id: str,
     journal_path: str | Path,
     market_state_path: str | Path,
     venue_constraints_path: str | Path,
-    observed_at: datetime,
-) -> tuple[ExecutionRequestArtifact, ExecutionResultArtifact, ExecutionStatusArtifact]:
+    execution_mode: Literal["shadow", "sandbox"],
+) -> ExecutionRequestArtifact:
     market_state = _load_market_state(market_state_path)
     registry = _load_constraint_registry(venue_constraints_path)
     requests = _dedupe_requests(
@@ -65,25 +66,47 @@ def build_shadow_execution_artifacts(
                 intent=intent,
                 constraints=registry.get(intent.symbol),
                 market_state=market_state,
-                execution_mode="shadow",
+                execution_mode=execution_mode,
             )
             for intent in _load_order_intents(journal_path)
         ]
     )
+    return ExecutionRequestArtifact(
+        run_id=run_id,
+        session_id=session_id,
+        execution_mode=execution_mode,
+        request_count=len(requests),
+        rejected_request_count=sum(
+            1 for request in requests if request.normalization_status == "rejected"
+        ),
+        requests=requests,
+    )
+
+
+def build_shadow_execution_artifacts(
+    *,
+    session_id: str,
+    run_id: str,
+    journal_path: str | Path,
+    market_state_path: str | Path,
+    venue_constraints_path: str | Path,
+    observed_at: datetime,
+    request_artifact: ExecutionRequestArtifact | None = None,
+) -> tuple[ExecutionRequestArtifact, ExecutionResultArtifact, ExecutionStatusArtifact]:
+    request_artifact = request_artifact or build_execution_request_artifact(
+        session_id=session_id,
+        run_id=run_id,
+        journal_path=journal_path,
+        market_state_path=market_state_path,
+        venue_constraints_path=venue_constraints_path,
+        execution_mode="shadow",
+    )
+    requests = request_artifact.requests
     results = [build_shadow_ack(request, observed_at=observed_at) for request in requests]
     statuses = [build_shadow_state(request, updated_at=observed_at) for request in requests]
 
     return (
-        ExecutionRequestArtifact(
-            run_id=run_id,
-            session_id=session_id,
-            execution_mode="shadow",
-            request_count=len(requests),
-            rejected_request_count=sum(
-                1 for request in requests if request.normalization_status == "rejected"
-            ),
-            requests=requests,
-        ),
+        request_artifact,
         ExecutionResultArtifact(
             run_id=run_id,
             session_id=session_id,

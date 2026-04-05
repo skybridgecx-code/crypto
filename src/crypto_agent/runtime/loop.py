@@ -7,6 +7,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
+from pydantic import BaseModel
+
 from crypto_agent.cli.main import PaperRunResult, run_paper_replay
 from crypto_agent.config import Settings
 from crypto_agent.enums import Mode
@@ -17,12 +19,27 @@ from crypto_agent.execution.models import (
     ExecutionStatusArtifact,
 )
 from crypto_agent.execution.sandbox import execute_sandbox_requests
-from crypto_agent.execution.shadow import build_shadow_execution_artifacts
+from crypto_agent.execution.shadow import (
+    build_execution_request_artifact,
+    build_shadow_execution_artifacts,
+)
 from crypto_agent.market_data.live_adapter import (
     BinanceSpotLiveMarketDataAdapter,
     LiveMarketDataUnavailableError,
 )
 from crypto_agent.market_data.live_models import LiveFeedHealth, LiveMarketState
+from crypto_agent.market_data.replay import load_candle_replay
+from crypto_agent.policy.live_controls import (
+    LiveControlConfig,
+    LiveControlDecision,
+    ManualControlState,
+    build_live_control_status_artifact,
+    default_live_control_config,
+    default_manual_control_state,
+    evaluate_post_run_controls,
+    evaluate_preflight_controls,
+)
+from crypto_agent.policy.readiness import LiveReadinessStatus, default_live_readiness_status
 from crypto_agent.runtime.history import append_forward_paper_history
 from crypto_agent.runtime.models import (
     ForwardPaperHistoryEvent,
@@ -89,6 +106,10 @@ def _session_execution_status_path(sessions_dir: Path, session_id: str) -> Path:
     return sessions_dir / f"{session_id}.execution_status.json"
 
 
+def _session_control_decision_path(sessions_dir: Path, session_id: str) -> Path:
+    return sessions_dir / f"{session_id}.control_decision.json"
+
+
 def _write_session_summary(summary: ForwardPaperSessionSummary, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -99,6 +120,48 @@ def _write_session_summary(summary: ForwardPaperSessionSummary, path: Path) -> N
 
 def _load_session_summary(path: Path) -> ForwardPaperSessionSummary:
     return ForwardPaperSessionSummary.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _write_json_artifact(path: Path, model: BaseModel) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(model.model_dump(mode="json"), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def _load_live_control_config(path: Path) -> LiveControlConfig:
+    return LiveControlConfig.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _load_readiness_status(path: Path) -> LiveReadinessStatus:
+    return LiveReadinessStatus.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _load_manual_control_state(path: Path) -> ManualControlState:
+    return ManualControlState.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _load_control_decision(path: Path) -> LiveControlDecision:
+    return LiveControlDecision.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _requested_symbols_from_replay(path: Path) -> list[str]:
+    return sorted({candle.symbol for candle in load_candle_replay(path)})
+
+
+def _last_completed_session(
+    status: ForwardPaperRuntimeStatus,
+) -> ForwardPaperSessionSummary | None:
+    if status.last_session_id is None:
+        return None
+    session_path = _session_summary_path(status.sessions_dir, status.last_session_id)
+    if not session_path.exists():
+        return None
+    summary = _load_session_summary(session_path)
+    if summary.status != "completed":
+        return None
+    return summary
 
 
 def build_forward_paper_runtime_paths(
@@ -118,6 +181,10 @@ def build_forward_paper_runtime_paths(
         reconciliation_report_path=runtime_dir / "reconciliation_report.json",
         recovery_status_path=runtime_dir / "recovery_status.json",
         execution_state_dir=runtime_dir / "execution",
+        live_control_config_path=runtime_dir / "live_control_config.json",
+        live_control_status_path=runtime_dir / "live_control_status.json",
+        readiness_status_path=runtime_dir / "live_readiness_status.json",
+        manual_control_state_path=runtime_dir / "manual_control_state.json",
     )
 
 
@@ -195,6 +262,10 @@ def _initial_runtime_status(
         reconciliation_report_path=paths.reconciliation_report_path,
         recovery_status_path=paths.recovery_status_path,
         execution_state_dir=paths.execution_state_dir,
+        live_control_config_path=paths.live_control_config_path,
+        live_control_status_path=paths.live_control_status_path,
+        readiness_status_path=paths.readiness_status_path,
+        manual_control_state_path=paths.manual_control_state_path,
     )
 
 
@@ -315,6 +386,66 @@ def _ensure_runtime_status(
             f"Forward paper runtime account state mismatch detected: {runtime_id}"
         )
     return reconciled_status, account_state, recovered_session_id, recovery_note
+
+
+def _resolve_control_surfaces(
+    *,
+    runtime_id: str,
+    settings: Settings,
+    paths: ForwardPaperRuntimePaths,
+    updated_at: datetime,
+    live_control_config: LiveControlConfig | None,
+    readiness_status: LiveReadinessStatus | None,
+    manual_control_state: ManualControlState | None,
+) -> tuple[LiveControlConfig, LiveReadinessStatus, ManualControlState]:
+    if live_control_config is not None:
+        resolved_controls = live_control_config
+    elif paths.live_control_config_path.exists():
+        resolved_controls = _load_live_control_config(paths.live_control_config_path)
+    else:
+        resolved_controls = default_live_control_config(
+            runtime_id=runtime_id,
+            settings=settings,
+            updated_at=updated_at,
+        )
+
+    if readiness_status is not None:
+        resolved_readiness = readiness_status
+    elif paths.readiness_status_path.exists():
+        resolved_readiness = _load_readiness_status(paths.readiness_status_path)
+    else:
+        resolved_readiness = default_live_readiness_status(
+            runtime_id=runtime_id,
+            updated_at=updated_at,
+        )
+
+    if manual_control_state is not None:
+        resolved_manual_controls = manual_control_state
+    elif paths.manual_control_state_path.exists():
+        resolved_manual_controls = _load_manual_control_state(paths.manual_control_state_path)
+    else:
+        resolved_manual_controls = default_manual_control_state(
+            runtime_id=runtime_id,
+            updated_at=updated_at,
+        )
+
+    if resolved_controls.runtime_id != runtime_id:
+        raise ValueError("live control config runtime_id does not match runtime")
+    if resolved_readiness.runtime_id != runtime_id:
+        raise ValueError("readiness status runtime_id does not match runtime")
+    if resolved_manual_controls.runtime_id != runtime_id:
+        raise ValueError("manual control state runtime_id does not match runtime")
+
+    resolved_controls = resolved_controls.model_copy(update={"updated_at": updated_at})
+    resolved_readiness = resolved_readiness.model_copy(update={"updated_at": updated_at})
+    resolved_manual_controls = resolved_manual_controls.model_copy(
+        update={"updated_at": updated_at}
+    )
+
+    _write_json_artifact(paths.live_control_config_path, resolved_controls)
+    _write_json_artifact(paths.readiness_status_path, resolved_readiness)
+    _write_json_artifact(paths.manual_control_state_path, resolved_manual_controls)
+    return resolved_controls, resolved_readiness, resolved_manual_controls
 
 
 def _recover_interrupted_session(
@@ -507,6 +638,32 @@ def _skipped_session_summary(
     )
 
 
+def _blocked_session_summary(
+    *,
+    session_summary: ForwardPaperSessionSummary,
+    completed_at: datetime,
+    control_decision: LiveControlDecision,
+) -> ForwardPaperSessionSummary:
+    path_exists = dict(session_summary.artifact_paths_exist)
+    if session_summary.market_input_path is not None:
+        path_exists["market_input_path"] = session_summary.market_input_path.exists()
+    if session_summary.market_state_path is not None:
+        path_exists["market_state_path"] = session_summary.market_state_path.exists()
+    if session_summary.venue_constraints_path is not None:
+        path_exists["venue_constraints_path"] = session_summary.venue_constraints_path.exists()
+    return session_summary.model_copy(
+        update={
+            "status": "completed",
+            "session_outcome": "blocked_controls",
+            "completed_at": completed_at,
+            "control_action": control_decision.action,
+            "control_reason_codes": control_decision.reason_codes,
+            "artifact_paths_exist": path_exists,
+            "all_artifact_paths_exist": all(path_exists.values()) if path_exists else True,
+        }
+    )
+
+
 def _failed_session_summary(
     *,
     session_summary: ForwardPaperSessionSummary,
@@ -664,6 +821,85 @@ def _session_summary_with_execution_artifacts(
     )
 
 
+def _session_summary_with_request_artifact(
+    *,
+    session_summary: ForwardPaperSessionSummary,
+    request_path: Path,
+    request_artifact: ExecutionRequestArtifact,
+) -> ForwardPaperSessionSummary:
+    artifact_paths_exist = dict(session_summary.artifact_paths_exist)
+    artifact_paths_exist["execution_request_path"] = request_path.exists()
+    return session_summary.model_copy(
+        update={
+            "execution_request_path": request_path,
+            "execution_request_count": request_artifact.request_count,
+            "artifact_paths_exist": artifact_paths_exist,
+            "all_artifact_paths_exist": all(artifact_paths_exist.values()),
+        }
+    )
+
+
+def _session_summary_with_control_decision(
+    *,
+    session_summary: ForwardPaperSessionSummary,
+    control_decision_path: Path,
+    control_decision: LiveControlDecision,
+) -> ForwardPaperSessionSummary:
+    artifact_paths_exist = dict(session_summary.artifact_paths_exist)
+    artifact_paths_exist["control_decision_path"] = control_decision_path.exists()
+    return session_summary.model_copy(
+        update={
+            "control_decision_path": control_decision_path,
+            "control_action": control_decision.action,
+            "control_reason_codes": control_decision.reason_codes,
+            "artifact_paths_exist": artifact_paths_exist,
+            "all_artifact_paths_exist": all(artifact_paths_exist.values()),
+        }
+    )
+
+
+def _persist_control_status(
+    *,
+    status: ForwardPaperRuntimeStatus,
+    controls: LiveControlConfig,
+    readiness: LiveReadinessStatus,
+    manual_controls: ManualControlState,
+    account_state: ForwardPaperRuntimeAccountState,
+    latest_decision_path: Path | None,
+    latest_decision: LiveControlDecision,
+    updated_at: datetime,
+) -> ForwardPaperRuntimeStatus:
+    last_session = _last_completed_session(status)
+    control_status = build_live_control_status_artifact(
+        runtime_id=status.runtime_id,
+        execution_mode=status.execution_mode,
+        market_source=status.market_source,
+        controls=controls,
+        manual_controls=manual_controls,
+        readiness_status=readiness.status,
+        limited_live_gate_status=readiness.limited_live_gate_status,
+        account_state=account_state,
+        last_completed_session=last_session,
+        latest_decision_path=latest_decision_path,
+        latest_decision=latest_decision,
+        updated_at=updated_at,
+    )
+    _write_json_artifact(status.live_control_status_path, control_status)
+    updated_status = status.model_copy(
+        update={
+            "live_control_status_path": status.live_control_status_path,
+            "live_control_config_path": status.live_control_config_path,
+            "readiness_status_path": status.readiness_status_path,
+            "manual_control_state_path": status.manual_control_state_path,
+            "control_status": latest_decision.action,
+            "control_block_reasons": latest_decision.reason_codes,
+            "updated_at": updated_at,
+        }
+    )
+    _persist_runtime_status(updated_status)
+    return updated_status
+
+
 def _materialize_execution_mode_artifacts(
     *,
     execution_mode: Literal["paper", "shadow", "sandbox"],
@@ -671,6 +907,7 @@ def _materialize_execution_mode_artifacts(
     sessions_dir: Path,
     sandbox_execution_adapter: SandboxExecutionAdapter | None,
     observed_at: datetime,
+    request_artifact: ExecutionRequestArtifact | None = None,
 ) -> ForwardPaperSessionSummary:
     if execution_mode == "paper":
         return session_summary
@@ -696,6 +933,7 @@ def _materialize_execution_mode_artifacts(
             market_state_path=session_summary.market_state_path,
             venue_constraints_path=session_summary.venue_constraints_path,
             observed_at=observed_at,
+            request_artifact=request_artifact,
         )
     else:
         if sandbox_execution_adapter is None:
@@ -709,6 +947,7 @@ def _materialize_execution_mode_artifacts(
             existing_status_path=status_path,
             adapter=sandbox_execution_adapter,
             observed_at=observed_at,
+            request_artifact=request_artifact,
         )
 
     _write_execution_artifact(request_path, request_artifact)
@@ -744,6 +983,9 @@ def run_forward_paper_runtime(
     feed_stale_after_seconds: int | None = None,
     live_adapter: BinanceSpotLiveMarketDataAdapter | None = None,
     sandbox_execution_adapter: SandboxExecutionAdapter | None = None,
+    live_control_config: LiveControlConfig | None = None,
+    readiness_status: LiveReadinessStatus | None = None,
+    manual_control_state: ManualControlState | None = None,
 ) -> ForwardPaperRuntimeResult:
     replay_fixture_path = Path(replay_path) if replay_path is not None else None
     scheduled_ticks = (
@@ -766,6 +1008,15 @@ def run_forward_paper_runtime(
         recover_interrupted=recover_interrupted,
     )
     paths = build_forward_paper_runtime_paths(settings.paths.runs_dir, runtime_id)
+    controls, readiness, manual_controls = _resolve_control_surfaces(
+        runtime_id=runtime_id,
+        settings=settings,
+        paths=paths,
+        updated_at=initial_now,
+        live_control_config=live_control_config,
+        readiness_status=readiness_status,
+        manual_control_state=manual_control_state,
+    )
     scheduled_times = _iter_scheduled_times(
         tick_times=scheduled_ticks,
         max_sessions=max_sessions,
@@ -786,10 +1037,80 @@ def run_forward_paper_runtime(
             scheduled_at=scheduled_at,
         )
         run_id = f"{runtime_id}-{running_session.session_id}"
+        control_decision_path = _session_control_decision_path(
+            status.sessions_dir,
+            running_session.session_id,
+        )
         try:
             if market_source == "replay":
                 if replay_fixture_path is None:
                     raise ValueError("Replay runtime requires replay fixture path")
+                preflight_decision = evaluate_preflight_controls(
+                    runtime_id=runtime_id,
+                    session_id=running_session.session_id,
+                    execution_mode=execution_mode,
+                    requested_symbols=_requested_symbols_from_replay(replay_fixture_path),
+                    account_state=account_state,
+                    controls=controls,
+                    readiness_status=readiness.status,
+                    manual_controls=manual_controls,
+                    checked_at=scheduled_at,
+                    last_completed_session=_last_completed_session(status),
+                )
+                _write_json_artifact(control_decision_path, preflight_decision)
+                running_session = _session_summary_with_control_decision(
+                    session_summary=running_session,
+                    control_decision_path=control_decision_path,
+                    control_decision=preflight_decision,
+                )
+                status = _persist_control_status(
+                    status=status,
+                    controls=controls,
+                    readiness=readiness,
+                    manual_controls=manual_controls,
+                    account_state=account_state,
+                    latest_decision_path=control_decision_path,
+                    latest_decision=preflight_decision,
+                    updated_at=scheduled_at,
+                )
+                if preflight_decision.action != "go":
+                    completed_at = _normalize_datetime(now_fn())
+                    blocked_session = _blocked_session_summary(
+                        session_summary=running_session,
+                        completed_at=completed_at,
+                        control_decision=preflight_decision,
+                    )
+                    _write_session_summary(blocked_session, session_path)
+                    append_forward_paper_history(
+                        status.history_path,
+                        ForwardPaperHistoryEvent(
+                            event_type="session.completed",
+                            runtime_id=runtime_id,
+                            session_id=blocked_session.session_id,
+                            session_number=blocked_session.session_number,
+                            occurred_at=completed_at,
+                            status="completed",
+                            message=blocked_session.session_outcome,
+                        ),
+                    )
+                    status = _complete_status(
+                        status=status,
+                        session_summary=blocked_session,
+                        completed_at=completed_at,
+                    )
+                    status, account_state, _, _ = reconcile_forward_paper_runtime(
+                        status=status,
+                        paths=paths,
+                        reconciled_at=completed_at,
+                        require_local_match=False,
+                        recovered_session_id=recovered_session_id,
+                        recovery_note=recovery_note,
+                    )
+                    recovered_session_id = None
+                    recovery_note = None
+                    _persist_runtime_status(status)
+                    completed_sessions.append(blocked_session)
+                    continue
                 result = run_paper_replay(
                     replay_fixture_path,
                     settings=settings,
@@ -802,13 +1123,6 @@ def run_forward_paper_runtime(
                     session_summary=running_session,
                     result=result,
                     completed_at=completed_at,
-                )
-                completed_session = _materialize_execution_mode_artifacts(
-                    execution_mode=execution_mode,
-                    session_summary=completed_session,
-                    sessions_dir=status.sessions_dir,
-                    sandbox_execution_adapter=sandbox_execution_adapter,
-                    observed_at=completed_at,
                 )
             else:
                 if resolved_live_adapter is None:
@@ -850,6 +1164,74 @@ def run_forward_paper_runtime(
                 )
                 _persist_runtime_status(status)
 
+                preflight_decision = evaluate_preflight_controls(
+                    runtime_id=runtime_id,
+                    session_id=live_session.session_id,
+                    execution_mode=execution_mode,
+                    requested_symbols=[market_state.symbol],
+                    account_state=account_state,
+                    controls=controls,
+                    readiness_status=readiness.status,
+                    manual_controls=manual_controls,
+                    checked_at=scheduled_at,
+                    last_completed_session=_last_completed_session(status),
+                )
+                _write_json_artifact(control_decision_path, preflight_decision)
+                live_session = _session_summary_with_control_decision(
+                    session_summary=live_session,
+                    control_decision_path=control_decision_path,
+                    control_decision=preflight_decision,
+                )
+                status = _persist_control_status(
+                    status=status,
+                    controls=controls,
+                    readiness=readiness,
+                    manual_controls=manual_controls,
+                    account_state=account_state,
+                    latest_decision_path=control_decision_path,
+                    latest_decision=preflight_decision,
+                    updated_at=scheduled_at,
+                )
+
+                if preflight_decision.action != "go":
+                    completed_at = _normalize_datetime(now_fn())
+                    completed_session = _blocked_session_summary(
+                        session_summary=live_session,
+                        completed_at=completed_at,
+                        control_decision=preflight_decision,
+                    )
+                    _write_session_summary(completed_session, session_path)
+                    append_forward_paper_history(
+                        status.history_path,
+                        ForwardPaperHistoryEvent(
+                            event_type="session.completed",
+                            runtime_id=runtime_id,
+                            session_id=completed_session.session_id,
+                            session_number=completed_session.session_number,
+                            occurred_at=completed_at,
+                            status="completed",
+                            message=completed_session.session_outcome,
+                        ),
+                    )
+                    status = _complete_status(
+                        status=status,
+                        session_summary=completed_session,
+                        completed_at=completed_at,
+                    )
+                    status, account_state, _, _ = reconcile_forward_paper_runtime(
+                        status=status,
+                        paths=paths,
+                        reconciled_at=completed_at,
+                        require_local_match=False,
+                        recovered_session_id=recovered_session_id,
+                        recovery_note=recovery_note,
+                    )
+                    recovered_session_id = None
+                    recovery_note = None
+                    _persist_runtime_status(status)
+                    completed_sessions.append(completed_session)
+                    continue
+
                 if market_state.feed_health.status == "healthy":
                     result = run_paper_replay(
                         session_market_input_path,
@@ -864,13 +1246,6 @@ def run_forward_paper_runtime(
                         result=result,
                         completed_at=completed_at,
                     )
-                    completed_session = _materialize_execution_mode_artifacts(
-                        execution_mode=execution_mode,
-                        session_summary=completed_session,
-                        sessions_dir=status.sessions_dir,
-                        sandbox_execution_adapter=sandbox_execution_adapter,
-                        observed_at=completed_at,
-                    )
                 else:
                     completed_at = _normalize_datetime(now_fn())
                     outcome = (
@@ -883,6 +1258,75 @@ def run_forward_paper_runtime(
                         completed_at=completed_at,
                         outcome=outcome,
                         feed_health=market_state.feed_health,
+                    )
+
+            if completed_session.session_outcome == "executed":
+                request_artifact = None
+                if execution_mode != "paper":
+                    if (
+                        completed_session.journal_path is None
+                        or completed_session.market_state_path is None
+                        or completed_session.venue_constraints_path is None
+                    ):
+                        raise ValueError(
+                            "Non-paper execution controls require journal, market state, "
+                            "and constraints."
+                        )
+                    request_artifact = build_execution_request_artifact(
+                        session_id=completed_session.session_id,
+                        run_id=completed_session.run_id or run_id,
+                        journal_path=completed_session.journal_path,
+                        market_state_path=completed_session.market_state_path,
+                        venue_constraints_path=completed_session.venue_constraints_path,
+                        execution_mode="shadow" if execution_mode == "shadow" else "sandbox",
+                    )
+                    request_path = _session_execution_request_path(
+                        status.sessions_dir,
+                        completed_session.session_id,
+                    )
+                    _write_execution_artifact(request_path, request_artifact)
+                    completed_session = _session_summary_with_request_artifact(
+                        session_summary=completed_session,
+                        request_path=request_path,
+                        request_artifact=request_artifact,
+                    )
+
+                post_run_decision = evaluate_post_run_controls(
+                    runtime_id=runtime_id,
+                    session_id=completed_session.session_id,
+                    execution_mode=execution_mode,
+                    request_artifact=request_artifact,
+                    session_pnl=completed_session.pnl,
+                    account_state=account_state,
+                    controls=controls,
+                    manual_controls=manual_controls,
+                    checked_at=completed_session.completed_at or scheduled_at,
+                )
+                _write_json_artifact(control_decision_path, post_run_decision)
+                completed_session = _session_summary_with_control_decision(
+                    session_summary=completed_session,
+                    control_decision_path=control_decision_path,
+                    control_decision=post_run_decision,
+                )
+                status = _persist_control_status(
+                    status=status,
+                    controls=controls,
+                    readiness=readiness,
+                    manual_controls=manual_controls,
+                    account_state=account_state,
+                    latest_decision_path=control_decision_path,
+                    latest_decision=post_run_decision,
+                    updated_at=completed_session.completed_at or scheduled_at,
+                )
+
+                if execution_mode != "paper" and post_run_decision.action == "go":
+                    completed_session = _materialize_execution_mode_artifacts(
+                        execution_mode=execution_mode,
+                        session_summary=completed_session,
+                        sessions_dir=status.sessions_dir,
+                        sandbox_execution_adapter=sandbox_execution_adapter,
+                        observed_at=completed_session.completed_at or scheduled_at,
+                        request_artifact=request_artifact,
                     )
 
             _write_session_summary(completed_session, session_path)
@@ -1027,6 +1471,10 @@ def run_forward_paper_runtime(
         recovery_status_path=status.recovery_status_path,
         execution_mode=status.execution_mode,
         execution_state_dir=status.execution_state_dir,
+        live_control_config_path=status.live_control_config_path,
+        live_control_status_path=status.live_control_status_path,
+        readiness_status_path=status.readiness_status_path,
+        manual_control_state_path=status.manual_control_state_path,
         session_count=len(completed_sessions),
         session_summaries=completed_sessions,
     )

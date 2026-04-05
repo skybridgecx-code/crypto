@@ -32,6 +32,10 @@ class ForwardPaperRuntimePaths(BaseModel):
     reconciliation_report_path: Path
     recovery_status_path: Path
     execution_state_dir: Path
+    live_control_config_path: Path
+    live_control_status_path: Path
+    readiness_status_path: Path
+    manual_control_state_path: Path
 
 
 class RuntimeAccountPosition(BaseModel):
@@ -151,6 +155,7 @@ class ForwardPaperSessionSummary(BaseModel):
     session_outcome: (
         Literal[
             "executed",
+            "blocked_controls",
             "skipped_stale_feed",
             "skipped_degraded_feed",
             "skipped_unavailable_feed",
@@ -168,6 +173,9 @@ class ForwardPaperSessionSummary(BaseModel):
     execution_request_path: Path | None = None
     execution_result_path: Path | None = None
     execution_status_path: Path | None = None
+    control_decision_path: Path | None = None
+    control_action: Literal["go", "no_go", "manual_approval_required"] | None = None
+    control_reason_codes: list[str] = Field(default_factory=list)
     execution_request_count: int | None = Field(default=None, ge=0)
     execution_terminal_count: int | None = Field(default=None, ge=0)
     quality_issue_count: int | None = Field(default=None, ge=0)
@@ -229,6 +237,12 @@ class ForwardPaperRuntimeStatus(BaseModel):
     reconciliation_report_path: Path
     recovery_status_path: Path
     execution_state_dir: Path
+    live_control_config_path: Path
+    live_control_status_path: Path
+    readiness_status_path: Path
+    manual_control_state_path: Path
+    control_status: Literal["go", "no_go", "manual_approval_required"] = "go"
+    control_block_reasons: list[str] = Field(default_factory=list)
 
     @field_validator(
         "active_session_started_at",
@@ -263,6 +277,10 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
     reconciliation_report_path: Path
     recovery_status_path: Path
     execution_state_dir: Path
+    live_control_config_path: Path
+    live_control_status_path: Path
+    readiness_status_path: Path
+    manual_control_state_path: Path
     starting_equity_usd: float = Field(gt=0)
     session_interval_seconds: int = Field(gt=0)
     status: Literal["idle", "running"]
@@ -271,6 +289,8 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
     last_session_id: str | None = None
     reconciliation_status: Literal["not_checked", "clean", "mismatch"] = "not_checked"
     mismatch_detected: bool = False
+    control_status: Literal["go", "no_go", "manual_approval_required"] = "go"
+    control_block_reasons: list[str] = Field(default_factory=list)
     updated_at: datetime
 
     @field_validator("updated_at")
@@ -325,5 +345,9 @@ class ForwardPaperRuntimeResult(BaseModel):
     recovery_status_path: Path
     execution_mode: Literal["paper", "shadow", "sandbox"] = "paper"
     execution_state_dir: Path
+    live_control_config_path: Path
+    live_control_status_path: Path
+    readiness_status_path: Path
+    manual_control_state_path: Path
     session_count: int = Field(ge=0)
     session_summaries: list[ForwardPaperSessionSummary] = Field(default_factory=list)

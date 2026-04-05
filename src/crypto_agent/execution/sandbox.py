@@ -4,7 +4,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from crypto_agent.execution.live_adapter import SandboxExecutionAdapter, build_venue_order_request
+from crypto_agent.execution.live_adapter import SandboxExecutionAdapter
 from crypto_agent.execution.models import (
     ExecutionRequestArtifact,
     ExecutionResultArtifact,
@@ -14,9 +14,7 @@ from crypto_agent.execution.models import (
     VenueOrderState,
 )
 from crypto_agent.execution.shadow import (
-    _load_constraint_registry,
-    _load_market_state,
-    _load_order_intents,
+    build_execution_request_artifact,
 )
 
 
@@ -63,23 +61,21 @@ def execute_sandbox_requests(
     existing_status_path: str | Path,
     adapter: SandboxExecutionAdapter,
     observed_at: datetime,
+    request_artifact: ExecutionRequestArtifact | None = None,
 ) -> tuple[ExecutionRequestArtifact, ExecutionResultArtifact, ExecutionStatusArtifact]:
     if not adapter.sandbox:
         raise ValueError("Sandbox execution requires an adapter explicitly marked as sandbox.")
 
-    market_state = _load_market_state(market_state_path)
-    registry = _load_constraint_registry(venue_constraints_path)
     existing_statuses = _load_existing_statuses(existing_status_path)
-
-    requests = [
-        build_venue_order_request(
-            intent=intent,
-            constraints=registry.get(intent.symbol),
-            market_state=market_state,
-            execution_mode="sandbox",
-        )
-        for intent in _load_order_intents(journal_path)
-    ]
+    request_artifact = request_artifact or build_execution_request_artifact(
+        session_id=session_id,
+        run_id=run_id,
+        journal_path=journal_path,
+        market_state_path=market_state_path,
+        venue_constraints_path=venue_constraints_path,
+        execution_mode="sandbox",
+    )
+    requests = request_artifact.requests
 
     deduped_requests: dict[str, VenueOrderRequest] = {}
     for request in requests:
@@ -160,17 +156,16 @@ def execute_sandbox_requests(
         statuses.append(state)
 
     return (
-        ExecutionRequestArtifact(
-            run_id=run_id,
-            session_id=session_id,
-            execution_mode="sandbox",
-            request_count=len(deduped_requests),
-            rejected_request_count=sum(
-                1
-                for request in deduped_requests.values()
-                if request.normalization_status == "rejected"
-            ),
-            requests=list(deduped_requests.values()),
+        request_artifact.model_copy(
+            update={
+                "request_count": len(deduped_requests),
+                "rejected_request_count": sum(
+                    1
+                    for request in deduped_requests.values()
+                    if request.normalization_status == "rejected"
+                ),
+                "requests": list(deduped_requests.values()),
+            }
         ),
         ExecutionResultArtifact(
             run_id=run_id,

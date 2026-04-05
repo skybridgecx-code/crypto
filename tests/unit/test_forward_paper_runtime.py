@@ -190,6 +190,10 @@ def test_forward_paper_runtime_recovers_interrupted_session_on_restart(
         reconciliation_report_path=paths.reconciliation_report_path,
         recovery_status_path=paths.recovery_status_path,
         execution_state_dir=paths.execution_state_dir,
+        live_control_config_path=paths.live_control_config_path,
+        live_control_status_path=paths.live_control_status_path,
+        readiness_status_path=paths.readiness_status_path,
+        manual_control_state_path=paths.manual_control_state_path,
     )
     paths.status_path.write_text(
         json.dumps(status.model_dump(mode="json"), indent=2, sort_keys=True),
@@ -262,6 +266,10 @@ def test_forward_paper_runtime_prevents_duplicate_active_session_without_recover
         reconciliation_report_path=paths.reconciliation_report_path,
         recovery_status_path=paths.recovery_status_path,
         execution_state_dir=paths.execution_state_dir,
+        live_control_config_path=paths.live_control_config_path,
+        live_control_status_path=paths.live_control_status_path,
+        readiness_status_path=paths.readiness_status_path,
+        manual_control_state_path=paths.manual_control_state_path,
     )
     paths.status_path.write_text(
         json.dumps(status.model_dump(mode="json"), indent=2, sort_keys=True),
@@ -311,5 +319,9 @@ def test_cli_forward_paper_runtime_runs_single_session_and_prints_status(
     assert Path(output["account_state_path"]).exists()
     assert Path(output["reconciliation_report_path"]).exists()
     assert Path(output["recovery_status_path"]).exists()
+    assert Path(output["live_control_config_path"]).exists()
+    assert Path(output["live_control_status_path"]).exists()
+    assert Path(output["readiness_status_path"]).exists()
+    assert Path(output["manual_control_state_path"]).exists()
     assert output["session_count"] == 1
     assert output["session_ids"] == ["session-0001"]

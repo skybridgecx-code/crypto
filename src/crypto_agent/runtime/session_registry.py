@@ -65,6 +65,10 @@ def registry_entry_from_status(
         reconciliation_report_path=status.reconciliation_report_path,
         recovery_status_path=status.recovery_status_path,
         execution_state_dir=status.execution_state_dir,
+        live_control_config_path=status.live_control_config_path,
+        live_control_status_path=status.live_control_status_path,
+        readiness_status_path=status.readiness_status_path,
+        manual_control_state_path=status.manual_control_state_path,
         starting_equity_usd=status.starting_equity_usd,
         session_interval_seconds=status.session_interval_seconds,
         status=status.status,
@@ -73,6 +77,8 @@ def registry_entry_from_status(
         last_session_id=status.last_session_id,
         reconciliation_status=status.reconciliation_status,
         mismatch_detected=status.mismatch_detected,
+        control_status=status.control_status,
+        control_block_reasons=status.control_block_reasons,
         updated_at=status.updated_at,
     )
 
