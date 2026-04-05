@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
+from crypto_agent.enums import Side
 from crypto_agent.events.envelope import EventEnvelope
 
 
@@ -38,6 +41,30 @@ class ReplayPnLSummary(BaseModel):
     ending_unrealized_pnl_usd: float = 0.0
     ending_equity_usd: float
     return_fraction: float = 0.0
+
+
+class TradeLedgerEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    proposal_id: str
+    symbol: str
+    side: Side
+    strategy_id: str
+    intent_id: str | None = None
+    filled_size: float = Field(default=0.0, ge=0)
+    average_fill_price: float | None = Field(default=None, gt=0)
+    total_fee_usd: float = Field(default=0.0, ge=0)
+    gross_realized_pnl_usd: float = 0.0
+    net_realized_pnl_usd: float = 0.0
+    ending_status: Literal["filled", "partial", "rejected", "halted"]
+
+
+class TradeLedger(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    row_count: int = Field(ge=0)
+    rows: list[TradeLedgerEntry] = Field(default_factory=list)
 
 
 class ReplayResult(BaseModel):

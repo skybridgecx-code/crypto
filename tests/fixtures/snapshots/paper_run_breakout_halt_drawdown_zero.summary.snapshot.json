@@ -66,5 +66,6 @@
     "run_id": "breakout-halt-drawdown-zero-paper-run",
     "total_fee_usd": 0.0,
     "total_fill_notional_usd": 0.0
-  }
+  },
+  "trade_ledger_path": "runs/breakout-halt-drawdown-zero-paper-run/trade_ledger.json"
 }

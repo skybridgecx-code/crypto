@@ -77,6 +77,7 @@ def _normalize_summary(
 ) -> dict[str, object]:
     normalized = dict(summary)
     normalized["journal_path"] = f"journals/{run_id}.jsonl"
+    normalized["trade_ledger_path"] = f"runs/{run_id}/trade_ledger.json"
     return normalized
 
 
@@ -120,6 +121,7 @@ def test_cli_paper_run_summary_snapshots_and_journal_shape(
     assert exit_code == 0
     assert journal_path.exists()
     assert summary_path.exists()
+    assert Path(str(output["trade_ledger_path"])).exists()
 
     journal = AppendOnlyJournal(journal_path)
     events = journal.read_all()
@@ -236,6 +238,7 @@ def test_cli_paper_run_adverse_summary_snapshots_and_event_flags(
     assert exit_code == 0
     assert journal_path.exists()
     assert summary_path.exists()
+    assert Path(str(output["trade_ledger_path"])).exists()
 
     journal = AppendOnlyJournal(journal_path)
     events = journal.read_all()

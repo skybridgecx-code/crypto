@@ -7,6 +7,7 @@ replay_path: tests/fixtures/paper_candles_breakout_long.jsonl
 journal_path: journals/breakout-paper-run.jsonl
 summary_path: runs/breakout-paper-run/summary.json
 report_path: runs/breakout-paper-run/report.md
+trade_ledger_path: runs/breakout-paper-run/trade_ledger.json
 quality_issue_count: 0
 
 ## Event Counts

@@ -60,5 +60,6 @@
     "run_id": "high-vol-no-signal-paper-run",
     "total_fee_usd": 0.0,
     "total_fill_notional_usd": 0.0
-  }
+  },
+  "trade_ledger_path": "runs/high-vol-no-signal-paper-run/trade_ledger.json"
 }

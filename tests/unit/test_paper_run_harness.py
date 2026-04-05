@@ -39,6 +39,7 @@ def test_run_paper_replay_writes_journal_and_summary_for_breakout_fixture(
     assert result.journal_path.exists()
     assert result.summary_path.exists()
     assert result.report_path.exists()
+    assert result.trade_ledger_path.exists()
     assert replay_result.scorecard.run_id == "breakout-paper-run"
     assert replay_result.scorecard.proposal_count == 1
     assert replay_result.scorecard.approval_count == 1
@@ -47,6 +48,7 @@ def test_run_paper_replay_writes_journal_and_summary_for_breakout_fixture(
     assert replay_result.scorecard.partial_fill_intent_count == 1
     assert summary["scorecard"] == replay_result.scorecard.model_dump(mode="json")
     assert summary["pnl"] == result.pnl.model_dump(mode="json")
+    assert summary["trade_ledger_path"] == str(result.trade_ledger_path)
     assert summary["review_packet"] == result.review_packet
     assert summary["operator_summary"] == result.operator_summary
 
@@ -107,6 +109,7 @@ def test_cli_main_runs_mean_reversion_fixture_and_prints_summary(
     assert Path(output["journal_path"]).exists()
     assert Path(output["summary_path"]).exists()
     assert Path(output["report_path"]).exists()
+    assert Path(output["trade_ledger_path"]).exists()
     assert output["pnl"]["starting_equity_usd"] == 100000.0
     assert output["scorecard"]["proposal_count"] == 1
     assert output["scorecard"]["approval_count"] == 1

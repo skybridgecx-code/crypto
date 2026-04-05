@@ -7,6 +7,7 @@ replay_path: tests/fixtures/paper_candles_high_volatility.jsonl
 journal_path: journals/high-vol-no-signal-paper-run.jsonl
 summary_path: runs/high-vol-no-signal-paper-run/summary.json
 report_path: runs/high-vol-no-signal-paper-run/report.md
+trade_ledger_path: runs/high-vol-no-signal-paper-run/trade_ledger.json
 quality_issue_count: 0
 
 ## Event Counts

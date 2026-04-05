@@ -159,6 +159,7 @@ def test_single_run_operator_report_shape_and_reconciliation(
     assert overview["journal_path"] == f"journals/{run_id}.jsonl"
     assert overview["summary_path"] == f"runs/{run_id}/summary.json"
     assert overview["report_path"] == f"runs/{run_id}/report.md"
+    assert overview["trade_ledger_path"] == f"runs/{run_id}/trade_ledger.json"
     assert overview["quality_issue_count"] == str(summary["quality_issue_count"])
 
     assert event_counts["event_count"] == str(summary["scorecard"]["event_count"])

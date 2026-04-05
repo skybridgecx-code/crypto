@@ -5,9 +5,14 @@ from dataclasses import dataclass
 from math import fsum
 
 from crypto_agent.enums import EventType, PolicyAction, Side
-from crypto_agent.evaluation.models import EvaluationScorecard, ReplayPnLSummary
+from crypto_agent.evaluation.models import (
+    EvaluationScorecard,
+    ReplayPnLSummary,
+    TradeLedger,
+    TradeLedgerEntry,
+)
 from crypto_agent.events.envelope import EventEnvelope
-from crypto_agent.types import FillEvent
+from crypto_agent.types import FillEvent, TradeProposal
 
 POSITION_EPSILON = 1e-12
 
@@ -16,6 +21,22 @@ POSITION_EPSILON = 1e-12
 class _PnLPosition:
     quantity: float = 0.0
     average_entry_price: float = 0.0
+
+
+@dataclass
+class _TradeLedgerAccumulator:
+    proposal_id: str
+    symbol: str
+    side: Side
+    strategy_id: str
+    intent_id: str | None = None
+    filled_size: float = 0.0
+    fill_notional_usd: float = 0.0
+    total_fee_usd: float = 0.0
+    gross_realized_pnl_usd: float = 0.0
+    policy_action: PolicyAction | None = None
+    order_rejected: bool = False
+    saw_partial_fill: bool = False
 
 
 def _collect_proposal_execution_state(
@@ -258,4 +279,122 @@ def build_replay_pnl(
         ending_unrealized_pnl_usd=ending_unrealized_pnl_usd,
         ending_equity_usd=ending_equity_usd,
         return_fraction=(ending_equity_usd - starting_equity_usd) / starting_equity_usd,
+    )
+
+
+def build_trade_ledger(
+    events: list[EventEnvelope],
+    *,
+    run_id: str | None = None,
+) -> TradeLedger:
+    if not events:
+        return TradeLedger(run_id=run_id or "empty", row_count=0)
+
+    resolved_run_id = run_id or events[0].run_id
+    proposals: dict[str, _TradeLedgerAccumulator] = {}
+    intent_to_proposal: dict[str, str] = {}
+
+    for event in events:
+        payload = event.payload
+        if event.event_type is EventType.TRADE_PROPOSAL_CREATED:
+            proposal = TradeProposal.model_validate(payload)
+            proposals[proposal.proposal_id] = _TradeLedgerAccumulator(
+                proposal_id=proposal.proposal_id,
+                symbol=proposal.symbol,
+                side=proposal.side,
+                strategy_id=proposal.strategy_id,
+            )
+        elif event.event_type is EventType.POLICY_DECISION_MADE:
+            proposal_id = str(payload["proposal_id"])
+            if proposal_id in proposals:
+                proposals[proposal_id].policy_action = PolicyAction(str(payload["action"]))
+        elif event.event_type is EventType.ORDER_INTENT_CREATED:
+            proposal_id = str(payload["proposal_id"])
+            intent_id = str(payload["intent_id"])
+            intent_to_proposal[intent_id] = proposal_id
+            if proposal_id in proposals:
+                proposals[proposal_id].intent_id = intent_id
+        elif event.event_type is EventType.ORDER_SUBMITTED:
+            intent = payload["intent"]
+            proposal_id = str(intent["proposal_id"])
+            intent_id = str(intent["intent_id"])
+            intent_to_proposal[intent_id] = proposal_id
+            if proposal_id in proposals:
+                proposals[proposal_id].intent_id = intent_id
+        elif event.event_type is EventType.ORDER_REJECTED:
+            intent = payload["intent"]
+            proposal_id = str(intent["proposal_id"])
+            intent_id = str(intent["intent_id"])
+            intent_to_proposal[intent_id] = proposal_id
+            if proposal_id in proposals:
+                proposals[proposal_id].intent_id = intent_id
+                proposals[proposal_id].order_rejected = True
+
+    fills: list[tuple[str | None, FillEvent]] = sorted(
+        (
+            (intent_to_proposal.get(fill.intent_id), fill)
+            for fill in (
+                FillEvent.model_validate(event.payload)
+                for event in events
+                if event.event_type is EventType.ORDER_FILLED
+            )
+        ),
+        key=lambda item: (item[1].timestamp, item[1].intent_id, item[1].fill_id),
+    )
+
+    positions: dict[str, _PnLPosition] = {}
+    for linked_proposal_id, fill in fills:
+        current_position = positions.get(fill.symbol, _PnLPosition())
+        next_position, gross_realized_pnl_usd = _apply_fill_to_pnl_position(current_position, fill)
+
+        if abs(next_position.quantity) < POSITION_EPSILON:
+            positions.pop(fill.symbol, None)
+        else:
+            positions[fill.symbol] = next_position
+
+        if linked_proposal_id is None or linked_proposal_id not in proposals:
+            continue
+
+        ledger_row = proposals[linked_proposal_id]
+        ledger_row.filled_size += fill.quantity
+        ledger_row.fill_notional_usd += fill.notional_usd
+        ledger_row.total_fee_usd += fill.fee_usd
+        ledger_row.gross_realized_pnl_usd += gross_realized_pnl_usd
+        ledger_row.saw_partial_fill = ledger_row.saw_partial_fill or (
+            str(fill.status) == "partially_filled"
+        )
+
+    rows = [
+        TradeLedgerEntry(
+            proposal_id=ledger_row.proposal_id,
+            symbol=ledger_row.symbol,
+            side=ledger_row.side,
+            strategy_id=ledger_row.strategy_id,
+            intent_id=ledger_row.intent_id,
+            filled_size=ledger_row.filled_size,
+            average_fill_price=(
+                ledger_row.fill_notional_usd / ledger_row.filled_size
+                if ledger_row.filled_size > 0
+                else None
+            ),
+            total_fee_usd=ledger_row.total_fee_usd,
+            gross_realized_pnl_usd=ledger_row.gross_realized_pnl_usd,
+            net_realized_pnl_usd=ledger_row.gross_realized_pnl_usd - ledger_row.total_fee_usd,
+            ending_status=(
+                "halted"
+                if ledger_row.policy_action is PolicyAction.HALT
+                else "rejected"
+                if ledger_row.order_rejected or ledger_row.policy_action is PolicyAction.DENY
+                else "partial"
+                if ledger_row.saw_partial_fill
+                else "filled"
+            ),
+        )
+        for ledger_row in proposals.values()
+    ]
+
+    return TradeLedger(
+        run_id=resolved_run_id,
+        row_count=len(rows),
+        rows=rows,
     )

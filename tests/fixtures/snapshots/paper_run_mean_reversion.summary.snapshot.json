@@ -69,5 +69,6 @@
     "run_id": "mean-reversion-paper-run",
     "total_fee_usd": 7.9995962141893,
     "total_fill_notional_usd": 39997.9810709465
-  }
+  },
+  "trade_ledger_path": "runs/mean-reversion-paper-run/trade_ledger.json"
 }

@@ -168,6 +168,7 @@ def test_single_run_report_snapshots_and_reconciliation(
     assert overview["journal_path"] == f"journals/{run_id}.jsonl"
     assert overview["summary_path"] == f"runs/{run_id}/summary.json"
     assert overview["report_path"] == f"runs/{run_id}/report.md"
+    assert overview["trade_ledger_path"] == f"runs/{run_id}/trade_ledger.json"
 
     assert event_counts["event_count"] == str(expected_event_count)
     assert event_counts["alert_count"] == str(expected_alert_count)

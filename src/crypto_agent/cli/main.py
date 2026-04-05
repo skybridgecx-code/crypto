@@ -11,8 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from crypto_agent.config import Settings, load_settings
 from crypto_agent.enums import EventType, Mode, PolicyAction, Side
-from crypto_agent.evaluation.models import EvaluationScorecard, ReplayPnLSummary
+from crypto_agent.evaluation.models import EvaluationScorecard, ReplayPnLSummary, TradeLedger
 from crypto_agent.evaluation.replay import replay_journal
+from crypto_agent.evaluation.scorecard import build_trade_ledger
 from crypto_agent.events.envelope import EventEnvelope
 from crypto_agent.events.journal import (
     AppendOnlyJournal,
@@ -46,8 +47,10 @@ class PaperRunResult(BaseModel):
     journal_path: Path
     summary_path: Path
     report_path: Path
+    trade_ledger_path: Path
     scorecard: EvaluationScorecard
     pnl: ReplayPnLSummary
+    trade_ledger: TradeLedger
     review_packet: dict[str, object]
     operator_summary: dict[str, object]
     quality_issue_count: int = Field(ge=0)
@@ -245,6 +248,10 @@ def _relative_report_path(run_id: str) -> str:
     return f"runs/{run_id}/report.md"
 
 
+def _relative_trade_ledger_path(run_id: str) -> str:
+    return f"runs/{run_id}/trade_ledger.json"
+
+
 def _event_type_sequence(review_packet: dict[str, Any]) -> str:
     event_types = [str(event_type) for event_type in review_packet["event_types"]]
     return ", ".join(event_types) if event_types else "<none>"
@@ -271,6 +278,7 @@ def _build_operator_report(
         f"journal_path: {_relative_journal_path(run_id)}",
         f"summary_path: {_relative_summary_path(run_id)}",
         f"report_path: {_relative_report_path(run_id)}",
+        f"trade_ledger_path: {_relative_trade_ledger_path(run_id)}",
         f"quality_issue_count: {quality_issue_count}",
         "",
         "## Event Counts",
@@ -402,6 +410,7 @@ def run_paper_replay(
     )
     summary_path = resolved_run_dir / "summary.json"
     report_path = resolved_run_dir / "report.md"
+    trade_ledger_path = resolved_run_dir / "trade_ledger.json"
 
     if resolved_journal_path.exists():
         raise FileExistsError(f"Journal path already exists: {resolved_journal_path}")
@@ -536,6 +545,7 @@ def run_paper_replay(
         starting_equity_usd=equity_usd,
         ending_equity_usd=equity_usd,
     )
+    trade_ledger = build_trade_ledger(replay_result.events, run_id=resolved_run_id)
     review_packet = build_review_packet(replay_result.events)
     operator_summary = _operator_summary(
         fixture_name=replay_fixture_path.name,
@@ -548,6 +558,7 @@ def run_paper_replay(
         "mode": settings.mode.value,
         "replay_path": str(replay_fixture_path),
         "journal_path": str(resolved_journal_path),
+        "trade_ledger_path": str(trade_ledger_path),
         "quality_issue_count": len(quality_issues),
         "scorecard": scorecard.model_dump(mode="json"),
         "pnl": pnl.model_dump(mode="json"),
@@ -555,6 +566,10 @@ def run_paper_replay(
         "operator_summary": operator_summary,
     }
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+    trade_ledger_path.write_text(
+        json.dumps(trade_ledger.model_dump(mode="json"), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     _write_operator_report(
         run_id=resolved_run_id,
         mode=settings.mode,
@@ -573,8 +588,10 @@ def run_paper_replay(
         journal_path=resolved_journal_path,
         summary_path=summary_path,
         report_path=report_path,
+        trade_ledger_path=trade_ledger_path,
         scorecard=scorecard,
         pnl=pnl,
+        trade_ledger=trade_ledger,
         review_packet=review_packet,
         operator_summary=operator_summary,
         quality_issue_count=len(quality_issues),
@@ -620,6 +637,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "journal_path": str(result.journal_path),
                 "summary_path": str(result.summary_path),
                 "report_path": str(result.report_path),
+                "trade_ledger_path": str(result.trade_ledger_path),
                 "pnl": result.pnl.model_dump(mode="json"),
                 "scorecard": result.scorecard.model_dump(mode="json"),
             },

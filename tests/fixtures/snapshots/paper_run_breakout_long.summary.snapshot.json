@@ -69,5 +69,6 @@
     "run_id": "breakout-paper-run",
     "total_fee_usd": 8.001343334544114,
     "total_fill_notional_usd": 40006.71667272058
-  }
+  },
+  "trade_ledger_path": "runs/breakout-paper-run/trade_ledger.json"
 }

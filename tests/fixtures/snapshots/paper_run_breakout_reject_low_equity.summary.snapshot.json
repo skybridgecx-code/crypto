@@ -68,5 +68,6 @@
     "run_id": "breakout-reject-low-equity-paper-run",
     "total_fee_usd": 0.0,
     "total_fill_notional_usd": 0.0
-  }
+  },
+  "trade_ledger_path": "runs/breakout-reject-low-equity-paper-run/trade_ledger.json"
 }
