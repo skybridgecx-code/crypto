@@ -30,6 +30,10 @@ def _ts(year: int, month: int, day: int, hour: int, minute: int) -> datetime:
     return datetime(year, month, day, hour, minute, tzinfo=UTC)
 
 
+def _millis(year: int, month: int, day: int, hour: int, minute: int) -> int:
+    return int(_ts(year, month, day, hour, minute).timestamp() * 1000)
+
+
 def _exchange_info() -> dict[str, object]:
     return {
         "symbols": [
@@ -57,6 +61,32 @@ class ScriptedFetcher:
         if isinstance(response, Exception):
             raise response
         return response
+
+
+def _kline(
+    *,
+    open_time_ms: int,
+    close_time_ms: int,
+    open_price: str,
+    high_price: str,
+    low_price: str,
+    close_price: str,
+    volume: str,
+) -> list[object]:
+    return [
+        open_time_ms,
+        open_price,
+        high_price,
+        low_price,
+        close_price,
+        volume,
+        close_time_ms,
+        "0",
+        0,
+        "0",
+        "0",
+        "0",
+    ]
 
 
 def _live_adapter(session_count: int) -> BinanceSpotLiveMarketDataAdapter:
@@ -100,6 +130,195 @@ def _live_adapter(session_count: int) -> BinanceSpotLiveMarketDataAdapter:
             ]
         )
     return BinanceSpotLiveMarketDataAdapter(fetch_json=ScriptedFetcher(responses))
+
+
+def _unavailable_live_adapter() -> BinanceSpotLiveMarketDataAdapter:
+    return BinanceSpotLiveMarketDataAdapter(
+        fetch_json=ScriptedFetcher([RuntimeError("exchange unavailable")])
+    )
+
+
+def _healthy_live_adapter() -> BinanceSpotLiveMarketDataAdapter:
+    return BinanceSpotLiveMarketDataAdapter(
+        fetch_json=ScriptedFetcher(
+            [
+                _exchange_info(),
+                [
+                    _kline(
+                        open_time_ms=_millis(2026, 4, 5, 11, 55),
+                        close_time_ms=_millis(2026, 4, 5, 11, 56),
+                        open_price="100.0",
+                        high_price="101.0",
+                        low_price="99.5",
+                        close_price="100.5",
+                        volume="1000",
+                    ),
+                    _kline(
+                        open_time_ms=_millis(2026, 4, 5, 11, 56),
+                        close_time_ms=_millis(2026, 4, 5, 11, 57),
+                        open_price="100.5",
+                        high_price="101.5",
+                        low_price="100.0",
+                        close_price="101.0",
+                        volume="1001",
+                    ),
+                    _kline(
+                        open_time_ms=_millis(2026, 4, 5, 11, 57),
+                        close_time_ms=_millis(2026, 4, 5, 11, 58),
+                        open_price="101.0",
+                        high_price="102.0",
+                        low_price="100.7",
+                        close_price="101.5",
+                        volume="1002",
+                    ),
+                    _kline(
+                        open_time_ms=_millis(2026, 4, 5, 11, 58),
+                        close_time_ms=_millis(2026, 4, 5, 11, 59),
+                        open_price="101.5",
+                        high_price="102.3",
+                        low_price="101.2",
+                        close_price="102.1",
+                        volume="1003",
+                    ),
+                    _kline(
+                        open_time_ms=_millis(2026, 4, 5, 11, 59),
+                        close_time_ms=_millis(2026, 4, 5, 12, 0),
+                        open_price="102.1",
+                        high_price="103.2",
+                        low_price="101.9",
+                        close_price="103.0",
+                        volume="1004",
+                    ),
+                    _kline(
+                        open_time_ms=_millis(2026, 4, 5, 12, 0),
+                        close_time_ms=_millis(2026, 4, 5, 12, 1),
+                        open_price="103.0",
+                        high_price="104.0",
+                        low_price="102.8",
+                        close_price="103.8",
+                        volume="1005",
+                    ),
+                ],
+                {
+                    "symbol": "BTCUSDT",
+                    "bidPrice": "103.70",
+                    "bidQty": "1.5",
+                    "askPrice": "103.80",
+                    "askQty": "1.4",
+                },
+            ]
+        )
+    )
+
+
+def test_fresh_runtime_materializes_live_gate_artifacts_without_existing_control_status(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="forward-gate-fresh",
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 5, 11, 0)],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_unavailable_live_adapter(),
+        readiness_status=LiveReadinessStatus(
+            runtime_id="forward-gate-fresh",
+            updated_at=_ts(2026, 4, 5, 10, 59),
+            status="ready",
+            limited_live_gate_status="ready_for_review",
+        ),
+    )
+
+    session = result.session_summaries[0]
+    control_status = json.loads(result.live_control_status_path.read_text(encoding="utf-8"))
+    gate = json.loads(result.live_gate_decision_path.read_text(encoding="utf-8"))
+    thresholds = json.loads(result.live_gate_threshold_summary_path.read_text(encoding="utf-8"))
+
+    assert session.session_outcome == "skipped_unavailable_feed"
+    assert result.live_control_status_path.exists()
+    assert result.live_gate_decision_path.exists()
+    assert result.live_gate_threshold_summary_path.exists()
+    assert result.live_gate_report_path.exists()
+    assert control_status["latest_decision_path"] is None
+    assert control_status["go_no_go_action"] == "go"
+    assert gate["state"] == "not_ready"
+    assert "insufficient_completed_sessions" in gate["reason_codes"]
+    assert thresholds["blocking_passed"] is True
+
+
+def test_persisted_runtime_keeps_live_control_status_behavior_on_second_start(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    first_result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="forward-gate-persisted",
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 5, 11, 5)],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_unavailable_live_adapter(),
+        readiness_status=LiveReadinessStatus(
+            runtime_id="forward-gate-persisted",
+            updated_at=_ts(2026, 4, 5, 11, 4),
+            status="ready",
+            limited_live_gate_status="ready_for_review",
+        ),
+    )
+    first_control_status = json.loads(
+        first_result.live_control_status_path.read_text(encoding="utf-8")
+    )
+
+    second_result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="forward-gate-persisted",
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 5, 12, 1)],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_healthy_live_adapter(),
+        readiness_status=LiveReadinessStatus(
+            runtime_id="forward-gate-persisted",
+            updated_at=_ts(2026, 4, 5, 12, 1),
+            status="ready",
+            limited_live_gate_status="ready_for_review",
+        ),
+    )
+
+    second_control_status = json.loads(
+        second_result.live_control_status_path.read_text(encoding="utf-8")
+    )
+
+    assert first_result.session_summaries[0].session_outcome == "skipped_unavailable_feed"
+    assert first_control_status["latest_decision_path"] is None
+    assert second_result.session_summaries[0].session_outcome == "executed"
+    assert second_result.live_control_status_path.exists()
+    assert second_result.live_gate_decision_path.exists()
+    assert second_control_status["latest_decision_path"] is not None
+    assert (
+        second_control_status["go_no_go_action"]
+        == second_result.session_summaries[0].control_action
+    )
 
 
 def test_live_gate_is_blocked_when_operator_readiness_is_not_ready(tmp_path: Path) -> None:

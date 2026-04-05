@@ -927,6 +927,44 @@ def _persist_control_status(
     return updated_status
 
 
+def _ensure_live_control_status_artifact(
+    *,
+    status: ForwardPaperRuntimeStatus,
+    runtime_id: str,
+    execution_mode: Literal["paper", "shadow", "sandbox"],
+    controls: LiveControlConfig,
+    readiness: LiveReadinessStatus,
+    manual_controls: ManualControlState,
+    account_state: ForwardPaperRuntimeAccountState,
+    checked_at: datetime,
+) -> ForwardPaperRuntimeStatus:
+    if status.live_control_status_path.exists():
+        return status
+
+    initial_decision = evaluate_preflight_controls(
+        runtime_id=runtime_id,
+        session_id="runtime-init",
+        execution_mode=execution_mode,
+        requested_symbols=[],
+        account_state=account_state,
+        controls=controls,
+        readiness_status=readiness.status,
+        manual_controls=manual_controls,
+        checked_at=checked_at,
+        last_completed_session=_last_completed_session(status),
+    )
+    return _persist_control_status(
+        status=status,
+        controls=controls,
+        readiness=readiness,
+        manual_controls=manual_controls,
+        account_state=account_state,
+        latest_decision_path=None,
+        latest_decision=initial_decision,
+        updated_at=checked_at,
+    )
+
+
 def _materialize_live_gate_artifacts(
     *,
     status: ForwardPaperRuntimeStatus,
@@ -1097,6 +1135,16 @@ def run_forward_paper_runtime(
         live_control_config=live_control_config,
         readiness_status=readiness_status,
         manual_control_state=manual_control_state,
+    )
+    status = _ensure_live_control_status_artifact(
+        status=status,
+        runtime_id=runtime_id,
+        execution_mode=execution_mode,
+        controls=controls,
+        readiness=readiness,
+        manual_controls=manual_controls,
+        account_state=account_state,
+        checked_at=initial_now,
     )
     scheduled_times = _iter_scheduled_times(
         tick_times=scheduled_ticks,
