@@ -94,6 +94,7 @@ Matrix artifacts:
 - per-run journals: `journals/<run-id>.jsonl`
 - per-run summaries: `runs/<run-id>/summary.json`
 - batch manifest: `runs/<matrix-run-id>/manifest.json`
+- batch comparison artifact: `runs/<matrix-run-id>/matrix_comparison.json`
 - batch trade ledger: `runs/<matrix-run-id>/matrix_trade_ledger.json`
 - batch operator report: `runs/<matrix-run-id>/report.md`
 
@@ -103,6 +104,25 @@ Matrix replay-derived surfaces:
 - aggregate replay totals across the fixed matrix
 - per-run replay PnL summaries rebuilt from manifest-referenced journals
 - aggregate replay PnL totals across the fixed matrix
+- matrix comparison rows rebuilt from manifest-referenced summaries, replays, and ledgers:
+  - `run_id`
+  - `fixture`
+  - `proposal_count`
+  - `halt_count`
+  - `order_reject_count`
+  - `fill_event_count`
+  - `partial_fill_intent_count`
+  - `alert_count`
+  - `ledger_row_count`
+  - `starting_equity_usd`
+  - `net_realized_pnl_usd`
+  - `ending_unrealized_pnl_usd`
+  - `ending_equity_usd`
+  - `return_fraction`
+- matrix comparison aggregate and ranking fields:
+  - aggregate totals across the fixed matrix
+  - best and worst return run ids
+  - highest and lowest ending-equity run ids
 - matrix trade-ledger rows rebuilt from manifest-referenced per-run ledgers:
   - `matrix_run_id`
   - `run_id`
@@ -141,6 +161,8 @@ Matrix:
   - [tests/unit/test_paper_run_matrix_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_snapshots.py)
 - replay-aggregate snapshots:
   - [tests/unit/test_paper_run_matrix_replay_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_replay_snapshots.py)
+- comparison snapshots:
+  - [tests/unit/test_paper_run_matrix_comparison_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_comparison_snapshots.py)
 - report snapshots:
   - [tests/unit/test_paper_run_matrix_report_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_report_snapshots.py)
 - trade-ledger snapshots:

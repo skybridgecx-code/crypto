@@ -39,6 +39,7 @@ Outputs:
 - normal per-run journals at `journals/<run-id>.jsonl`
 - normal per-run summaries at `runs/<run-id>/summary.json`
 - aggregate manifest at `runs/<matrix-run-id>/manifest.json`
+- aggregate matrix comparison at `runs/<matrix-run-id>/matrix_comparison.json`
 - aggregate matrix ledger at `runs/<matrix-run-id>/matrix_trade_ledger.json`
 - operator-readable batch report at `runs/<matrix-run-id>/report.md`
 
@@ -57,6 +58,37 @@ The report records:
 - aggregate replay-derived PnL totals
 - per-run manifest and replay sections for operator review
 - per-run replay-derived PnL sections for operator review
+
+The matrix comparison records:
+
+- `run_id`
+- `fixture`
+- `proposal_count`
+- `halt_count`
+- `order_reject_count`
+- `fill_event_count`
+- `partial_fill_intent_count`
+- `alert_count`
+- `ledger_row_count`
+- `starting_equity_usd`
+- `net_realized_pnl_usd`
+- `ending_unrealized_pnl_usd`
+- `ending_equity_usd`
+- `return_fraction`
+
+Comparison reconciliation expectations:
+
+- comparison rows must reconcile to the referenced manifest outcome counts
+- comparison rows must reconcile to replay-derived per-run pnl values
+- comparison `ledger_row_count` must reconcile to the referenced per-run single-run ledgers
+- aggregate totals must reconcile to the summed per-run comparison rows
+- ranking fields must reconcile to deterministic ordering over the recorded return and ending-equity fields
+
+Aggregate and ranking fields are part of the operator-facing batch comparison view:
+
+- aggregate proposal, halt, reject, fill, partial-fill, alert, ledger-row, and pnl totals
+- best and worst return run ids
+- highest and lowest ending-equity run ids
 
 The matrix trade ledger records:
 
@@ -97,6 +129,8 @@ Ledger reconciliation expectations:
   - [tests/unit/test_paper_run_matrix_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_snapshots.py)
 - matrix replay-aggregate snapshots rebuilt from manifest-referenced journals:
   - [tests/unit/test_paper_run_matrix_replay_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_replay_snapshots.py)
+- matrix comparison snapshots for `runs/<matrix-run-id>/matrix_comparison.json`:
+  - [tests/unit/test_paper_run_matrix_comparison_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_comparison_snapshots.py)
 - matrix report snapshots for `runs/<matrix-run-id>/report.md`:
   - [tests/unit/test_paper_run_matrix_report_snapshots.py](/Users/muhammadaatif/cryp/tests/unit/test_paper_run_matrix_report_snapshots.py)
 - matrix trade-ledger snapshots for `runs/<matrix-run-id>/matrix_trade_ledger.json`:
@@ -125,6 +159,7 @@ Phase-end rule:
 - sequential local execution only
 - no live execution
 - no second batch runner
+- no second comparison path
 - no second batch ledger path
 - no second report path
 - no separate accounting path beyond replayed journals plus final replay closes
