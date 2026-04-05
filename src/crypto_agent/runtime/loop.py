@@ -10,6 +10,14 @@ from typing import Literal
 from crypto_agent.cli.main import PaperRunResult, run_paper_replay
 from crypto_agent.config import Settings
 from crypto_agent.enums import Mode
+from crypto_agent.execution.live_adapter import SandboxExecutionAdapter
+from crypto_agent.execution.models import (
+    ExecutionRequestArtifact,
+    ExecutionResultArtifact,
+    ExecutionStatusArtifact,
+)
+from crypto_agent.execution.sandbox import execute_sandbox_requests
+from crypto_agent.execution.shadow import build_shadow_execution_artifacts
 from crypto_agent.market_data.live_adapter import (
     BinanceSpotLiveMarketDataAdapter,
     LiveMarketDataUnavailableError,
@@ -69,6 +77,18 @@ def _session_market_state_path(sessions_dir: Path, session_id: str) -> Path:
     return sessions_dir / f"{session_id}.live_market_state.json"
 
 
+def _session_execution_request_path(sessions_dir: Path, session_id: str) -> Path:
+    return sessions_dir / f"{session_id}.execution_requests.json"
+
+
+def _session_execution_result_path(sessions_dir: Path, session_id: str) -> Path:
+    return sessions_dir / f"{session_id}.execution_results.json"
+
+
+def _session_execution_status_path(sessions_dir: Path, session_id: str) -> Path:
+    return sessions_dir / f"{session_id}.execution_status.json"
+
+
 def _write_session_summary(summary: ForwardPaperSessionSummary, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -97,6 +117,7 @@ def build_forward_paper_runtime_paths(
         account_state_path=runtime_dir / "account_state.json",
         reconciliation_report_path=runtime_dir / "reconciliation_report.json",
         recovery_status_path=runtime_dir / "recovery_status.json",
+        execution_state_dir=runtime_dir / "execution",
     )
 
 
@@ -123,9 +144,21 @@ def _write_live_market_input(path: Path, state: LiveMarketState) -> None:
             handle.write(json.dumps(candle.model_dump(mode="json"), sort_keys=True) + "\n")
 
 
+def _write_execution_artifact(
+    path: Path,
+    artifact: ExecutionRequestArtifact | ExecutionResultArtifact | ExecutionStatusArtifact,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(artifact.model_dump(mode="json"), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
 def _initial_runtime_status(
     *,
     runtime_id: str,
+    execution_mode: Literal["paper", "shadow", "sandbox"],
     market_source: Literal["replay", "binance_spot"],
     replay_path: Path | None,
     live_symbol: str | None,
@@ -140,6 +173,7 @@ def _initial_runtime_status(
     return ForwardPaperRuntimeStatus(
         runtime_id=runtime_id,
         mode=Mode.PAPER,
+        execution_mode=execution_mode,
         market_source=market_source,
         replay_path=replay_path,
         live_symbol=live_symbol,
@@ -160,12 +194,14 @@ def _initial_runtime_status(
         account_state_path=paths.account_state_path,
         reconciliation_report_path=paths.reconciliation_report_path,
         recovery_status_path=paths.recovery_status_path,
+        execution_state_dir=paths.execution_state_dir,
     )
 
 
 def _ensure_runtime_status(
     *,
     settings: Settings,
+    execution_mode: Literal["paper", "shadow", "sandbox"],
     market_source: Literal["replay", "binance_spot"],
     replay_path: Path | None,
     live_symbol: str | None,
@@ -195,6 +231,7 @@ def _ensure_runtime_status(
 
     runtime_dir.mkdir(parents=True, exist_ok=True)
     paths.sessions_dir.mkdir(parents=True, exist_ok=True)
+    paths.execution_state_dir.mkdir(parents=True, exist_ok=True)
 
     if market_source == "replay" and replay_path is None:
         raise ValueError("Replay market source requires replay_path")
@@ -207,10 +244,13 @@ def _ensure_runtime_status(
         raise ValueError(
             "Live market source requires symbol, interval, lookback, and stale feed threshold"
         )
+    if execution_mode in {"shadow", "sandbox"} and market_source != "binance_spot":
+        raise ValueError("Shadow and sandbox execution modes require binance_spot market source.")
 
     if not paths.status_path.exists():
         status = _initial_runtime_status(
             runtime_id=runtime_id,
+            execution_mode=execution_mode,
             market_source=market_source,
             replay_path=replay_path,
             live_symbol=live_symbol,
@@ -232,6 +272,8 @@ def _ensure_runtime_status(
         return reconciled_status, reconciled_account_state, None, None
 
     status = _load_runtime_status(paths.status_path)
+    if status.execution_mode != execution_mode:
+        raise ValueError("Existing runtime execution_mode does not match requested value")
     if status.market_source != market_source:
         raise ValueError("Existing runtime market_source does not match requested market_source")
     if status.replay_path != replay_path:
@@ -304,6 +346,7 @@ def _recover_interrupted_session(
             session_id=status.active_session_id,
             session_number=session_number,
             mode=Mode.PAPER,
+            execution_mode=status.execution_mode,
             market_source=status.market_source,
             live_symbol=status.live_symbol,
             live_interval=status.live_interval,
@@ -359,6 +402,7 @@ def _start_session(
         session_id=session_id,
         session_number=session_number,
         mode=Mode.PAPER,
+        execution_mode=status.execution_mode,
         market_source=status.market_source,
         live_symbol=status.live_symbol,
         live_interval=status.live_interval,
@@ -590,6 +634,96 @@ def _session_summary_with_live_state(
     )
 
 
+def _session_summary_with_execution_artifacts(
+    *,
+    session_summary: ForwardPaperSessionSummary,
+    request_path: Path,
+    result_path: Path,
+    status_path: Path,
+    request_artifact: ExecutionRequestArtifact,
+    status_artifact: ExecutionStatusArtifact,
+) -> ForwardPaperSessionSummary:
+    artifact_paths_exist = dict(session_summary.artifact_paths_exist)
+    artifact_paths_exist.update(
+        {
+            "execution_request_path": request_path.exists(),
+            "execution_result_path": result_path.exists(),
+            "execution_status_path": status_path.exists(),
+        }
+    )
+    return session_summary.model_copy(
+        update={
+            "execution_request_path": request_path,
+            "execution_result_path": result_path,
+            "execution_status_path": status_path,
+            "execution_request_count": request_artifact.request_count,
+            "execution_terminal_count": status_artifact.terminal_status_count,
+            "artifact_paths_exist": artifact_paths_exist,
+            "all_artifact_paths_exist": all(artifact_paths_exist.values()),
+        }
+    )
+
+
+def _materialize_execution_mode_artifacts(
+    *,
+    execution_mode: Literal["paper", "shadow", "sandbox"],
+    session_summary: ForwardPaperSessionSummary,
+    sessions_dir: Path,
+    sandbox_execution_adapter: SandboxExecutionAdapter | None,
+    observed_at: datetime,
+) -> ForwardPaperSessionSummary:
+    if execution_mode == "paper":
+        return session_summary
+    if (
+        session_summary.journal_path is None
+        or session_summary.run_id is None
+        or session_summary.market_state_path is None
+        or session_summary.venue_constraints_path is None
+    ):
+        raise ValueError(
+            "Execution adapter artifacts require journal, run, market state, and constraints."
+        )
+
+    request_path = _session_execution_request_path(sessions_dir, session_summary.session_id)
+    result_path = _session_execution_result_path(sessions_dir, session_summary.session_id)
+    status_path = _session_execution_status_path(sessions_dir, session_summary.session_id)
+
+    if execution_mode == "shadow":
+        request_artifact, result_artifact, status_artifact = build_shadow_execution_artifacts(
+            session_id=session_summary.session_id,
+            run_id=session_summary.run_id,
+            journal_path=session_summary.journal_path,
+            market_state_path=session_summary.market_state_path,
+            venue_constraints_path=session_summary.venue_constraints_path,
+            observed_at=observed_at,
+        )
+    else:
+        if sandbox_execution_adapter is None:
+            raise ValueError("Sandbox execution mode requires an explicit sandbox adapter.")
+        request_artifact, result_artifact, status_artifact = execute_sandbox_requests(
+            session_id=session_summary.session_id,
+            run_id=session_summary.run_id,
+            journal_path=session_summary.journal_path,
+            market_state_path=session_summary.market_state_path,
+            venue_constraints_path=session_summary.venue_constraints_path,
+            existing_status_path=status_path,
+            adapter=sandbox_execution_adapter,
+            observed_at=observed_at,
+        )
+
+    _write_execution_artifact(request_path, request_artifact)
+    _write_execution_artifact(result_path, result_artifact)
+    _write_execution_artifact(status_path, status_artifact)
+    return _session_summary_with_execution_artifacts(
+        session_summary=session_summary,
+        request_path=request_path,
+        result_path=result_path,
+        status_path=status_path,
+        request_artifact=request_artifact,
+        status_artifact=status_artifact,
+    )
+
+
 def run_forward_paper_runtime(
     replay_path: str | Path | None,
     *,
@@ -597,6 +731,7 @@ def run_forward_paper_runtime(
     runtime_id: str,
     session_interval_seconds: int,
     equity_usd: float = 100_000.0,
+    execution_mode: Literal["paper", "shadow", "sandbox"] = "paper",
     max_sessions: int | None = None,
     tick_times: Iterable[datetime] | None = None,
     recover_interrupted: bool = True,
@@ -608,6 +743,7 @@ def run_forward_paper_runtime(
     live_lookback_candles: int | None = None,
     feed_stale_after_seconds: int | None = None,
     live_adapter: BinanceSpotLiveMarketDataAdapter | None = None,
+    sandbox_execution_adapter: SandboxExecutionAdapter | None = None,
 ) -> ForwardPaperRuntimeResult:
     replay_fixture_path = Path(replay_path) if replay_path is not None else None
     scheduled_ticks = (
@@ -616,6 +752,7 @@ def run_forward_paper_runtime(
     initial_now = scheduled_ticks[0] if scheduled_ticks else _normalize_datetime(now_fn())
     status, account_state, recovered_session_id, recovery_note = _ensure_runtime_status(
         settings=settings,
+        execution_mode=execution_mode,
         market_source=market_source,
         replay_path=replay_fixture_path,
         live_symbol=live_symbol,
@@ -665,6 +802,13 @@ def run_forward_paper_runtime(
                     session_summary=running_session,
                     result=result,
                     completed_at=completed_at,
+                )
+                completed_session = _materialize_execution_mode_artifacts(
+                    execution_mode=execution_mode,
+                    session_summary=completed_session,
+                    sessions_dir=status.sessions_dir,
+                    sandbox_execution_adapter=sandbox_execution_adapter,
+                    observed_at=completed_at,
                 )
             else:
                 if resolved_live_adapter is None:
@@ -719,6 +863,13 @@ def run_forward_paper_runtime(
                         session_summary=live_session,
                         result=result,
                         completed_at=completed_at,
+                    )
+                    completed_session = _materialize_execution_mode_artifacts(
+                        execution_mode=execution_mode,
+                        session_summary=completed_session,
+                        sessions_dir=status.sessions_dir,
+                        sandbox_execution_adapter=sandbox_execution_adapter,
+                        observed_at=completed_at,
                     )
                 else:
                     completed_at = _normalize_datetime(now_fn())
@@ -874,6 +1025,8 @@ def run_forward_paper_runtime(
         account_state_path=status.account_state_path,
         reconciliation_report_path=status.reconciliation_report_path,
         recovery_status_path=status.recovery_status_path,
+        execution_mode=status.execution_mode,
+        execution_state_dir=status.execution_state_dir,
         session_count=len(completed_sessions),
         session_summaries=completed_sessions,
     )

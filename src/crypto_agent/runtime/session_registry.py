@@ -50,6 +50,7 @@ def registry_entry_from_status(
     return ForwardPaperRuntimeRegistryEntry(
         runtime_id=status.runtime_id,
         mode=status.mode,
+        execution_mode=status.execution_mode,
         market_source=status.market_source,
         replay_path=status.replay_path,
         live_symbol=status.live_symbol,
@@ -63,6 +64,7 @@ def registry_entry_from_status(
         account_state_path=status.account_state_path,
         reconciliation_report_path=status.reconciliation_report_path,
         recovery_status_path=status.recovery_status_path,
+        execution_state_dir=status.execution_state_dir,
         starting_equity_usd=status.starting_equity_usd,
         session_interval_seconds=status.session_interval_seconds,
         status=status.status,

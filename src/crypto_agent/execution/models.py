@@ -1,8 +1,17 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from datetime import UTC, datetime
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from crypto_agent.types import FillEvent, OrderIntent
+
+
+def _normalize_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        raise ValueError("timestamp must be timezone-aware")
+    return value.astimezone(UTC)
 
 
 class PaperExecutionConfig(BaseModel):
@@ -25,3 +34,109 @@ class ExecutionReport(BaseModel):
     rejected: bool = False
     reject_reason: str | None = None
     estimated_slippage_bps: float = Field(default=0.0, ge=0)
+
+
+class VenueOrderRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    client_order_id: str
+    venue: str
+    execution_mode: Literal["shadow", "sandbox"]
+    sandbox: bool
+    proposal_id: str
+    intent_id: str
+    symbol: str
+    side: str
+    order_type: str
+    time_in_force: str
+    quantity: float = Field(gt=0)
+    price: float | None = Field(default=None, gt=0)
+    reference_price: float = Field(gt=0)
+    estimated_notional_usd: float = Field(gt=0)
+    min_notional_usd: float = Field(ge=0)
+    normalization_status: Literal["ready", "rejected"]
+    normalization_reject_reason: str | None = None
+
+
+class VenueExecutionAck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    client_order_id: str
+    venue: str
+    execution_mode: Literal["shadow", "sandbox"]
+    sandbox: bool
+    intent_id: str
+    status: Literal["would_send", "accepted", "rejected", "duplicate"]
+    venue_order_id: str | None = None
+    reject_reason: str | None = None
+    observed_at: datetime
+
+    @field_validator("observed_at")
+    @classmethod
+    def normalize_observed_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
+class VenueOrderState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    client_order_id: str
+    venue: str
+    execution_mode: Literal["shadow", "sandbox"]
+    sandbox: bool
+    intent_id: str
+    venue_order_id: str | None = None
+    state: Literal[
+        "shadow_only",
+        "accepted",
+        "open",
+        "partially_filled",
+        "filled",
+        "canceled",
+        "rejected",
+    ]
+    terminal: bool
+    filled_quantity: float = Field(default=0.0, ge=0)
+    average_fill_price: float | None = Field(default=None, gt=0)
+    fee_usd: float = Field(default=0.0, ge=0)
+    updated_at: datetime
+
+    @field_validator("updated_at")
+    @classmethod
+    def normalize_updated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
+class ExecutionRequestArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    session_id: str
+    execution_mode: Literal["shadow", "sandbox"]
+    request_count: int = Field(ge=0)
+    rejected_request_count: int = Field(ge=0)
+    requests: list[VenueOrderRequest] = Field(default_factory=list)
+
+
+class ExecutionResultArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    session_id: str
+    execution_mode: Literal["shadow", "sandbox"]
+    result_count: int = Field(ge=0)
+    results: list[VenueExecutionAck] = Field(default_factory=list)
+
+
+class ExecutionStatusArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    session_id: str
+    execution_mode: Literal["shadow", "sandbox"]
+    status_count: int = Field(ge=0)
+    terminal_status_count: int = Field(ge=0)
+    statuses: list[VenueOrderState] = Field(default_factory=list)

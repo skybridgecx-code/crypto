@@ -189,6 +189,7 @@ def test_forward_paper_runtime_recovers_interrupted_session_on_restart(
         account_state_path=paths.account_state_path,
         reconciliation_report_path=paths.reconciliation_report_path,
         recovery_status_path=paths.recovery_status_path,
+        execution_state_dir=paths.execution_state_dir,
     )
     paths.status_path.write_text(
         json.dumps(status.model_dump(mode="json"), indent=2, sort_keys=True),
@@ -260,6 +261,7 @@ def test_forward_paper_runtime_prevents_duplicate_active_session_without_recover
         account_state_path=paths.account_state_path,
         reconciliation_report_path=paths.reconciliation_report_path,
         recovery_status_path=paths.recovery_status_path,
+        execution_state_dir=paths.execution_state_dir,
     )
     paths.status_path.write_text(
         json.dumps(status.model_dump(mode="json"), indent=2, sort_keys=True),

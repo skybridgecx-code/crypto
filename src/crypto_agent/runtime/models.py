@@ -31,6 +31,7 @@ class ForwardPaperRuntimePaths(BaseModel):
     account_state_path: Path
     reconciliation_report_path: Path
     recovery_status_path: Path
+    execution_state_dir: Path
 
 
 class RuntimeAccountPosition(BaseModel):
@@ -137,6 +138,7 @@ class ForwardPaperSessionSummary(BaseModel):
     session_id: str
     session_number: int = Field(ge=1)
     mode: Mode = Mode.PAPER
+    execution_mode: Literal["paper", "shadow", "sandbox"] = "paper"
     market_source: Literal["replay", "binance_spot"] = "replay"
     live_symbol: str | None = None
     live_interval: str | None = None
@@ -163,6 +165,11 @@ class ForwardPaperSessionSummary(BaseModel):
     summary_path: Path | None = None
     report_path: Path | None = None
     trade_ledger_path: Path | None = None
+    execution_request_path: Path | None = None
+    execution_result_path: Path | None = None
+    execution_status_path: Path | None = None
+    execution_request_count: int | None = Field(default=None, ge=0)
+    execution_terminal_count: int | None = Field(default=None, ge=0)
     quality_issue_count: int | None = Field(default=None, ge=0)
     scorecard: EvaluationScorecard | None = None
     pnl: ReplayPnLSummary | None = None
@@ -186,6 +193,7 @@ class ForwardPaperRuntimeStatus(BaseModel):
 
     runtime_id: str
     mode: Mode = Mode.PAPER
+    execution_mode: Literal["paper", "shadow", "sandbox"] = "paper"
     market_source: Literal["replay", "binance_spot"] = "replay"
     replay_path: Path | None = None
     live_symbol: str | None = None
@@ -220,6 +228,7 @@ class ForwardPaperRuntimeStatus(BaseModel):
     account_state_path: Path
     reconciliation_report_path: Path
     recovery_status_path: Path
+    execution_state_dir: Path
 
     @field_validator(
         "active_session_started_at",
@@ -239,6 +248,7 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
 
     runtime_id: str
     mode: Mode = Mode.PAPER
+    execution_mode: Literal["paper", "shadow", "sandbox"] = "paper"
     market_source: Literal["replay", "binance_spot"] = "replay"
     replay_path: Path | None = None
     live_symbol: str | None = None
@@ -252,6 +262,7 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
     account_state_path: Path
     reconciliation_report_path: Path
     recovery_status_path: Path
+    execution_state_dir: Path
     starting_equity_usd: float = Field(gt=0)
     session_interval_seconds: int = Field(gt=0)
     status: Literal["idle", "running"]
@@ -312,5 +323,7 @@ class ForwardPaperRuntimeResult(BaseModel):
     account_state_path: Path
     reconciliation_report_path: Path
     recovery_status_path: Path
+    execution_mode: Literal["paper", "shadow", "sandbox"] = "paper"
+    execution_state_dir: Path
     session_count: int = Field(ge=0)
     session_summaries: list[ForwardPaperSessionSummary] = Field(default_factory=list)

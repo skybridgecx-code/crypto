@@ -33,6 +33,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Paper runtime market input source.",
     )
     parser.add_argument(
+        "--execution-mode",
+        choices=("paper", "shadow", "sandbox"),
+        default="paper",
+        help="Execution adapter mode for the forward runtime.",
+    )
+    parser.add_argument(
         "--runtime-id",
         required=True,
         help="Explicit persistent runtime identifier.",
@@ -94,6 +100,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         runtime_id=args.runtime_id,
         session_interval_seconds=args.session_interval_seconds,
         equity_usd=args.equity_usd,
+        execution_mode=cast(Literal["paper", "shadow", "sandbox"], args.execution_mode),
         max_sessions=args.max_sessions,
         market_source=market_source,
         live_symbol=args.live_symbol,
@@ -118,6 +125,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "account_state_path": str(result.account_state_path),
                 "reconciliation_report_path": str(result.reconciliation_report_path),
                 "recovery_status_path": str(result.recovery_status_path),
+                "execution_mode": result.execution_mode,
+                "execution_state_dir": str(result.execution_state_dir),
                 "session_count": result.session_count,
                 "session_ids": [session.session_id for session in result.session_summaries],
             },
