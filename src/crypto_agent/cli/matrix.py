@@ -13,6 +13,10 @@ from crypto_agent.cli.main import run_paper_replay
 from crypto_agent.config import Settings, load_settings
 from crypto_agent.evaluation.models import (
     EvaluationScorecard,
+    MatrixComparison,
+    MatrixComparisonAggregate,
+    MatrixComparisonRanking,
+    MatrixComparisonRow,
     MatrixTradeLedger,
     MatrixTradeLedgerEntry,
     ReplayPnLSummary,
@@ -46,6 +50,7 @@ class PaperRunMatrixManifest(BaseModel):
 
     matrix_run_id: str
     manifest_path: str
+    matrix_comparison_path: str
     matrix_trade_ledger_path: str
     entry_count: int = Field(ge=0)
     aggregate_counts: dict[str, int]
@@ -182,6 +187,109 @@ def _relative_matrix_trade_ledger_path(matrix_run_id: str) -> str:
     return f"runs/{matrix_run_id}/matrix_trade_ledger.json"
 
 
+def _relative_matrix_comparison_path(matrix_run_id: str) -> str:
+    return f"runs/{matrix_run_id}/matrix_comparison.json"
+
+
+def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparison:
+    rows: list[MatrixComparisonRow] = []
+
+    for entry in manifest.entries:
+        summary = json.loads(Path(entry.summary_path).read_text(encoding="utf-8"))
+        replay_result = replay_journal(
+            entry.journal_path,
+            replay_path=str(summary["replay_path"]),
+            starting_equity_usd=float(summary["pnl"]["starting_equity_usd"]),
+        )
+        pnl = replay_result.pnl or ReplayPnLSummary(
+            starting_equity_usd=float(summary["pnl"]["starting_equity_usd"]),
+            ending_equity_usd=float(summary["pnl"]["starting_equity_usd"]),
+        )
+        trade_ledger = TradeLedger.model_validate(
+            json.loads(Path(summary["trade_ledger_path"]).read_text(encoding="utf-8"))
+        )
+        rows.append(
+            MatrixComparisonRow(
+                run_id=entry.run_id,
+                fixture=entry.fixture,
+                proposal_count=entry.outcome_counts["proposal_count"],
+                halt_count=entry.outcome_counts["halt_count"],
+                order_reject_count=entry.outcome_counts["order_reject_count"],
+                fill_event_count=entry.outcome_counts["fill_event_count"],
+                partial_fill_intent_count=entry.outcome_counts["partial_fill_intent_count"],
+                alert_count=entry.outcome_counts["alert_count"],
+                ledger_row_count=trade_ledger.row_count,
+                starting_equity_usd=pnl.starting_equity_usd,
+                net_realized_pnl_usd=pnl.net_realized_pnl_usd,
+                ending_unrealized_pnl_usd=pnl.ending_unrealized_pnl_usd,
+                ending_equity_usd=pnl.ending_equity_usd,
+                return_fraction=pnl.return_fraction,
+            )
+        )
+
+    total_starting_equity_usd = fsum(row.starting_equity_usd for row in rows)
+    total_ending_equity_usd = fsum(row.ending_equity_usd for row in rows)
+    aggregate = MatrixComparisonAggregate(
+        run_count=len(rows),
+        total_proposal_count=sum(row.proposal_count for row in rows),
+        total_halt_count=sum(row.halt_count for row in rows),
+        total_order_reject_count=sum(row.order_reject_count for row in rows),
+        total_fill_event_count=sum(row.fill_event_count for row in rows),
+        total_partial_fill_intent_count=sum(row.partial_fill_intent_count for row in rows),
+        total_alert_count=sum(row.alert_count for row in rows),
+        total_ledger_row_count=sum(row.ledger_row_count for row in rows),
+        total_starting_equity_usd=total_starting_equity_usd,
+        total_net_realized_pnl_usd=fsum(row.net_realized_pnl_usd for row in rows),
+        total_ending_unrealized_pnl_usd=fsum(row.ending_unrealized_pnl_usd for row in rows),
+        total_ending_equity_usd=total_ending_equity_usd,
+        aggregate_return_fraction=(
+            (total_ending_equity_usd - total_starting_equity_usd) / total_starting_equity_usd
+            if total_starting_equity_usd > 0
+            else 0.0
+        ),
+    )
+
+    best_return_row = max(rows, key=lambda row: (row.return_fraction, row.run_id), default=None)
+    worst_return_row = min(rows, key=lambda row: (row.return_fraction, row.run_id), default=None)
+    highest_ending_equity_row = max(
+        rows,
+        key=lambda row: (row.ending_equity_usd, row.run_id),
+        default=None,
+    )
+    lowest_ending_equity_row = min(
+        rows,
+        key=lambda row: (row.ending_equity_usd, row.run_id),
+        default=None,
+    )
+
+    return MatrixComparison(
+        matrix_run_id=manifest.matrix_run_id,
+        row_count=len(rows),
+        rows=rows,
+        aggregate=aggregate,
+        rankings=MatrixComparisonRanking(
+            best_return_run_id=best_return_row.run_id if best_return_row is not None else None,
+            worst_return_run_id=worst_return_row.run_id if worst_return_row is not None else None,
+            highest_ending_equity_run_id=(
+                highest_ending_equity_row.run_id if highest_ending_equity_row is not None else None
+            ),
+            lowest_ending_equity_run_id=(
+                lowest_ending_equity_row.run_id if lowest_ending_equity_row is not None else None
+            ),
+        ),
+    )
+
+
+def _write_matrix_comparison(manifest: PaperRunMatrixManifest) -> Path:
+    comparison = _build_matrix_comparison(manifest)
+    comparison_path = Path(manifest.matrix_comparison_path)
+    comparison_path.write_text(
+        json.dumps(comparison.model_dump(mode="json"), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return comparison_path
+
+
 def _build_matrix_trade_ledger(manifest: PaperRunMatrixManifest) -> MatrixTradeLedger:
     rows: list[MatrixTradeLedgerEntry] = []
 
@@ -313,6 +421,7 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
         f"matrix_run_id: {manifest.matrix_run_id}",
         f"entry_count: {manifest.entry_count}",
         f"manifest_path: runs/{manifest.matrix_run_id}/manifest.json",
+        f"matrix_comparison_path: {_relative_matrix_comparison_path(manifest.matrix_run_id)}",
         f"matrix_trade_ledger_path: {_relative_matrix_trade_ledger_path(manifest.matrix_run_id)}",
         f"report_path: runs/{manifest.matrix_run_id}/report.md",
         "",
@@ -440,6 +549,7 @@ def run_paper_replay_matrix(
     manifest = PaperRunMatrixManifest(
         matrix_run_id=resolved_matrix_run_id,
         manifest_path=str(resolved_manifest_path),
+        matrix_comparison_path=str(resolved_manifest_path.with_name("matrix_comparison.json")),
         matrix_trade_ledger_path=str(resolved_manifest_path.with_name("matrix_trade_ledger.json")),
         entry_count=len(entries),
         aggregate_counts=_aggregate_counts(entries),
@@ -449,6 +559,7 @@ def run_paper_replay_matrix(
         json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True),
         encoding="utf-8",
     )
+    _write_matrix_comparison(manifest)
     _write_matrix_trade_ledger(manifest)
     _write_operator_report(manifest)
     return manifest

@@ -93,6 +93,62 @@ class MatrixTradeLedger(BaseModel):
     rows: list[MatrixTradeLedgerEntry] = Field(default_factory=list)
 
 
+class MatrixComparisonRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    fixture: str
+    proposal_count: int = Field(default=0, ge=0)
+    halt_count: int = Field(default=0, ge=0)
+    order_reject_count: int = Field(default=0, ge=0)
+    fill_event_count: int = Field(default=0, ge=0)
+    partial_fill_intent_count: int = Field(default=0, ge=0)
+    alert_count: int = Field(default=0, ge=0)
+    ledger_row_count: int = Field(default=0, ge=0)
+    starting_equity_usd: float = Field(ge=0)
+    net_realized_pnl_usd: float = 0.0
+    ending_unrealized_pnl_usd: float = 0.0
+    ending_equity_usd: float = Field(ge=0)
+    return_fraction: float = 0.0
+
+
+class MatrixComparisonAggregate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_count: int = Field(ge=0)
+    total_proposal_count: int = Field(default=0, ge=0)
+    total_halt_count: int = Field(default=0, ge=0)
+    total_order_reject_count: int = Field(default=0, ge=0)
+    total_fill_event_count: int = Field(default=0, ge=0)
+    total_partial_fill_intent_count: int = Field(default=0, ge=0)
+    total_alert_count: int = Field(default=0, ge=0)
+    total_ledger_row_count: int = Field(default=0, ge=0)
+    total_starting_equity_usd: float = Field(default=0.0, ge=0)
+    total_net_realized_pnl_usd: float = 0.0
+    total_ending_unrealized_pnl_usd: float = 0.0
+    total_ending_equity_usd: float = Field(default=0.0, ge=0)
+    aggregate_return_fraction: float = 0.0
+
+
+class MatrixComparisonRanking(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    best_return_run_id: str | None = None
+    worst_return_run_id: str | None = None
+    highest_ending_equity_run_id: str | None = None
+    lowest_ending_equity_run_id: str | None = None
+
+
+class MatrixComparison(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    matrix_run_id: str
+    row_count: int = Field(ge=0)
+    rows: list[MatrixComparisonRow] = Field(default_factory=list)
+    aggregate: MatrixComparisonAggregate
+    rankings: MatrixComparisonRanking
+
+
 class ReplayResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

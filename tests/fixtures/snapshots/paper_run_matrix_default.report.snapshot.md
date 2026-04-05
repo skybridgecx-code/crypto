@@ -3,6 +3,7 @@
 matrix_run_id: paper-run-matrix-demo
 entry_count: 5
 manifest_path: runs/paper-run-matrix-demo/manifest.json
+matrix_comparison_path: runs/paper-run-matrix-demo/matrix_comparison.json
 matrix_trade_ledger_path: runs/paper-run-matrix-demo/matrix_trade_ledger.json
 report_path: runs/paper-run-matrix-demo/report.md
 

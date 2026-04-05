@@ -88,6 +88,7 @@ def test_matrix_report_artifact_shape_and_reconciliation(tmp_path: Path) -> None
     assert f"matrix_run_id: {manifest.matrix_run_id}" in report
     assert f"entry_count: {manifest.entry_count}" in report
     assert f"manifest_path: runs/{manifest.matrix_run_id}/manifest.json" in report
+    assert f"matrix_comparison_path: runs/{manifest.matrix_run_id}/matrix_comparison.json" in report
     assert (
         f"matrix_trade_ledger_path: runs/{manifest.matrix_run_id}/matrix_trade_ledger.json"
         in report

@@ -71,6 +71,7 @@ def test_run_paper_replay_matrix_writes_manifest_and_per_run_artifacts(
     )
 
     manifest_path = Path(manifest.manifest_path)
+    matrix_comparison_path = Path(manifest.matrix_comparison_path)
     matrix_trade_ledger_path = Path(manifest.matrix_trade_ledger_path)
     report_path = manifest_path.with_name("report.md")
     manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -79,10 +80,12 @@ def test_run_paper_replay_matrix_writes_manifest_and_per_run_artifacts(
     }
 
     assert manifest_path.exists()
+    assert matrix_comparison_path.exists()
     assert matrix_trade_ledger_path.exists()
     assert report_path.exists()
     assert manifest.entry_count == 5
     assert manifest_payload == manifest.model_dump(mode="json")
+    assert manifest_payload["matrix_comparison_path"] == str(matrix_comparison_path)
     assert manifest_payload["matrix_trade_ledger_path"] == str(matrix_trade_ledger_path)
     assert set(entries_by_suffix) == {
         "breakout-paper-run",
@@ -126,17 +129,20 @@ def test_cli_matrix_main_runs_default_fixture_matrix_and_prints_manifest(
     )
     output = json.loads(capsys.readouterr().out)
     manifest_path = Path(output["manifest_path"])
+    matrix_comparison_path = manifest_path.with_name("matrix_comparison.json")
     matrix_trade_ledger_path = manifest_path.with_name("matrix_trade_ledger.json")
     report_path = manifest_path.with_name("report.md")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     assert exit_code == 0
     assert manifest_path.exists()
+    assert matrix_comparison_path.exists()
     assert matrix_trade_ledger_path.exists()
     assert report_path.exists()
     assert output["matrix_run_id"] == "paper-run-matrix-cli"
     assert output["entry_count"] == 5
     assert output["aggregate_counts"] == manifest["aggregate_counts"]
+    assert manifest["matrix_comparison_path"] == str(matrix_comparison_path)
     assert manifest["matrix_trade_ledger_path"] == str(matrix_trade_ledger_path)
     assert manifest["entries"][0]["fixture"] == "paper_candles_breakout_long.jsonl"
     assert manifest["entries"][1]["fixture"] == "paper_candles_mean_reversion_short.jsonl"
