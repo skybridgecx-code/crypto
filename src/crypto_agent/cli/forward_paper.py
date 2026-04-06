@@ -12,7 +12,10 @@ from crypto_agent.policy.live_controls import (
     default_manual_control_state,
 )
 from crypto_agent.policy.readiness import default_live_readiness_status
-from crypto_agent.runtime.loop import run_forward_paper_runtime
+from crypto_agent.runtime.loop import (
+    run_forward_paper_runtime,
+    run_live_market_preflight_probe,
+)
 
 
 def _symbol_cap(value: str) -> tuple[str, float]:
@@ -101,6 +104,14 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=120,
         help="Feed freshness threshold for live market input.",
+    )
+    parser.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help=(
+            "Probe live market availability once using the runtime live-market retry path, "
+            "write live_market_preflight.json, and exit without starting sessions."
+        ),
     )
     parser.add_argument(
         "--allow-execution-mode",
@@ -211,6 +222,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("replay_path is required when --market-source=replay")
     if args.market_source == "binance_spot" and args.live_symbol is None:
         parser.error("--live-symbol is required when --market-source=binance_spot")
+    if args.preflight_only and args.market_source != "binance_spot":
+        parser.error("--preflight-only requires --market-source=binance_spot")
     if args.manual_halt and args.manual_resume:
         parser.error("--manual-halt and --manual-resume are mutually exclusive")
     market_source = cast(Literal["replay", "binance_spot"], args.market_source)
@@ -273,6 +286,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.manual_approval_granted:
         manual_controls = manual_controls.model_copy(update={"approval_granted": True})
 
+    if args.preflight_only:
+        preflight_result = run_live_market_preflight_probe(
+            settings=settings,
+            runtime_id=args.runtime_id,
+            market_source=cast(Literal["binance_spot"], market_source),
+            live_symbol=args.live_symbol,
+            live_interval=args.live_interval,
+            live_lookback_candles=args.live_lookback_candles,
+            feed_stale_after_seconds=args.feed_stale_after_seconds,
+            binance_base_url=args.binance_base_url,
+            live_market_poll_retry_count=args.live_market_poll_retry_count,
+            live_market_poll_retry_delay_seconds=args.live_market_poll_retry_delay_seconds,
+        )
+        print(
+            json.dumps(
+                {
+                    "runtime_id": preflight_result.runtime_id,
+                    "preflight_path": str(preflight_result.artifact_path),
+                    "status": preflight_result.artifact.status,
+                    "success": preflight_result.artifact.success,
+                    "attempt_count_used": preflight_result.artifact.attempt_count_used,
+                    "feed_health_status": preflight_result.artifact.feed_health_status,
+                    "feed_health_message": preflight_result.artifact.feed_health_message,
+                    "configured_base_url": preflight_result.artifact.configured_base_url,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0 if preflight_result.artifact.success else 1
+
     result = run_forward_paper_runtime(
         args.replay_path,
         settings=settings,
@@ -316,6 +360,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "live_control_status_path": str(result.live_control_status_path),
                 "readiness_status_path": str(result.readiness_status_path),
                 "manual_control_state_path": str(result.manual_control_state_path),
+                "live_market_preflight_path": str(result.live_market_preflight_path),
                 "soak_evaluation_path": str(result.soak_evaluation_path),
                 "shadow_evaluation_path": str(result.shadow_evaluation_path),
                 "live_gate_decision_path": str(result.live_gate_decision_path),

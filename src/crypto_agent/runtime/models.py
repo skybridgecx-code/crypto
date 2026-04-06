@@ -38,6 +38,7 @@ class ForwardPaperRuntimePaths(BaseModel):
     manual_control_state_path: Path
     soak_evaluation_path: Path
     shadow_evaluation_path: Path
+    live_market_preflight_path: Path
     live_gate_decision_path: Path
     live_gate_threshold_summary_path: Path
     live_gate_report_path: Path
@@ -376,6 +377,38 @@ class LiveGateDecision(BaseModel):
         return _normalize_datetime(value)
 
 
+class LiveMarketPreflightArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    market_source: Literal["binance_spot"]
+    symbol: str
+    interval: str
+    configured_base_url: str
+    retry_count: int = Field(ge=0)
+    retry_delay_seconds: float = Field(ge=0)
+    attempt_count_used: int = Field(ge=1)
+    observed_at: datetime
+    status: Literal[
+        "ready",
+        "recovered_after_retry",
+        "stale",
+        "unavailable",
+        "retries_exhausted",
+    ]
+    success: bool
+    feed_health_status: Literal["healthy", "stale", "degraded"] | None = None
+    feed_health_message: str | None = None
+    candle_count: int = Field(default=0, ge=0)
+    order_book_present: bool = False
+    constraints_present: bool = False
+
+    @field_validator("observed_at")
+    @classmethod
+    def normalize_observed_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
 class ForwardPaperRuntimeStatus(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -540,6 +573,7 @@ class ForwardPaperRuntimeResult(BaseModel):
     live_control_status_path: Path
     readiness_status_path: Path
     manual_control_state_path: Path
+    live_market_preflight_path: Path
     soak_evaluation_path: Path
     shadow_evaluation_path: Path
     live_gate_decision_path: Path
@@ -547,3 +581,11 @@ class ForwardPaperRuntimeResult(BaseModel):
     live_gate_report_path: Path
     session_count: int = Field(ge=0)
     session_summaries: list[ForwardPaperSessionSummary] = Field(default_factory=list)
+
+
+class LiveMarketPreflightResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    artifact_path: Path
+    artifact: LiveMarketPreflightArtifact

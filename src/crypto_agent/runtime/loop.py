@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
@@ -56,6 +57,8 @@ from crypto_agent.runtime.models import (
     ForwardPaperRuntimeStatus,
     ForwardPaperSessionSkipEvidence,
     ForwardPaperSessionSummary,
+    LiveMarketPreflightArtifact,
+    LiveMarketPreflightResult,
 )
 from crypto_agent.runtime.reconciliation import (
     RuntimeAccountMismatchError,
@@ -72,6 +75,12 @@ from crypto_agent.runtime.soak import (
 
 class RuntimeAlreadyActiveError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class _LivePollResult:
+    market_state: LiveMarketState
+    attempt_count_used: int
 
 
 def _utc_now() -> datetime:
@@ -209,6 +218,7 @@ def build_forward_paper_runtime_paths(
         manual_control_state_path=runtime_dir / "manual_control_state.json",
         soak_evaluation_path=runtime_dir / "soak_evaluation.json",
         shadow_evaluation_path=runtime_dir / "shadow_evaluation.json",
+        live_market_preflight_path=runtime_dir / "live_market_preflight.json",
         live_gate_decision_path=runtime_dir / "live_gate_decision.json",
         live_gate_threshold_summary_path=runtime_dir / "live_gate_threshold_summary.json",
         live_gate_report_path=runtime_dir / "live_gate_report.md",
@@ -809,7 +819,7 @@ def _refresh_live_state(
     )
 
 
-def _poll_with_retry(
+def _poll_with_retry_result(
     *,
     status: ForwardPaperRuntimeStatus,
     adapter: BinanceSpotLiveMarketDataAdapter,
@@ -817,7 +827,7 @@ def _poll_with_retry(
     retry_count: int,
     retry_delay_seconds: float,
     sleep_fn: Callable[[float], None],
-) -> LiveMarketState:
+) -> _LivePollResult:
     """Call _refresh_live_state with bounded retry/backoff on LiveMarketDataUnavailableError.
 
     On success after one or more retries, enriches feed_health.message to record which
@@ -843,7 +853,7 @@ def _poll_with_retry(
                         )
                     }
                 )
-            return state
+            return _LivePollResult(market_state=state, attempt_count_used=attempt + 1)
         except LiveMarketDataUnavailableError as caught:
             last_exc = caught
     if last_exc is None:
@@ -853,6 +863,147 @@ def _poll_with_retry(
             f"{last_exc} | retries_exhausted: failed after {total_attempts} attempts"
         ) from last_exc
     raise last_exc
+
+
+def _poll_with_retry(
+    *,
+    status: ForwardPaperRuntimeStatus,
+    adapter: BinanceSpotLiveMarketDataAdapter,
+    now: datetime,
+    retry_count: int,
+    retry_delay_seconds: float,
+    sleep_fn: Callable[[float], None],
+) -> LiveMarketState:
+    return _poll_with_retry_result(
+        status=status,
+        adapter=adapter,
+        now=now,
+        retry_count=retry_count,
+        retry_delay_seconds=retry_delay_seconds,
+        sleep_fn=sleep_fn,
+    ).market_state
+
+
+def run_live_market_preflight_probe(
+    *,
+    settings: Settings,
+    runtime_id: str,
+    market_source: Literal["binance_spot"],
+    live_symbol: str,
+    live_interval: str,
+    live_lookback_candles: int,
+    feed_stale_after_seconds: int,
+    binance_base_url: str | None = None,
+    live_market_poll_retry_count: int = 2,
+    live_market_poll_retry_delay_seconds: float = 2.0,
+    live_adapter: BinanceSpotLiveMarketDataAdapter | None = None,
+    now_fn: Callable[[], datetime] = _utc_now,
+    sleep_fn: Callable[[float], None] = time.sleep,
+) -> LiveMarketPreflightResult:
+    if settings.mode is not Mode.PAPER:
+        raise ValueError("Live market preflight requires settings.mode to be paper.")
+    if market_source != "binance_spot":
+        raise ValueError("Live market preflight only supports market_source=binance_spot.")
+
+    observed_at = _normalize_datetime(now_fn())
+    paths = build_forward_paper_runtime_paths(settings.paths.runs_dir, runtime_id)
+    paths.runtime_dir.mkdir(parents=True, exist_ok=True)
+    transient_status = _initial_runtime_status(
+        runtime_id=runtime_id,
+        execution_mode="paper",
+        market_source=market_source,
+        replay_path=None,
+        live_symbol=live_symbol,
+        live_interval=live_interval,
+        live_lookback_candles=live_lookback_candles,
+        feed_stale_after_seconds=feed_stale_after_seconds,
+        binance_base_url=binance_base_url,
+        starting_equity_usd=1.0,
+        session_interval_seconds=1,
+        now=observed_at,
+        paths=paths,
+    )
+    resolved_adapter = live_adapter or (
+        BinanceSpotLiveMarketDataAdapter(base_url=binance_base_url)
+        if binance_base_url is not None
+        else BinanceSpotLiveMarketDataAdapter()
+    )
+    configured_base_url = binance_base_url or resolved_adapter.base_url
+
+    try:
+        poll_result = _poll_with_retry_result(
+            status=transient_status,
+            adapter=resolved_adapter,
+            now=observed_at,
+            retry_count=live_market_poll_retry_count,
+            retry_delay_seconds=live_market_poll_retry_delay_seconds,
+            sleep_fn=sleep_fn,
+        )
+        market_state = poll_result.market_state
+        _write_live_market_state(paths, market_state)
+        if market_state.feed_health.status != "healthy":
+            classification: Literal[
+                "ready",
+                "recovered_after_retry",
+                "stale",
+                "unavailable",
+                "retries_exhausted",
+            ] = "stale"
+            success = False
+        elif poll_result.attempt_count_used > 1 or market_state.feed_health.recovered:
+            classification = "recovered_after_retry"
+            success = True
+        else:
+            classification = "ready"
+            success = True
+        artifact = LiveMarketPreflightArtifact(
+            runtime_id=runtime_id,
+            market_source=market_source,
+            symbol=live_symbol,
+            interval=live_interval,
+            configured_base_url=configured_base_url,
+            retry_count=live_market_poll_retry_count,
+            retry_delay_seconds=live_market_poll_retry_delay_seconds,
+            attempt_count_used=poll_result.attempt_count_used,
+            observed_at=observed_at,
+            status=classification,
+            success=success,
+            feed_health_status=market_state.feed_health.status,
+            feed_health_message=market_state.feed_health.message,
+            candle_count=len(market_state.candles),
+            order_book_present=market_state.order_book is not None,
+            constraints_present=market_state.constraints is not None,
+        )
+    except LiveMarketDataUnavailableError as exc:
+        message = str(exc)
+        classification = "retries_exhausted" if "retries_exhausted" in message else "unavailable"
+        artifact = LiveMarketPreflightArtifact(
+            runtime_id=runtime_id,
+            market_source=market_source,
+            symbol=live_symbol,
+            interval=live_interval,
+            configured_base_url=configured_base_url,
+            retry_count=live_market_poll_retry_count,
+            retry_delay_seconds=live_market_poll_retry_delay_seconds,
+            attempt_count_used=(
+                live_market_poll_retry_count + 1 if classification == "retries_exhausted" else 1
+            ),
+            observed_at=observed_at,
+            status=classification,
+            success=False,
+            feed_health_status="degraded",
+            feed_health_message=message,
+            candle_count=0,
+            order_book_present=False,
+            constraints_present=False,
+        )
+
+    _write_json_artifact(paths.live_market_preflight_path, artifact)
+    return LiveMarketPreflightResult(
+        runtime_id=runtime_id,
+        artifact_path=paths.live_market_preflight_path,
+        artifact=artifact,
+    )
 
 
 def _session_summary_with_live_state(
@@ -1709,6 +1860,7 @@ def run_forward_paper_runtime(
         live_control_status_path=status.live_control_status_path,
         readiness_status_path=status.readiness_status_path,
         manual_control_state_path=status.manual_control_state_path,
+        live_market_preflight_path=paths.live_market_preflight_path,
         soak_evaluation_path=status.soak_evaluation_path,
         shadow_evaluation_path=status.shadow_evaluation_path,
         live_gate_decision_path=status.live_gate_decision_path,
