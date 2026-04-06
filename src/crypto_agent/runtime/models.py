@@ -140,6 +140,23 @@ class ForwardPaperRecoveryStatus(BaseModel):
         return _normalize_datetime(value)
 
 
+class ForwardPaperSessionSkipEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    session_id: str
+    session_outcome: Literal["skipped_unavailable_feed"]
+    feed_health_status: str
+    feed_health_message: str | None
+    configured_base_url: str
+    observed_at: datetime
+
+    @field_validator("observed_at")
+    @classmethod
+    def normalize_observed_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
 class ForwardPaperSessionSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -178,6 +195,7 @@ class ForwardPaperSessionSummary(BaseModel):
     execution_request_path: Path | None = None
     execution_result_path: Path | None = None
     execution_status_path: Path | None = None
+    skip_evidence_path: Path | None = None
     control_decision_path: Path | None = None
     control_action: Literal["go", "no_go", "manual_approval_required"] | None = None
     control_reason_codes: list[str] = Field(default_factory=list)
@@ -277,6 +295,7 @@ class ForwardPaperShadowEvaluationRow(BaseModel):
     terminal_status_count: int = Field(default=0, ge=0)
     filled_status_count: int = Field(default=0, ge=0)
     canceled_status_count: int = Field(default=0, ge=0)
+    skip_evidence_present: bool = False
     all_artifacts_present: bool = True
 
 
@@ -300,6 +319,9 @@ class ForwardPaperShadowEvaluation(BaseModel):
     missing_request_artifact_count: int = Field(default=0, ge=0)
     missing_result_artifact_count: int = Field(default=0, ge=0)
     missing_status_artifact_count: int = Field(default=0, ge=0)
+    shadow_unavailable_feed_session_count: int = Field(default=0, ge=0)
+    skip_evidence_count: int = Field(default=0, ge=0)
+    missing_skip_evidence_count: int = Field(default=0, ge=0)
     all_shadow_artifacts_present: bool = True
     rows: list[ForwardPaperShadowEvaluationRow] = Field(default_factory=list)
 

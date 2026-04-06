@@ -39,8 +39,36 @@ def build_forward_paper_shadow_evaluation(
     missing_request_artifact_count = 0
     missing_result_artifact_count = 0
     missing_status_artifact_count = 0
+    skip_evidence_count = 0
+    missing_skip_evidence_count = 0
 
     for session in shadow_sessions:
+        is_unavailable_feed = session.session_outcome == "skipped_unavailable_feed"
+
+        if is_unavailable_feed:
+            # For unavailable-feed skips, check the skip evidence artifact only.
+            # Execution artifacts are legitimately absent; do not count them as missing.
+            skip_evidence_present = (
+                session.skip_evidence_path is not None and Path(session.skip_evidence_path).exists()
+            )
+            if skip_evidence_present:
+                skip_evidence_count += 1
+            else:
+                missing_skip_evidence_count += 1
+            rows.append(
+                ForwardPaperShadowEvaluationRow(
+                    session_id=session.session_id,
+                    session_number=session.session_number,
+                    run_id=session.run_id,
+                    session_outcome=session.session_outcome,
+                    control_action=session.control_action,
+                    skip_evidence_present=skip_evidence_present,
+                    all_artifacts_present=skip_evidence_present,
+                )
+            )
+            continue
+
+        # For all other outcomes, check the standard execution artifacts.
         request_artifact = None
         result_artifact = None
         status_artifact = None
@@ -126,6 +154,9 @@ def build_forward_paper_shadow_evaluation(
             )
         )
 
+    shadow_unavailable_feed_session_count = sum(
+        1 for s in shadow_sessions if s.session_outcome == "skipped_unavailable_feed"
+    )
     return ForwardPaperShadowEvaluation(
         runtime_id=runtime_id,
         generated_at=generated_at,
@@ -146,6 +177,9 @@ def build_forward_paper_shadow_evaluation(
         missing_request_artifact_count=missing_request_artifact_count,
         missing_result_artifact_count=missing_result_artifact_count,
         missing_status_artifact_count=missing_status_artifact_count,
+        shadow_unavailable_feed_session_count=shadow_unavailable_feed_session_count,
+        skip_evidence_count=skip_evidence_count,
+        missing_skip_evidence_count=missing_skip_evidence_count,
         all_shadow_artifacts_present=all(row.all_artifacts_present for row in rows),
         rows=rows,
     )

@@ -54,6 +54,7 @@ from crypto_agent.runtime.models import (
     ForwardPaperRuntimePaths,
     ForwardPaperRuntimeResult,
     ForwardPaperRuntimeStatus,
+    ForwardPaperSessionSkipEvidence,
     ForwardPaperSessionSummary,
 )
 from crypto_agent.runtime.reconciliation import (
@@ -121,6 +122,10 @@ def _session_execution_status_path(sessions_dir: Path, session_id: str) -> Path:
 
 def _session_control_decision_path(sessions_dir: Path, session_id: str) -> Path:
     return sessions_dir / f"{session_id}.control_decision.json"
+
+
+def _session_skip_evidence_path(sessions_dir: Path, session_id: str) -> Path:
+    return sessions_dir / f"{session_id}.skip_evidence.json"
 
 
 def _write_session_summary(summary: ForwardPaperSessionSummary, path: Path) -> None:
@@ -1535,6 +1540,21 @@ def run_forward_paper_runtime(
                 stale_after_seconds=status.feed_stale_after_seconds or 60,
                 message=feed_message,
             )
+            skip_evidence_path: Path | None = None
+            if execution_mode == "shadow":
+                skip_evidence_path = _session_skip_evidence_path(
+                    status.sessions_dir, running_session.session_id
+                )
+                skip_evidence = ForwardPaperSessionSkipEvidence(
+                    runtime_id=runtime_id,
+                    session_id=running_session.session_id,
+                    session_outcome="skipped_unavailable_feed",
+                    feed_health_status=unavailable_health.status,
+                    feed_health_message=unavailable_health.message,
+                    configured_base_url=configured_base_url,
+                    observed_at=completed_at,
+                )
+                _write_json_artifact(skip_evidence_path, skip_evidence)
             skipped_session = _skipped_session_summary(
                 session_summary=running_session.model_copy(
                     update={
@@ -1542,6 +1562,7 @@ def run_forward_paper_runtime(
                         "live_symbol": status.live_symbol,
                         "live_interval": status.live_interval,
                         "venue_constraints_path": status.venue_constraints_path,
+                        "skip_evidence_path": skip_evidence_path,
                     }
                 ),
                 completed_at=completed_at,

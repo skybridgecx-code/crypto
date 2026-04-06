@@ -199,3 +199,144 @@ def test_shadow_evaluation_records_missing_would_send_artifacts_when_manual_appr
     assert shadow["missing_status_artifact_count"] == 1
     assert shadow["all_shadow_artifacts_present"] is False
     assert shadow["rows"][0]["control_action"] == "manual_approval_required"
+
+
+def test_shadow_evaluation_unavailable_feed_session_has_skip_evidence_artifact(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    fetcher = ScriptedFetcher([RuntimeError("HTTP Error 451: ")])
+    adapter = BinanceSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="shadow-skip-evidence-test",
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 5, 14, 0)],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=adapter,
+        readiness_status=LiveReadinessStatus(
+            runtime_id="shadow-skip-evidence-test",
+            updated_at=_ts(2026, 4, 5, 9, 59),
+            status="ready",
+            limited_live_gate_status="ready_for_review",
+        ),
+    )
+
+    session = result.session_summaries[0]
+    shadow = json.loads(result.shadow_evaluation_path.read_text(encoding="utf-8"))
+
+    # Session outcome is correct
+    assert session.session_outcome == "skipped_unavailable_feed"
+
+    # Skip evidence artifact was written
+    assert session.skip_evidence_path is not None
+    skip_evidence_path = Path(str(session.skip_evidence_path))
+    assert skip_evidence_path.exists()
+    skip_ev = json.loads(skip_evidence_path.read_text(encoding="utf-8"))
+    assert skip_ev["session_id"] == session.session_id
+    assert skip_ev["runtime_id"] == "shadow-skip-evidence-test"
+    assert skip_ev["session_outcome"] == "skipped_unavailable_feed"
+    assert skip_ev["feed_health_status"] == "degraded"
+    assert skip_ev["feed_health_message"] is not None
+    assert "451" in skip_ev["feed_health_message"]
+    assert skip_ev["configured_base_url"] == "https://api.binance.com"
+
+    # Shadow evaluation reflects skip evidence
+    assert shadow["shadow_session_count"] == 1
+    assert shadow["shadow_executed_session_count"] == 0
+    assert shadow["shadow_unavailable_feed_session_count"] == 1
+    assert shadow["skip_evidence_count"] == 1
+    assert shadow["missing_skip_evidence_count"] == 0
+    assert shadow["request_count"] == 0
+    assert shadow["missing_request_artifact_count"] == 0
+    assert shadow["missing_result_artifact_count"] == 0
+    assert shadow["missing_status_artifact_count"] == 0
+    assert shadow["all_shadow_artifacts_present"] is True
+    assert shadow["rows"][0]["skip_evidence_present"] is True
+    assert shadow["rows"][0]["all_artifacts_present"] is True
+
+
+def test_shadow_evaluation_mixed_executed_and_unavailable_feed_sessions(
+    tmp_path: Path,
+) -> None:
+    # Session 1: executed (healthy feed).
+    settings = _paper_settings_for(tmp_path)
+    run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="shadow-mixed-evidence-test",
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 3, 16, 4)],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_live_adapter(1),
+        readiness_status=LiveReadinessStatus(
+            runtime_id="shadow-mixed-evidence-test",
+            updated_at=_ts(2026, 4, 5, 9, 59),
+            status="ready",
+            limited_live_gate_status="ready_for_review",
+        ),
+    )
+
+    # Session 2: fresh adapter with no cached state — 451 raises LiveMarketDataUnavailableError.
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="shadow-mixed-evidence-test",
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 3, 16, 5)],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=BinanceSpotLiveMarketDataAdapter(
+            fetch_json=ScriptedFetcher([RuntimeError("HTTP Error 451: ")])
+        ),
+        readiness_status=LiveReadinessStatus(
+            runtime_id="shadow-mixed-evidence-test",
+            updated_at=_ts(2026, 4, 5, 9, 59),
+            status="ready",
+            limited_live_gate_status="ready_for_review",
+        ),
+    )
+
+    shadow = json.loads(result.shadow_evaluation_path.read_text(encoding="utf-8"))
+
+    assert shadow["shadow_session_count"] == 2
+    assert shadow["shadow_executed_session_count"] == 1
+    assert shadow["shadow_unavailable_feed_session_count"] == 1
+    assert shadow["skip_evidence_count"] == 1
+    assert shadow["missing_skip_evidence_count"] == 0
+    # Execution artifact misses only apply to non-unavailable-feed sessions.
+    assert shadow["missing_request_artifact_count"] == 0
+    assert shadow["missing_result_artifact_count"] == 0
+    assert shadow["missing_status_artifact_count"] == 0
+    # request_count is truthful (executed session only).
+    assert shadow["request_count"] >= 0
+    assert shadow["all_shadow_artifacts_present"] is True
+
+    executed_row = next(r for r in shadow["rows"] if r["session_outcome"] == "executed")
+    skipped_row = next(
+        r for r in shadow["rows"] if r["session_outcome"] == "skipped_unavailable_feed"
+    )
+    assert executed_row["all_artifacts_present"] is True
+    assert executed_row["skip_evidence_present"] is False
+    assert skipped_row["all_artifacts_present"] is True
+    assert skipped_row["skip_evidence_present"] is True
+    assert skipped_row["request_count"] == 0
