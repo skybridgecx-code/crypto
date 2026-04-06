@@ -186,6 +186,21 @@ def _build_parser() -> argparse.ArgumentParser:
             "Use to point at an alternate endpoint when the default is geo/IP restricted."
         ),
     )
+    parser.add_argument(
+        "--live-market-poll-retry-count",
+        type=int,
+        default=2,
+        help=(
+            "Number of additional retry attempts after a transient live-market fetch failure"
+            " (default: 2)."
+        ),
+    )
+    parser.add_argument(
+        "--live-market-poll-retry-delay-seconds",
+        type=float,
+        default=2.0,
+        help="Seconds to wait between live-market fetch retry attempts (default: 2.0).",
+    )
     return parser
 
 
@@ -275,6 +290,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         readiness_status=readiness,
         manual_control_state=manual_controls,
         binance_base_url=args.binance_base_url,
+        live_market_poll_retry_count=args.live_market_poll_retry_count,
+        live_market_poll_retry_delay_seconds=args.live_market_poll_retry_delay_seconds,
     )
     print(
         json.dumps(

@@ -423,6 +423,7 @@ def test_forward_paper_runtime_unavailable_feed_451_enriches_message(
         feed_stale_after_seconds=120,
         live_adapter=adapter,
         binance_base_url="https://api.binance.us",
+        live_market_poll_retry_count=0,
     )
 
     session = result.session_summaries[0]
@@ -460,6 +461,7 @@ def test_forward_paper_runtime_unavailable_feed_non_451_enriches_message(
         live_lookback_candles=2,
         feed_stale_after_seconds=120,
         live_adapter=adapter,
+        live_market_poll_retry_count=0,
     )
 
     session = result.session_summaries[0]
@@ -473,3 +475,183 @@ def test_forward_paper_runtime_unavailable_feed_non_451_enriches_message(
     assert status.feed_health.message is not None
     assert "https://api.binance.com" in status.feed_health.message
     assert "--binance-base-url" in status.feed_health.message
+
+
+def _healthy_klines_and_book(
+    tick: datetime,
+) -> list[object]:
+    """Return exchangeInfo + 3 closed klines + bookTicker for a healthy poll at tick."""
+    base_ms = int((tick.timestamp() - 180) * 1000)
+    minute_ms = 60_000
+    return [
+        _exchange_info(),
+        [
+            _kline(
+                open_time_ms=base_ms,
+                close_time_ms=base_ms + minute_ms - 1,
+                open_price="100.0",
+                high_price="101.0",
+                low_price="99.5",
+                close_price="100.5",
+                volume="1000",
+            ),
+            _kline(
+                open_time_ms=base_ms + minute_ms,
+                close_time_ms=base_ms + 2 * minute_ms - 1,
+                open_price="100.5",
+                high_price="101.5",
+                low_price="100.0",
+                close_price="101.0",
+                volume="1001",
+            ),
+            _kline(
+                open_time_ms=base_ms + 2 * minute_ms,
+                close_time_ms=base_ms + 3 * minute_ms - 1,
+                open_price="101.0",
+                high_price="102.0",
+                low_price="100.7",
+                close_price="101.5",
+                volume="1002",
+            ),
+        ],
+        {
+            "symbol": "BTCUSDT",
+            "bidPrice": "101.40",
+            "bidQty": "1.0",
+            "askPrice": "101.50",
+            "askQty": "1.0",
+        },
+    ]
+
+
+def test_forward_paper_runtime_retry_recovers_on_second_attempt(
+    tmp_path: Path,
+) -> None:
+    """Feed fails on attempt 1, succeeds on attempt 2; session executes with retry_recovery note."""
+    settings = _paper_settings_for(tmp_path)
+    tick = _ts(2026, 4, 5, 15, 3)
+    fetcher = ScriptedFetcher([RuntimeError("timeout"), *_healthy_klines_and_book(tick)])
+    adapter = BinanceSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    sleep_calls: list[float] = []
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="retry-recover-attempt-2",
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[tick],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=2,
+        feed_stale_after_seconds=120,
+        live_adapter=adapter,
+        live_market_poll_retry_count=2,
+        live_market_poll_retry_delay_seconds=0.1,
+        sleep_fn=lambda d: sleep_calls.append(d),
+    )
+
+    session = result.session_summaries[0]
+    assert session.session_outcome == "executed"
+    assert session.feed_health is not None
+    assert session.feed_health.recovered is True
+    assert session.feed_health.message is not None
+    assert "retry_recovery" in session.feed_health.message
+    assert "attempt 2 of 3" in session.feed_health.message
+    # sleep was called exactly once (between attempt 1 and attempt 2)
+    assert len(sleep_calls) == 1
+    assert sleep_calls[0] == 0.1
+
+
+def test_forward_paper_runtime_retry_recovers_on_third_attempt(
+    tmp_path: Path,
+) -> None:
+    """Feed fails on attempts 1 and 2, succeeds on attempt 3."""
+    settings = _paper_settings_for(tmp_path)
+    tick = _ts(2026, 4, 5, 15, 6)
+    fetcher = ScriptedFetcher(
+        [
+            RuntimeError("timeout"),
+            RuntimeError("timeout"),
+            *_healthy_klines_and_book(tick),
+        ]
+    )
+    adapter = BinanceSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    sleep_calls: list[float] = []
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="retry-recover-attempt-3",
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[tick],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=2,
+        feed_stale_after_seconds=120,
+        live_adapter=adapter,
+        live_market_poll_retry_count=2,
+        live_market_poll_retry_delay_seconds=0.1,
+        sleep_fn=lambda d: sleep_calls.append(d),
+    )
+
+    session = result.session_summaries[0]
+    assert session.session_outcome == "executed"
+    assert session.feed_health is not None
+    assert session.feed_health.recovered is True
+    assert session.feed_health.message is not None
+    assert "retry_recovery" in session.feed_health.message
+    assert "attempt 3 of 3" in session.feed_health.message
+    # sleep was called twice (before attempt 2 and before attempt 3)
+    assert len(sleep_calls) == 2
+
+
+def test_forward_paper_runtime_retry_exhausted_skips_session_with_retries_note(
+    tmp_path: Path,
+) -> None:
+    """All retry attempts fail — session is skipped and message records retries_exhausted."""
+    settings = _paper_settings_for(tmp_path)
+    fetcher = ScriptedFetcher(
+        [
+            RuntimeError("HTTP Error 451: "),
+            RuntimeError("HTTP Error 451: "),
+            RuntimeError("HTTP Error 451: "),
+        ]
+    )
+    adapter = BinanceSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="retry-exhausted-test",
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 5, 15, 9)],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=2,
+        feed_stale_after_seconds=120,
+        live_adapter=adapter,
+        live_market_poll_retry_count=2,
+        live_market_poll_retry_delay_seconds=0.1,
+        sleep_fn=lambda _: None,
+    )
+
+    session = result.session_summaries[0]
+    assert session.session_outcome == "skipped_unavailable_feed"
+
+    status = ForwardPaperRuntimeStatus.model_validate(
+        json.loads(result.status_path.read_text(encoding="utf-8"))
+    )
+    assert status.feed_health is not None
+    assert status.feed_health.status == "degraded"
+    assert status.feed_health.message is not None
+    assert "retries_exhausted" in status.feed_health.message
+    assert "failed after 3 attempts" in status.feed_health.message
+    assert "451" in status.feed_health.message

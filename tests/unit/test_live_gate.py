@@ -229,6 +229,7 @@ def test_fresh_runtime_materializes_live_gate_artifacts_without_existing_control
         live_lookback_candles=4,
         feed_stale_after_seconds=120,
         live_adapter=_unavailable_live_adapter(),
+        live_market_poll_retry_count=0,
         readiness_status=LiveReadinessStatus(
             runtime_id="forward-gate-fresh",
             updated_at=_ts(2026, 4, 5, 10, 59),
@@ -272,6 +273,7 @@ def test_persisted_runtime_keeps_live_control_status_behavior_on_second_start(
         live_lookback_candles=4,
         feed_stale_after_seconds=120,
         live_adapter=_unavailable_live_adapter(),
+        live_market_poll_retry_count=0,
         readiness_status=LiveReadinessStatus(
             runtime_id="forward-gate-persisted",
             updated_at=_ts(2026, 4, 5, 11, 4),

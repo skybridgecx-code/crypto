@@ -222,6 +222,7 @@ def test_shadow_evaluation_unavailable_feed_session_has_skip_evidence_artifact(
         live_lookback_candles=4,
         feed_stale_after_seconds=120,
         live_adapter=adapter,
+        live_market_poll_retry_count=0,
         readiness_status=LiveReadinessStatus(
             runtime_id="shadow-skip-evidence-test",
             updated_at=_ts(2026, 4, 5, 9, 59),
@@ -308,6 +309,7 @@ def test_shadow_evaluation_mixed_executed_and_unavailable_feed_sessions(
         live_adapter=BinanceSpotLiveMarketDataAdapter(
             fetch_json=ScriptedFetcher([RuntimeError("HTTP Error 451: ")])
         ),
+        live_market_poll_retry_count=0,
         readiness_status=LiveReadinessStatus(
             runtime_id="shadow-mixed-evidence-test",
             updated_at=_ts(2026, 4, 5, 9, 59),

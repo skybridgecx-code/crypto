@@ -809,6 +809,52 @@ def _refresh_live_state(
     )
 
 
+def _poll_with_retry(
+    *,
+    status: ForwardPaperRuntimeStatus,
+    adapter: BinanceSpotLiveMarketDataAdapter,
+    now: datetime,
+    retry_count: int,
+    retry_delay_seconds: float,
+    sleep_fn: Callable[[float], None],
+) -> LiveMarketState:
+    """Call _refresh_live_state with bounded retry/backoff on LiveMarketDataUnavailableError.
+
+    On success after one or more retries, enriches feed_health.message to record which
+    attempt succeeded.  On exhaustion, re-raises with a retries_exhausted note so the
+    catch block in the session loop can surface it in the skip evidence artifact.
+    """
+    total_attempts = 1 + retry_count
+    last_exc: LiveMarketDataUnavailableError | None = None
+    for attempt in range(total_attempts):
+        if attempt > 0:
+            sleep_fn(retry_delay_seconds)
+        try:
+            state = _refresh_live_state(status=status, adapter=adapter, now=now)
+            if attempt > 0:
+                enriched_message = (
+                    f"{state.feed_health.message or 'ok'}"
+                    f" | retry_recovery: succeeded on attempt {attempt + 1} of {total_attempts}"
+                )
+                state = state.model_copy(
+                    update={
+                        "feed_health": state.feed_health.model_copy(
+                            update={"message": enriched_message}
+                        )
+                    }
+                )
+            return state
+        except LiveMarketDataUnavailableError as caught:
+            last_exc = caught
+    if last_exc is None:
+        raise LiveMarketDataUnavailableError("poll_with_retry: unexpected empty attempt loop")
+    if retry_count > 0:
+        raise LiveMarketDataUnavailableError(
+            f"{last_exc} | retries_exhausted: failed after {total_attempts} attempts"
+        ) from last_exc
+    raise last_exc
+
+
 def _session_summary_with_live_state(
     *,
     session_summary: ForwardPaperSessionSummary,
@@ -1111,6 +1157,8 @@ def run_forward_paper_runtime(
     feed_stale_after_seconds: int | None = None,
     live_adapter: BinanceSpotLiveMarketDataAdapter | None = None,
     binance_base_url: str | None = None,
+    live_market_poll_retry_count: int = 2,
+    live_market_poll_retry_delay_seconds: float = 2.0,
     sandbox_execution_adapter: SandboxExecutionAdapter | None = None,
     live_control_config: LiveControlConfig | None = None,
     readiness_status: LiveReadinessStatus | None = None,
@@ -1274,10 +1322,13 @@ def run_forward_paper_runtime(
             else:
                 if resolved_live_adapter is None:
                     raise ValueError("Live market runtime requires a live market adapter")
-                market_state = _refresh_live_state(
+                market_state = _poll_with_retry(
                     status=status,
                     adapter=resolved_live_adapter,
                     now=scheduled_at,
+                    retry_count=live_market_poll_retry_count,
+                    retry_delay_seconds=live_market_poll_retry_delay_seconds,
+                    sleep_fn=sleep_fn,
                 )
                 _write_live_market_state(paths, market_state)
                 session_market_input_path = _session_market_input_path(
