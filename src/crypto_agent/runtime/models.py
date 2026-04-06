@@ -390,16 +390,27 @@ class LiveMarketPreflightArtifact(BaseModel):
     attempt_count_used: int = Field(ge=1)
     observed_at: datetime
     status: Literal[
-        "ready",
+        "batch_ready",
         "recovered_after_retry",
+        "single_probe_ready",
         "stale",
         "unavailable",
         "retries_exhausted",
     ]
     success: bool
+    single_probe_success: bool
+    batch_readiness: bool
+    batch_readiness_reason: str
     feed_health_status: Literal["healthy", "stale", "degraded"] | None = None
     feed_health_message: str | None = None
+    required_closed_candle_count: int = Field(default=0, ge=0)
     candle_count: int = Field(default=0, ge=0)
+    stability_window_probe_count: int = Field(default=0, ge=0)
+    stability_window_success_count: int = Field(default=0, ge=0)
+    stability_window_result: Literal["passed", "failed", "not_run"]
+    stability_probe_attempt_count_used: int | None = Field(default=None, ge=1)
+    stability_feed_health_status: Literal["healthy", "stale", "degraded"] | None = None
+    stability_feed_health_message: str | None = None
     order_book_present: bool = False
     constraints_present: bool = False
 

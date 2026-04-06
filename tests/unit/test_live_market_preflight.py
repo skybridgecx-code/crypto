@@ -172,7 +172,9 @@ def test_live_market_preflight_succeeds_immediately(tmp_path: Path) -> None:
     settings = _paper_settings_for(tmp_path)
     tick = _ts(2026, 4, 6, 9, 30)
     adapter = BinanceSpotLiveMarketDataAdapter(
-        fetch_json=ScriptedFetcher(_healthy_klines_and_book(tick))
+        fetch_json=ScriptedFetcher(
+            [*_healthy_klines_and_book(tick), *_healthy_klines_and_book(tick)]
+        )
     )
 
     result = run_live_market_preflight_probe(
@@ -192,11 +194,20 @@ def test_live_market_preflight_succeeds_immediately(tmp_path: Path) -> None:
         json.loads(result.artifact_path.read_text(encoding="utf-8"))
     )
 
-    assert artifact.status == "ready"
+    assert artifact.status == "batch_ready"
     assert artifact.success is True
+    assert artifact.single_probe_success is True
+    assert artifact.batch_readiness is True
+    assert artifact.batch_readiness_reason == "batch_ready"
     assert artifact.attempt_count_used == 1
     assert artifact.feed_health_status == "healthy"
+    assert artifact.required_closed_candle_count == 2
     assert artifact.candle_count == 2
+    assert artifact.stability_window_probe_count == 2
+    assert artifact.stability_window_success_count == 2
+    assert artifact.stability_window_result == "passed"
+    assert artifact.stability_probe_attempt_count_used == 1
+    assert artifact.stability_feed_health_status == "healthy"
     assert artifact.order_book_present is True
     assert artifact.constraints_present is True
     assert (tmp_path / "runs" / "preflight-ready" / "live_market_status.json").exists()
@@ -207,7 +218,13 @@ def test_live_market_preflight_recovers_after_retry(tmp_path: Path) -> None:
     settings = _paper_settings_for(tmp_path)
     tick = _ts(2026, 4, 6, 9, 35)
     adapter = BinanceSpotLiveMarketDataAdapter(
-        fetch_json=ScriptedFetcher([RuntimeError("timeout"), *_healthy_klines_and_book(tick)])
+        fetch_json=ScriptedFetcher(
+            [
+                RuntimeError("timeout"),
+                *_healthy_klines_and_book(tick),
+                *_healthy_klines_and_book(tick),
+            ]
+        )
     )
     sleep_calls: list[float] = []
 
@@ -230,11 +247,16 @@ def test_live_market_preflight_recovers_after_retry(tmp_path: Path) -> None:
 
     assert artifact.status == "recovered_after_retry"
     assert artifact.success is True
+    assert artifact.single_probe_success is True
+    assert artifact.batch_readiness is True
+    assert artifact.batch_readiness_reason == "batch_ready_after_retry_recovery"
     assert artifact.attempt_count_used == 2
     assert artifact.feed_health_status == "healthy"
     assert artifact.feed_health_message is not None
     assert "retry_recovery" in artifact.feed_health_message
     assert "attempt 2 of 3" in artifact.feed_health_message
+    assert artifact.stability_window_result == "passed"
+    assert artifact.stability_probe_attempt_count_used == 1
     assert sleep_calls == [0.1]
 
 
@@ -272,15 +294,70 @@ def test_live_market_preflight_fails_when_retries_are_exhausted(tmp_path: Path) 
 
     assert artifact.status == "retries_exhausted"
     assert artifact.success is False
+    assert artifact.single_probe_success is False
+    assert artifact.batch_readiness is False
+    assert artifact.batch_readiness_reason == "retries_exhausted"
     assert artifact.attempt_count_used == 3
     assert artifact.feed_health_status == "degraded"
     assert artifact.feed_health_message is not None
     assert "retries_exhausted" in artifact.feed_health_message
     assert "failed after 3 attempts" in artifact.feed_health_message
     assert "451" in artifact.feed_health_message
+    assert artifact.required_closed_candle_count == 2
     assert artifact.candle_count == 0
+    assert artifact.stability_window_result == "not_run"
     assert artifact.order_book_present is False
     assert artifact.constraints_present is False
+
+
+def test_live_market_preflight_marks_single_probe_ready_when_batch_followup_fails(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    tick = _ts(2026, 4, 6, 9, 42)
+    adapter = BinanceSpotLiveMarketDataAdapter(
+        fetch_json=ScriptedFetcher(
+            [
+                *_healthy_klines_and_book(tick),
+                RuntimeError("HTTP Error 451: "),
+                RuntimeError("HTTP Error 451: "),
+                RuntimeError("HTTP Error 451: "),
+            ]
+        )
+    )
+
+    result = run_live_market_preflight_probe(
+        settings=settings,
+        runtime_id="preflight-single-probe-only",
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=2,
+        feed_stale_after_seconds=120,
+        live_adapter=adapter,
+        now_fn=lambda: tick,
+        live_market_poll_retry_count=2,
+        live_market_poll_retry_delay_seconds=0.1,
+        sleep_fn=lambda _: None,
+    )
+
+    artifact = result.artifact
+
+    assert artifact.status == "single_probe_ready"
+    assert artifact.success is False
+    assert artifact.single_probe_success is True
+    assert artifact.batch_readiness is False
+    assert artifact.batch_readiness_reason == "stability_probe_degraded"
+    assert artifact.attempt_count_used == 1
+    assert artifact.feed_health_status == "healthy"
+    assert artifact.candle_count == 2
+    assert artifact.stability_window_probe_count == 2
+    assert artifact.stability_window_success_count == 1
+    assert artifact.stability_window_result == "failed"
+    assert artifact.stability_probe_attempt_count_used == 1
+    assert artifact.stability_feed_health_status == "degraded"
+    assert artifact.stability_feed_health_message is not None
+    assert "451" in artifact.stability_feed_health_message
 
 
 def test_cli_preflight_only_returns_nonzero_for_failed_probe(
@@ -303,9 +380,19 @@ def test_cli_preflight_only_returns_nonzero_for_failed_probe(
         observed_at=_ts(2026, 4, 6, 9, 45),
         status="retries_exhausted",
         success=False,
+        single_probe_success=False,
+        batch_readiness=False,
+        batch_readiness_reason="retries_exhausted",
         feed_health_status="degraded",
         feed_health_message="HTTP Error 451 | retries_exhausted: failed after 3 attempts",
+        required_closed_candle_count=2,
         candle_count=0,
+        stability_window_probe_count=0,
+        stability_window_success_count=0,
+        stability_window_result="not_run",
+        stability_probe_attempt_count_used=None,
+        stability_feed_health_status=None,
+        stability_feed_health_message=None,
         order_book_present=False,
         constraints_present=False,
     )
@@ -347,3 +434,4 @@ def test_cli_preflight_only_returns_nonzero_for_failed_probe(
     assert output["preflight_path"] == str(artifact_path)
     assert output["status"] == "retries_exhausted"
     assert output["success"] is False
+    assert output["batch_readiness"] is False

@@ -306,7 +306,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "preflight_path": str(preflight_result.artifact_path),
                     "status": preflight_result.artifact.status,
                     "success": preflight_result.artifact.success,
+                    "single_probe_success": preflight_result.artifact.single_probe_success,
+                    "batch_readiness": preflight_result.artifact.batch_readiness,
+                    "batch_readiness_reason": preflight_result.artifact.batch_readiness_reason,
                     "attempt_count_used": preflight_result.artifact.attempt_count_used,
+                    "stability_probe_attempt_count_used": (
+                        preflight_result.artifact.stability_probe_attempt_count_used
+                    ),
+                    "stability_window_result": preflight_result.artifact.stability_window_result,
                     "feed_health_status": preflight_result.artifact.feed_health_status,
                     "feed_health_message": preflight_result.artifact.feed_health_message,
                     "configured_base_url": preflight_result.artifact.configured_base_url,

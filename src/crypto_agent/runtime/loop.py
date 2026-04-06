@@ -884,6 +884,57 @@ def _poll_with_retry(
     ).market_state
 
 
+def _build_failed_preflight_artifact(
+    *,
+    runtime_id: str,
+    market_source: Literal["binance_spot"],
+    live_symbol: str,
+    live_interval: str,
+    configured_base_url: str,
+    retry_count: int,
+    retry_delay_seconds: float,
+    attempt_count_used: int,
+    observed_at: datetime,
+    status: Literal["stale", "unavailable", "retries_exhausted"],
+    feed_health_status: Literal["healthy", "stale", "degraded"] | None,
+    feed_health_message: str | None,
+    required_closed_candle_count: int,
+    candle_count: int,
+    order_book_present: bool,
+    constraints_present: bool,
+    batch_readiness_reason: str,
+    single_probe_success: bool,
+) -> LiveMarketPreflightArtifact:
+    return LiveMarketPreflightArtifact(
+        runtime_id=runtime_id,
+        market_source=market_source,
+        symbol=live_symbol,
+        interval=live_interval,
+        configured_base_url=configured_base_url,
+        retry_count=retry_count,
+        retry_delay_seconds=retry_delay_seconds,
+        attempt_count_used=attempt_count_used,
+        observed_at=observed_at,
+        status=status,
+        success=False,
+        single_probe_success=single_probe_success,
+        batch_readiness=False,
+        batch_readiness_reason=batch_readiness_reason,
+        feed_health_status=feed_health_status,
+        feed_health_message=feed_health_message,
+        required_closed_candle_count=required_closed_candle_count,
+        candle_count=candle_count,
+        stability_window_probe_count=0 if not single_probe_success else 2,
+        stability_window_success_count=1 if single_probe_success else 0,
+        stability_window_result="not_run" if not single_probe_success else "failed",
+        stability_probe_attempt_count_used=None,
+        stability_feed_health_status=None,
+        stability_feed_health_message=None,
+        order_book_present=order_book_present,
+        constraints_present=constraints_present,
+    )
+
+
 def run_live_market_preflight_probe(
     *,
     settings: Settings,
@@ -931,7 +982,7 @@ def run_live_market_preflight_probe(
     configured_base_url = binance_base_url or resolved_adapter.base_url
 
     try:
-        poll_result = _poll_with_retry_result(
+        initial_poll_result = _poll_with_retry_result(
             status=transient_status,
             adapter=resolved_adapter,
             now=observed_at,
@@ -939,49 +990,176 @@ def run_live_market_preflight_probe(
             retry_delay_seconds=live_market_poll_retry_delay_seconds,
             sleep_fn=sleep_fn,
         )
-        market_state = poll_result.market_state
-        _write_live_market_state(paths, market_state)
-        if market_state.feed_health.status != "healthy":
-            classification: Literal[
-                "ready",
-                "recovered_after_retry",
-                "stale",
-                "unavailable",
-                "retries_exhausted",
-            ] = "stale"
-            success = False
-        elif poll_result.attempt_count_used > 1 or market_state.feed_health.recovered:
-            classification = "recovered_after_retry"
-            success = True
+        initial_market_state = initial_poll_result.market_state
+        _write_live_market_state(paths, initial_market_state)
+        if initial_market_state.feed_health.status != "healthy":
+            artifact = _build_failed_preflight_artifact(
+                runtime_id=runtime_id,
+                market_source=market_source,
+                live_symbol=live_symbol,
+                live_interval=live_interval,
+                configured_base_url=configured_base_url,
+                retry_count=live_market_poll_retry_count,
+                retry_delay_seconds=live_market_poll_retry_delay_seconds,
+                attempt_count_used=initial_poll_result.attempt_count_used,
+                observed_at=observed_at,
+                status="stale",
+                feed_health_status=initial_market_state.feed_health.status,
+                feed_health_message=initial_market_state.feed_health.message,
+                required_closed_candle_count=live_lookback_candles,
+                candle_count=len(initial_market_state.candles),
+                order_book_present=initial_market_state.order_book is not None,
+                constraints_present=initial_market_state.constraints is not None,
+                batch_readiness_reason="single_probe_not_healthy",
+                single_probe_success=False,
+            )
         else:
-            classification = "ready"
-            success = True
-        artifact = LiveMarketPreflightArtifact(
-            runtime_id=runtime_id,
-            market_source=market_source,
-            symbol=live_symbol,
-            interval=live_interval,
-            configured_base_url=configured_base_url,
-            retry_count=live_market_poll_retry_count,
-            retry_delay_seconds=live_market_poll_retry_delay_seconds,
-            attempt_count_used=poll_result.attempt_count_used,
-            observed_at=observed_at,
-            status=classification,
-            success=success,
-            feed_health_status=market_state.feed_health.status,
-            feed_health_message=market_state.feed_health.message,
-            candle_count=len(market_state.candles),
-            order_book_present=market_state.order_book is not None,
-            constraints_present=market_state.constraints is not None,
-        )
+            stability_observed_at = observed_at + timedelta(seconds=1)
+            try:
+                stability_poll_result = _poll_with_retry_result(
+                    status=transient_status,
+                    adapter=resolved_adapter,
+                    now=stability_observed_at,
+                    retry_count=live_market_poll_retry_count,
+                    retry_delay_seconds=live_market_poll_retry_delay_seconds,
+                    sleep_fn=sleep_fn,
+                )
+                stability_market_state = stability_poll_result.market_state
+                if stability_market_state.feed_health.status == "healthy":
+                    if (
+                        initial_poll_result.attempt_count_used > 1
+                        or stability_poll_result.attempt_count_used > 1
+                        or initial_market_state.feed_health.recovered
+                        or stability_market_state.feed_health.recovered
+                    ):
+                        classification: Literal[
+                            "batch_ready",
+                            "recovered_after_retry",
+                            "single_probe_ready",
+                            "stale",
+                            "unavailable",
+                            "retries_exhausted",
+                        ] = "recovered_after_retry"
+                        batch_readiness_reason = "batch_ready_after_retry_recovery"
+                    else:
+                        classification = "batch_ready"
+                        batch_readiness_reason = "batch_ready"
+                    artifact = LiveMarketPreflightArtifact(
+                        runtime_id=runtime_id,
+                        market_source=market_source,
+                        symbol=live_symbol,
+                        interval=live_interval,
+                        configured_base_url=configured_base_url,
+                        retry_count=live_market_poll_retry_count,
+                        retry_delay_seconds=live_market_poll_retry_delay_seconds,
+                        attempt_count_used=initial_poll_result.attempt_count_used,
+                        observed_at=observed_at,
+                        status=classification,
+                        success=True,
+                        single_probe_success=True,
+                        batch_readiness=True,
+                        batch_readiness_reason=batch_readiness_reason,
+                        feed_health_status=initial_market_state.feed_health.status,
+                        feed_health_message=initial_market_state.feed_health.message,
+                        required_closed_candle_count=live_lookback_candles,
+                        candle_count=min(
+                            len(initial_market_state.candles),
+                            len(stability_market_state.candles),
+                        ),
+                        stability_window_probe_count=2,
+                        stability_window_success_count=2,
+                        stability_window_result="passed",
+                        stability_probe_attempt_count_used=stability_poll_result.attempt_count_used,
+                        stability_feed_health_status=stability_market_state.feed_health.status,
+                        stability_feed_health_message=stability_market_state.feed_health.message,
+                        order_book_present=(
+                            initial_market_state.order_book is not None
+                            and stability_market_state.order_book is not None
+                        ),
+                        constraints_present=(
+                            initial_market_state.constraints is not None
+                            and stability_market_state.constraints is not None
+                        ),
+                    )
+                else:
+                    artifact = LiveMarketPreflightArtifact(
+                        runtime_id=runtime_id,
+                        market_source=market_source,
+                        symbol=live_symbol,
+                        interval=live_interval,
+                        configured_base_url=configured_base_url,
+                        retry_count=live_market_poll_retry_count,
+                        retry_delay_seconds=live_market_poll_retry_delay_seconds,
+                        attempt_count_used=initial_poll_result.attempt_count_used,
+                        observed_at=observed_at,
+                        status="single_probe_ready",
+                        success=False,
+                        single_probe_success=True,
+                        batch_readiness=False,
+                        batch_readiness_reason=(
+                            f"stability_probe_{stability_market_state.feed_health.status}"
+                        ),
+                        feed_health_status=initial_market_state.feed_health.status,
+                        feed_health_message=initial_market_state.feed_health.message,
+                        required_closed_candle_count=live_lookback_candles,
+                        candle_count=min(
+                            len(initial_market_state.candles),
+                            len(stability_market_state.candles),
+                        ),
+                        stability_window_probe_count=2,
+                        stability_window_success_count=1,
+                        stability_window_result="failed",
+                        stability_probe_attempt_count_used=stability_poll_result.attempt_count_used,
+                        stability_feed_health_status=stability_market_state.feed_health.status,
+                        stability_feed_health_message=stability_market_state.feed_health.message,
+                        order_book_present=(
+                            initial_market_state.order_book is not None
+                            and stability_market_state.order_book is not None
+                        ),
+                        constraints_present=(
+                            initial_market_state.constraints is not None
+                            and stability_market_state.constraints is not None
+                        ),
+                    )
+            except LiveMarketDataUnavailableError as exc:
+                artifact = LiveMarketPreflightArtifact(
+                    runtime_id=runtime_id,
+                    market_source=market_source,
+                    symbol=live_symbol,
+                    interval=live_interval,
+                    configured_base_url=configured_base_url,
+                    retry_count=live_market_poll_retry_count,
+                    retry_delay_seconds=live_market_poll_retry_delay_seconds,
+                    attempt_count_used=initial_poll_result.attempt_count_used,
+                    observed_at=observed_at,
+                    status="single_probe_ready",
+                    success=False,
+                    single_probe_success=True,
+                    batch_readiness=False,
+                    batch_readiness_reason="stability_probe_unavailable",
+                    feed_health_status=initial_market_state.feed_health.status,
+                    feed_health_message=initial_market_state.feed_health.message,
+                    required_closed_candle_count=live_lookback_candles,
+                    candle_count=len(initial_market_state.candles),
+                    stability_window_probe_count=2,
+                    stability_window_success_count=1,
+                    stability_window_result="failed",
+                    stability_probe_attempt_count_used=(
+                        live_market_poll_retry_count + 1 if "retries_exhausted" in str(exc) else 1
+                    ),
+                    stability_feed_health_status="degraded",
+                    stability_feed_health_message=str(exc),
+                    order_book_present=initial_market_state.order_book is not None,
+                    constraints_present=initial_market_state.constraints is not None,
+                )
     except LiveMarketDataUnavailableError as exc:
         message = str(exc)
         classification = "retries_exhausted" if "retries_exhausted" in message else "unavailable"
-        artifact = LiveMarketPreflightArtifact(
+        artifact = _build_failed_preflight_artifact(
             runtime_id=runtime_id,
             market_source=market_source,
-            symbol=live_symbol,
-            interval=live_interval,
+            live_symbol=live_symbol,
+            live_interval=live_interval,
             configured_base_url=configured_base_url,
             retry_count=live_market_poll_retry_count,
             retry_delay_seconds=live_market_poll_retry_delay_seconds,
@@ -990,12 +1168,14 @@ def run_live_market_preflight_probe(
             ),
             observed_at=observed_at,
             status=classification,
-            success=False,
             feed_health_status="degraded",
             feed_health_message=message,
+            required_closed_candle_count=live_lookback_candles,
             candle_count=0,
             order_book_present=False,
             constraints_present=False,
+            batch_readiness_reason=classification,
+            single_probe_success=False,
         )
 
     _write_json_artifact(paths.live_market_preflight_path, artifact)
