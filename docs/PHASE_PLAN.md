@@ -115,3 +115,12 @@ Closeout doc:
 - `docs/PHASE_H1A_SANDBOX_CLI_WIRING.md`
 
 The phase remains sandbox-only and does not authorize production live execution.
+
+## Phase H1B — Sandbox executable-order rehearsal blocker
+
+Phase H1B documents that CLI-level non-zero sandbox order rehearsal is blocked under current safety boundaries.
+
+Closeout doc:
+- `docs/PHASE_H1B_SANDBOX_EXECUTABLE_ORDER_REHEARSAL_BLOCKER.md`
+
+Future work should explicitly scope fixture-backed sandbox CLI rehearsal before changing replay/sandbox guards.

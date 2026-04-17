@@ -131,3 +131,9 @@ Future work must preserve these boundaries unless explicitly re-scoped:
 `docs/PHASE_H1A_SANDBOX_CLI_WIRING.md` documents the CLI sandbox adapter wiring.
 
 Sandbox mode remains sandbox-only evidence. It does not authorize production live execution or live order authority.
+
+## Phase H1B sandbox executable-order rehearsal blocker
+
+`docs/PHASE_H1B_SANDBOX_EXECUTABLE_ORDER_REHEARSAL_BLOCKER.md` records that CLI-level non-zero sandbox order rehearsal is intentionally blocked under current boundaries.
+
+Do not loosen replay + sandbox guards, force live signals, or add fixture-backed sandbox CLI behavior unless a future phase explicitly scopes it.
