@@ -124,6 +124,15 @@ class ScriptedFetcher:
         return response
 
 
+def _adapter_factory(*response_groups: list[object]):
+    pending_groups = [list(group) for group in response_groups]
+
+    def _factory() -> BinanceSpotLiveMarketDataAdapter:
+        return BinanceSpotLiveMarketDataAdapter(fetch_json=ScriptedFetcher(pending_groups.pop(0)))
+
+    return _factory
+
+
 def _healthy_klines_and_book(tick: datetime) -> list[object]:
     minute_ms = 60_000
     base_ms = int(tick.timestamp() * 1000) - 3 * minute_ms
@@ -171,11 +180,6 @@ def _healthy_klines_and_book(tick: datetime) -> list[object]:
 def test_live_market_preflight_succeeds_immediately(tmp_path: Path) -> None:
     settings = _paper_settings_for(tmp_path)
     tick = _ts(2026, 4, 6, 9, 30)
-    adapter = BinanceSpotLiveMarketDataAdapter(
-        fetch_json=ScriptedFetcher(
-            [*_healthy_klines_and_book(tick), *_healthy_klines_and_book(tick)]
-        )
-    )
 
     result = run_live_market_preflight_probe(
         settings=settings,
@@ -185,7 +189,10 @@ def test_live_market_preflight_succeeds_immediately(tmp_path: Path) -> None:
         live_interval="1m",
         live_lookback_candles=2,
         feed_stale_after_seconds=120,
-        live_adapter=adapter,
+        live_adapter_factory=_adapter_factory(
+            _healthy_klines_and_book(tick),
+            _healthy_klines_and_book(tick),
+        ),
         now_fn=lambda: tick,
         sleep_fn=lambda _: None,
     )
@@ -206,6 +213,7 @@ def test_live_market_preflight_succeeds_immediately(tmp_path: Path) -> None:
     assert artifact.stability_window_probe_count == 2
     assert artifact.stability_window_success_count == 2
     assert artifact.stability_window_result == "passed"
+    assert artifact.stability_failure_status is None
     assert artifact.stability_probe_attempt_count_used == 1
     assert artifact.stability_feed_health_status == "healthy"
     assert artifact.order_book_present is True
@@ -217,15 +225,6 @@ def test_live_market_preflight_succeeds_immediately(tmp_path: Path) -> None:
 def test_live_market_preflight_recovers_after_retry(tmp_path: Path) -> None:
     settings = _paper_settings_for(tmp_path)
     tick = _ts(2026, 4, 6, 9, 35)
-    adapter = BinanceSpotLiveMarketDataAdapter(
-        fetch_json=ScriptedFetcher(
-            [
-                RuntimeError("timeout"),
-                *_healthy_klines_and_book(tick),
-                *_healthy_klines_and_book(tick),
-            ]
-        )
-    )
     sleep_calls: list[float] = []
 
     result = run_live_market_preflight_probe(
@@ -236,7 +235,10 @@ def test_live_market_preflight_recovers_after_retry(tmp_path: Path) -> None:
         live_interval="1m",
         live_lookback_candles=2,
         feed_stale_after_seconds=120,
-        live_adapter=adapter,
+        live_adapter_factory=_adapter_factory(
+            [RuntimeError("timeout"), *_healthy_klines_and_book(tick)],
+            _healthy_klines_and_book(tick),
+        ),
         now_fn=lambda: tick,
         live_market_poll_retry_count=2,
         live_market_poll_retry_delay_seconds=0.1,
@@ -256,6 +258,7 @@ def test_live_market_preflight_recovers_after_retry(tmp_path: Path) -> None:
     assert "retry_recovery" in artifact.feed_health_message
     assert "attempt 2 of 3" in artifact.feed_health_message
     assert artifact.stability_window_result == "passed"
+    assert artifact.stability_failure_status is None
     assert artifact.stability_probe_attempt_count_used == 1
     assert sleep_calls == [0.1]
 
@@ -306,6 +309,7 @@ def test_live_market_preflight_fails_when_retries_are_exhausted(tmp_path: Path) 
     assert artifact.required_closed_candle_count == 2
     assert artifact.candle_count == 0
     assert artifact.stability_window_result == "not_run"
+    assert artifact.stability_failure_status is None
     assert artifact.order_book_present is False
     assert artifact.constraints_present is False
 
@@ -315,16 +319,6 @@ def test_live_market_preflight_marks_single_probe_ready_when_batch_followup_fail
 ) -> None:
     settings = _paper_settings_for(tmp_path)
     tick = _ts(2026, 4, 6, 9, 42)
-    adapter = BinanceSpotLiveMarketDataAdapter(
-        fetch_json=ScriptedFetcher(
-            [
-                *_healthy_klines_and_book(tick),
-                RuntimeError("HTTP Error 451: "),
-                RuntimeError("HTTP Error 451: "),
-                RuntimeError("HTTP Error 451: "),
-            ]
-        )
-    )
 
     result = run_live_market_preflight_probe(
         settings=settings,
@@ -334,7 +328,14 @@ def test_live_market_preflight_marks_single_probe_ready_when_batch_followup_fail
         live_interval="1m",
         live_lookback_candles=2,
         feed_stale_after_seconds=120,
-        live_adapter=adapter,
+        live_adapter_factory=_adapter_factory(
+            _healthy_klines_and_book(tick),
+            [
+                RuntimeError("HTTP Error 451: "),
+                RuntimeError("HTTP Error 451: "),
+                RuntimeError("HTTP Error 451: "),
+            ],
+        ),
         now_fn=lambda: tick,
         live_market_poll_retry_count=2,
         live_market_poll_retry_delay_seconds=0.1,
@@ -347,17 +348,24 @@ def test_live_market_preflight_marks_single_probe_ready_when_batch_followup_fail
     assert artifact.success is False
     assert artifact.single_probe_success is True
     assert artifact.batch_readiness is False
-    assert artifact.batch_readiness_reason == "stability_probe_degraded"
+    assert artifact.batch_readiness_reason == "stability_probe_unavailable"
     assert artifact.attempt_count_used == 1
     assert artifact.feed_health_status == "healthy"
     assert artifact.candle_count == 2
     assert artifact.stability_window_probe_count == 2
     assert artifact.stability_window_success_count == 1
     assert artifact.stability_window_result == "failed"
-    assert artifact.stability_probe_attempt_count_used == 1
+    assert artifact.stability_failure_status == "retries_exhausted"
+    assert artifact.stability_probe_attempt_count_used == 3
     assert artifact.stability_feed_health_status == "degraded"
     assert artifact.stability_feed_health_message is not None
     assert "451" in artifact.stability_feed_health_message
+    assert not (
+        tmp_path / "runs" / "preflight-single-probe-only" / "live_market_status.json"
+    ).exists()
+    assert not (
+        tmp_path / "runs" / "preflight-single-probe-only" / "venue_constraints.json"
+    ).exists()
 
 
 def test_cli_preflight_only_returns_nonzero_for_failed_probe(
@@ -390,6 +398,7 @@ def test_cli_preflight_only_returns_nonzero_for_failed_probe(
         stability_window_probe_count=0,
         stability_window_success_count=0,
         stability_window_result="not_run",
+        stability_failure_status=None,
         stability_probe_attempt_count_used=None,
         stability_feed_health_status=None,
         stability_feed_health_message=None,
@@ -435,3 +444,4 @@ def test_cli_preflight_only_returns_nonzero_for_failed_probe(
     assert output["status"] == "retries_exhausted"
     assert output["success"] is False
     assert output["batch_readiness"] is False
+    assert output["stability_failure_status"] is None

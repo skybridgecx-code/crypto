@@ -259,6 +259,12 @@ def _write_execution_artifact(
     )
 
 
+def _clear_live_market_state_artifacts(paths: ForwardPaperRuntimePaths) -> None:
+    for path in (paths.live_market_status_path, paths.venue_constraints_path):
+        if path.exists():
+            path.unlink()
+
+
 def _initial_runtime_status(
     *,
     runtime_id: str,
@@ -927,12 +933,22 @@ def _build_failed_preflight_artifact(
         stability_window_probe_count=0 if not single_probe_success else 2,
         stability_window_success_count=1 if single_probe_success else 0,
         stability_window_result="not_run" if not single_probe_success else "failed",
+        stability_failure_status=None if not single_probe_success else "unavailable",
         stability_probe_attempt_count_used=None,
         stability_feed_health_status=None,
         stability_feed_health_message=None,
         order_book_present=order_book_present,
         constraints_present=constraints_present,
     )
+
+
+def _build_default_live_adapter(
+    *,
+    binance_base_url: str | None,
+) -> BinanceSpotLiveMarketDataAdapter:
+    if binance_base_url is not None:
+        return BinanceSpotLiveMarketDataAdapter(base_url=binance_base_url)
+    return BinanceSpotLiveMarketDataAdapter()
 
 
 def run_live_market_preflight_probe(
@@ -948,6 +964,7 @@ def run_live_market_preflight_probe(
     live_market_poll_retry_count: int = 2,
     live_market_poll_retry_delay_seconds: float = 2.0,
     live_adapter: BinanceSpotLiveMarketDataAdapter | None = None,
+    live_adapter_factory: Callable[[], BinanceSpotLiveMarketDataAdapter] | None = None,
     now_fn: Callable[[], datetime] = _utc_now,
     sleep_fn: Callable[[float], None] = time.sleep,
 ) -> LiveMarketPreflightResult:
@@ -974,25 +991,29 @@ def run_live_market_preflight_probe(
         now=observed_at,
         paths=paths,
     )
-    resolved_adapter = live_adapter or (
-        BinanceSpotLiveMarketDataAdapter(base_url=binance_base_url)
-        if binance_base_url is not None
-        else BinanceSpotLiveMarketDataAdapter()
-    )
-    configured_base_url = binance_base_url or resolved_adapter.base_url
+
+    def _make_probe_adapter() -> BinanceSpotLiveMarketDataAdapter:
+        if live_adapter_factory is not None:
+            return live_adapter_factory()
+        if live_adapter is not None:
+            return live_adapter
+        return _build_default_live_adapter(binance_base_url=binance_base_url)
+
+    initial_adapter = _make_probe_adapter()
+    configured_base_url = binance_base_url or initial_adapter.base_url
 
     try:
         initial_poll_result = _poll_with_retry_result(
             status=transient_status,
-            adapter=resolved_adapter,
+            adapter=initial_adapter,
             now=observed_at,
             retry_count=live_market_poll_retry_count,
             retry_delay_seconds=live_market_poll_retry_delay_seconds,
             sleep_fn=sleep_fn,
         )
         initial_market_state = initial_poll_result.market_state
-        _write_live_market_state(paths, initial_market_state)
         if initial_market_state.feed_health.status != "healthy":
+            _clear_live_market_state_artifacts(paths)
             artifact = _build_failed_preflight_artifact(
                 runtime_id=runtime_id,
                 market_source=market_source,
@@ -1016,9 +1037,10 @@ def run_live_market_preflight_probe(
         else:
             stability_observed_at = observed_at + timedelta(seconds=1)
             try:
+                stability_adapter = _make_probe_adapter()
                 stability_poll_result = _poll_with_retry_result(
                     status=transient_status,
-                    adapter=resolved_adapter,
+                    adapter=stability_adapter,
                     now=stability_observed_at,
                     retry_count=live_market_poll_retry_count,
                     retry_delay_seconds=live_market_poll_retry_delay_seconds,
@@ -1026,6 +1048,7 @@ def run_live_market_preflight_probe(
                 )
                 stability_market_state = stability_poll_result.market_state
                 if stability_market_state.feed_health.status == "healthy":
+                    _write_live_market_state(paths, stability_market_state)
                     if (
                         initial_poll_result.attempt_count_used > 1
                         or stability_poll_result.attempt_count_used > 1
@@ -1069,6 +1092,7 @@ def run_live_market_preflight_probe(
                         stability_window_probe_count=2,
                         stability_window_success_count=2,
                         stability_window_result="passed",
+                        stability_failure_status=None,
                         stability_probe_attempt_count_used=stability_poll_result.attempt_count_used,
                         stability_feed_health_status=stability_market_state.feed_health.status,
                         stability_feed_health_message=stability_market_state.feed_health.message,
@@ -1082,6 +1106,16 @@ def run_live_market_preflight_probe(
                         ),
                     )
                 else:
+                    _clear_live_market_state_artifacts(paths)
+                    stability_failure_status: Literal[
+                        "stale",
+                        "unavailable",
+                        "retries_exhausted",
+                    ] = (
+                        "stale"
+                        if stability_market_state.feed_health.status == "stale"
+                        else "unavailable"
+                    )
                     artifact = LiveMarketPreflightArtifact(
                         runtime_id=runtime_id,
                         market_source=market_source,
@@ -1109,6 +1143,7 @@ def run_live_market_preflight_probe(
                         stability_window_probe_count=2,
                         stability_window_success_count=1,
                         stability_window_result="failed",
+                        stability_failure_status=stability_failure_status,
                         stability_probe_attempt_count_used=stability_poll_result.attempt_count_used,
                         stability_feed_health_status=stability_market_state.feed_health.status,
                         stability_feed_health_message=stability_market_state.feed_health.message,
@@ -1122,6 +1157,10 @@ def run_live_market_preflight_probe(
                         ),
                     )
             except LiveMarketDataUnavailableError as exc:
+                _clear_live_market_state_artifacts(paths)
+                stability_exception_status: Literal["unavailable", "retries_exhausted"] = (
+                    "retries_exhausted" if "retries_exhausted" in str(exc) else "unavailable"
+                )
                 artifact = LiveMarketPreflightArtifact(
                     runtime_id=runtime_id,
                     market_source=market_source,
@@ -1144,8 +1183,11 @@ def run_live_market_preflight_probe(
                     stability_window_probe_count=2,
                     stability_window_success_count=1,
                     stability_window_result="failed",
+                    stability_failure_status=stability_exception_status,
                     stability_probe_attempt_count_used=(
-                        live_market_poll_retry_count + 1 if "retries_exhausted" in str(exc) else 1
+                        live_market_poll_retry_count + 1
+                        if stability_exception_status == "retries_exhausted"
+                        else 1
                     ),
                     stability_feed_health_status="degraded",
                     stability_feed_health_message=str(exc),
@@ -1153,6 +1195,7 @@ def run_live_market_preflight_probe(
                     constraints_present=initial_market_state.constraints is not None,
                 )
     except LiveMarketDataUnavailableError as exc:
+        _clear_live_market_state_artifacts(paths)
         message = str(exc)
         classification = "retries_exhausted" if "retries_exhausted" in message else "unavailable"
         artifact = _build_failed_preflight_artifact(

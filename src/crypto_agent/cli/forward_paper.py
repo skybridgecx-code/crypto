@@ -313,6 +313,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "stability_probe_attempt_count_used": (
                         preflight_result.artifact.stability_probe_attempt_count_used
                     ),
+                    "stability_failure_status": preflight_result.artifact.stability_failure_status,
                     "stability_window_result": preflight_result.artifact.stability_window_result,
                     "feed_health_status": preflight_result.artifact.feed_health_status,
                     "feed_health_message": preflight_result.artifact.feed_health_message,
