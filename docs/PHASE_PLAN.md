@@ -97,3 +97,12 @@ Stop and report if:
 Phase G10 adds `docs/LAUNCH_VERDICT_REASON_CODES.md`, an operator-facing map for `live_launch_verdict.json.reason_codes`.
 
 Scope is docs/runbook only. The verdict remains artifact-only and grants no live execution authority.
+
+## Phase G11 — Launch verdict workflow closeout
+
+Phase G11 freezes the G8-G10 launch-verdict workflow as the current operator review endpoint.
+
+Closeout doc:
+- `docs/PHASE_G11_LAUNCH_VERDICT_WORKFLOW_CLOSEOUT.md`
+
+The workflow remains artifact-only and does not authorize production live execution.

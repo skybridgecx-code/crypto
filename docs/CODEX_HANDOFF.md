@@ -113,3 +113,15 @@ Any future assignment must:
 `docs/LAUNCH_VERDICT_REASON_CODES.md` is part of the operator documentation contract for `runs/<runtime-id>/live_launch_verdict.json`.
 
 Do not change verdict semantics, reason-code behavior, live authority, execution modes, or trusted account-state boundaries unless a future assignment explicitly scopes that change.
+
+## Phase G11 launch verdict workflow closeout
+
+`docs/PHASE_G11_LAUNCH_VERDICT_WORKFLOW_CLOSEOUT.md` freezes the current G8-G10 launch-verdict workflow.
+
+Future work must preserve these boundaries unless explicitly re-scoped:
+- no production live execution
+- no new execution modes
+- no account-state trust widening
+- no strategy/risk/execution rewrites
+- no second accounting system
+- no hidden launch authority
