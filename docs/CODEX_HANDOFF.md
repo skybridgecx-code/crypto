@@ -143,3 +143,9 @@ Do not loosen replay + sandbox guards, force live signals, or add fixture-backed
 `docs/PHASE_H1C_FIXTURE_BACKED_SANDBOX_CLI_REHEARSAL_DESIGN.md` defines the safe future shape for fixture-backed sandbox CLI rehearsal.
 
 Do not implement fixture-backed sandbox CLI behavior unless a future phase explicitly scopes it.
+
+## Phase H1D fixture-backed sandbox rehearsal
+
+`docs/PHASE_H1D_IMPLEMENT_FIXTURE_BACKED_SANDBOX_REHEARSAL.md` records the shipped bounded replay+sandbox CLI rehearsal path.
+
+Replay + sandbox must remain blocked unless `--sandbox-fixture-rehearsal` is explicitly set.

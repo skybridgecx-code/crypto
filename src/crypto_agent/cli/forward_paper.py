@@ -123,6 +123,15 @@ def _build_parser() -> argparse.ArgumentParser:
             "write shadow_canary_evaluation.json, and exit nonzero unless the canary passes."
         ),
     )
+
+    parser.add_argument(
+        "--sandbox-fixture-rehearsal",
+        action="store_true",
+        help=(
+            "Allow replay-source sandbox rehearsal only for deterministic checked-in fixtures. "
+            "Does not enable live execution."
+        ),
+    )
     parser.add_argument(
         "--allow-execution-mode",
         action="append",
@@ -298,6 +307,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--canary-only requires --market-source=binance_spot")
     if args.canary_only and args.execution_mode != "shadow":
         parser.error("--canary-only requires --execution-mode=shadow")
+    if args.sandbox_fixture_rehearsal and args.execution_mode != "sandbox":
+        parser.error("--sandbox-fixture-rehearsal requires --execution-mode=sandbox")
+    if args.sandbox_fixture_rehearsal and args.market_source != "replay":
+        parser.error("--sandbox-fixture-rehearsal requires --market-source=replay")
+    if args.sandbox_fixture_rehearsal and args.replay_path is None:
+        parser.error("--sandbox-fixture-rehearsal requires replay_path")
+    if args.sandbox_fixture_rehearsal and args.preflight_only:
+        parser.error("--sandbox-fixture-rehearsal cannot be used with --preflight-only")
+    if args.sandbox_fixture_rehearsal and args.canary_only:
+        parser.error("--sandbox-fixture-rehearsal cannot be used with --canary-only")
     if args.manual_halt and args.manual_resume:
         parser.error("--manual-halt and --manual-resume are mutually exclusive")
     market_source = cast(Literal["replay", "binance_spot"], args.market_source)
@@ -418,6 +437,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         binance_base_url=args.binance_base_url,
         live_market_poll_retry_count=args.live_market_poll_retry_count,
         live_market_poll_retry_delay_seconds=args.live_market_poll_retry_delay_seconds,
+        sandbox_fixture_rehearsal=args.sandbox_fixture_rehearsal,
         sandbox_execution_adapter=(
             _build_cli_sandbox_execution_adapter() if args.execution_mode == "sandbox" else None
         ),

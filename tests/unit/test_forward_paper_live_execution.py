@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from crypto_agent.config import load_settings
 from crypto_agent.execution.live_adapter import ScriptedSandboxExecutionAdapter
 from crypto_agent.execution.models import (
@@ -225,3 +226,160 @@ def test_forward_runtime_live_sandbox_mode_writes_adapter_evidence(tmp_path: Pat
     assert requests.request_count >= 1
     assert results.results[0].status == "accepted"
     assert statuses.statuses[0].state == "filled"
+
+
+def test_forward_runtime_replay_sandbox_requires_fixture_rehearsal_flag(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    adapter = ScriptedSandboxExecutionAdapter(
+        submit_fn=lambda request: VenueExecutionAck(
+            request_id=request.request_id,
+            client_order_id=request.client_order_id,
+            venue=request.venue,
+            execution_mode="sandbox",
+            sandbox=True,
+            intent_id=request.intent_id,
+            status="accepted",
+            venue_order_id="sandbox-order-1",
+            observed_at=_ts(2026, 4, 3, 16, 4),
+        ),
+        fetch_state_fn=lambda client_order_id, request: VenueOrderState(
+            request_id=request.request_id,
+            client_order_id=client_order_id,
+            venue=request.venue,
+            execution_mode="sandbox",
+            sandbox=True,
+            intent_id=request.intent_id,
+            venue_order_id="sandbox-order-1",
+            state="filled",
+            terminal=True,
+            filled_quantity=request.quantity,
+            average_fill_price=request.reference_price,
+            updated_at=_ts(2026, 4, 3, 16, 4),
+        ),
+        cancel_fn=lambda client_order_id, request: VenueOrderState(
+            request_id=request.request_id,
+            client_order_id=client_order_id,
+            venue=request.venue,
+            execution_mode="sandbox",
+            sandbox=True,
+            intent_id=request.intent_id,
+            venue_order_id="sandbox-order-1",
+            state="canceled",
+            terminal=True,
+            updated_at=_ts(2026, 4, 3, 16, 4),
+        ),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Shadow and sandbox execution modes require binance_spot market source.",
+    ):
+        run_forward_paper_runtime(
+            Path("tests/fixtures/paper_candles_breakout_long.jsonl"),
+            settings=settings,
+            runtime_id="forward-replay-sandbox-blocked",
+            session_interval_seconds=60,
+            execution_mode="sandbox",
+            max_sessions=1,
+            market_source="replay",
+            sandbox_execution_adapter=adapter,
+        )
+
+
+def test_forward_runtime_replay_shadow_remains_blocked_even_with_fixture_rehearsal(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+
+    with pytest.raises(
+        ValueError,
+        match="Shadow and sandbox execution modes require binance_spot market source.",
+    ):
+        run_forward_paper_runtime(
+            Path("tests/fixtures/paper_candles_breakout_long.jsonl"),
+            settings=settings,
+            runtime_id="forward-replay-shadow-blocked",
+            session_interval_seconds=60,
+            execution_mode="shadow",
+            max_sessions=1,
+            market_source="replay",
+            sandbox_fixture_rehearsal=True,
+        )
+
+
+def test_forward_runtime_replay_sandbox_fixture_rehearsal_writes_nonzero_adapter_evidence(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    adapter = ScriptedSandboxExecutionAdapter(
+        submit_fn=lambda request: VenueExecutionAck(
+            request_id=request.request_id,
+            client_order_id=request.client_order_id,
+            venue=request.venue,
+            execution_mode="sandbox",
+            sandbox=True,
+            intent_id=request.intent_id,
+            status="accepted",
+            venue_order_id="sandbox-order-1",
+            observed_at=_ts(2026, 4, 3, 16, 4),
+        ),
+        fetch_state_fn=lambda client_order_id, request: VenueOrderState(
+            request_id=request.request_id,
+            client_order_id=client_order_id,
+            venue=request.venue,
+            execution_mode="sandbox",
+            sandbox=True,
+            intent_id=request.intent_id,
+            venue_order_id="sandbox-order-1",
+            state="filled",
+            terminal=True,
+            filled_quantity=request.quantity,
+            average_fill_price=request.reference_price,
+            updated_at=_ts(2026, 4, 3, 16, 4),
+        ),
+        cancel_fn=lambda client_order_id, request: VenueOrderState(
+            request_id=request.request_id,
+            client_order_id=client_order_id,
+            venue=request.venue,
+            execution_mode="sandbox",
+            sandbox=True,
+            intent_id=request.intent_id,
+            venue_order_id="sandbox-order-1",
+            state="canceled",
+            terminal=True,
+            updated_at=_ts(2026, 4, 3, 16, 4),
+        ),
+    )
+
+    result = run_forward_paper_runtime(
+        Path("tests/fixtures/paper_candles_breakout_long.jsonl"),
+        settings=settings,
+        runtime_id="forward-replay-sandbox-fixture",
+        session_interval_seconds=60,
+        execution_mode="sandbox",
+        max_sessions=1,
+        market_source="replay",
+        sandbox_fixture_rehearsal=True,
+        sandbox_execution_adapter=adapter,
+    )
+
+    session = result.session_summaries[0]
+    requests = ExecutionRequestArtifact.model_validate(
+        json.loads(Path(session.execution_request_path).read_text(encoding="utf-8"))
+    )
+    results = ExecutionResultArtifact.model_validate(
+        json.loads(Path(session.execution_result_path).read_text(encoding="utf-8"))
+    )
+    statuses = ExecutionStatusArtifact.model_validate(
+        json.loads(Path(session.execution_status_path).read_text(encoding="utf-8"))
+    )
+
+    assert session.execution_mode == "sandbox"
+    assert requests.request_count > 0
+    assert results.result_count > 0
+    assert statuses.status_count > 0
+    assert all(request.sandbox is True for request in requests.requests)
+    assert all(result.sandbox is True for result in results.results)
+    assert all(status.sandbox is True for status in statuses.statuses)

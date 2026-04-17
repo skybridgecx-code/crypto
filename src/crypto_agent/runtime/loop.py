@@ -29,7 +29,12 @@ from crypto_agent.market_data.live_adapter import (
     LiveMarketDataUnavailableError,
 )
 from crypto_agent.market_data.live_models import LiveFeedHealth, LiveMarketState
+from crypto_agent.market_data.models import BookLevel, OrderBookSnapshot
 from crypto_agent.market_data.replay import load_candle_replay
+from crypto_agent.market_data.venue_constraints import (
+    VenueConstraintRegistry,
+    VenueSymbolConstraints,
+)
 from crypto_agent.policy.live_controls import (
     LiveControlConfig,
     LiveControlDecision,
@@ -240,6 +245,65 @@ def _persist_runtime_status(status: ForwardPaperRuntimeStatus) -> None:
     upsert_forward_paper_registry_entry(status.registry_path, status)
 
 
+def _build_replay_fixture_market_state(
+    replay_path: Path,
+    *,
+    stale_after_seconds: int,
+) -> LiveMarketState:
+    candles = load_candle_replay(replay_path)
+    if not candles:
+        raise ValueError("Replay fixture rehearsal requires at least one candle")
+
+    last_candle = candles[-1]
+    close_price = last_candle.close
+    tick_size = 0.1
+    step_size = 0.001
+    bid_price = max(tick_size, close_price - tick_size)
+    ask_price = close_price + tick_size
+    symbol = last_candle.symbol
+    quote_asset = symbol[-4:] if len(symbol) > 4 else "USDT"
+    base_asset = symbol[:-4] if len(symbol) > 4 else symbol
+    constraints = VenueSymbolConstraints(
+        venue="binance_spot",
+        symbol=symbol,
+        status="TRADING",
+        base_asset=base_asset,
+        quote_asset=quote_asset,
+        tick_size=tick_size,
+        step_size=step_size,
+        min_quantity=step_size,
+        min_notional=10.0,
+    )
+    observed_at = last_candle.close_time
+    return LiveMarketState(
+        venue="binance_spot",
+        symbol=symbol,
+        interval=last_candle.interval,
+        polled_at=observed_at,
+        candles=candles,
+        order_book=OrderBookSnapshot(
+            venue="binance_spot",
+            symbol=symbol,
+            timestamp=observed_at,
+            bids=[BookLevel(price=bid_price, quantity=1.0)],
+            asks=[BookLevel(price=ask_price, quantity=1.0)],
+        ),
+        constraints=constraints,
+        constraint_registry=VenueConstraintRegistry(
+            venue="binance_spot_testnet",
+            updated_at=observed_at,
+            symbol_constraints=[constraints],
+        ),
+        feed_health=LiveFeedHealth(
+            status="healthy",
+            observed_at=observed_at,
+            last_success_at=observed_at,
+            last_candle_close_time=last_candle.close_time,
+            stale_after_seconds=stale_after_seconds,
+        ),
+    )
+
+
 def _write_live_market_state(paths: ForwardPaperRuntimePaths, state: LiveMarketState) -> None:
     paths.live_market_status_path.write_text(
         json.dumps(state.model_dump(mode="json"), indent=2, sort_keys=True),
@@ -336,6 +400,7 @@ def _ensure_runtime_status(
     settings: Settings,
     execution_mode: Literal["paper", "shadow", "sandbox"],
     market_source: Literal["replay", "binance_spot"],
+    sandbox_fixture_rehearsal: bool = False,
     replay_path: Path | None,
     live_symbol: str | None,
     live_interval: str | None,
@@ -379,7 +444,12 @@ def _ensure_runtime_status(
             "Live market source requires symbol, interval, lookback, and stale feed threshold"
         )
     if execution_mode in {"shadow", "sandbox"} and market_source != "binance_spot":
-        raise ValueError("Shadow and sandbox execution modes require binance_spot market source.")
+        if not (
+            sandbox_fixture_rehearsal and execution_mode == "sandbox" and market_source == "replay"
+        ):
+            raise ValueError(
+                "Shadow and sandbox execution modes require binance_spot market source."
+            )
 
     if not paths.status_path.exists():
         status = _initial_runtime_status(
@@ -1571,6 +1641,7 @@ def run_forward_paper_runtime(
     binance_base_url: str | None = None,
     live_market_poll_retry_count: int = 2,
     live_market_poll_retry_delay_seconds: float = 2.0,
+    sandbox_fixture_rehearsal: bool = False,
     sandbox_execution_adapter: SandboxExecutionAdapter | None = None,
     live_control_config: LiveControlConfig | None = None,
     readiness_status: LiveReadinessStatus | None = None,
@@ -1585,6 +1656,7 @@ def run_forward_paper_runtime(
         settings=settings,
         execution_mode=execution_mode,
         market_source=market_source,
+        sandbox_fixture_rehearsal=sandbox_fixture_rehearsal,
         replay_path=replay_fixture_path,
         live_symbol=live_symbol,
         live_interval=live_interval,
@@ -1725,9 +1797,50 @@ def run_forward_paper_runtime(
                     equity_usd=account_state.ending_equity_usd,
                     starting_portfolio=account_state.to_portfolio_state(),
                 )
+                replay_session = running_session
+                if sandbox_fixture_rehearsal and execution_mode == "sandbox":
+                    fixture_market_state = _build_replay_fixture_market_state(
+                        replay_fixture_path,
+                        stale_after_seconds=feed_stale_after_seconds or 120,
+                    )
+                    _write_live_market_state(paths, fixture_market_state)
+                    session_market_input_path = _session_market_input_path(
+                        status.sessions_dir,
+                        running_session.session_id,
+                    )
+                    session_market_state_path = _session_market_state_path(
+                        status.sessions_dir,
+                        running_session.session_id,
+                    )
+                    _write_live_market_input(session_market_input_path, fixture_market_state)
+                    session_market_state_path.write_text(
+                        json.dumps(
+                            fixture_market_state.model_dump(mode="json"),
+                            indent=2,
+                            sort_keys=True,
+                        ),
+                        encoding="utf-8",
+                    )
+                    replay_session = _session_summary_with_live_state(
+                        session_summary=running_session,
+                        session_market_input_path=session_market_input_path,
+                        session_market_state_path=session_market_state_path,
+                        state=fixture_market_state,
+                        paths=paths,
+                    )
+                    status = status.model_copy(
+                        update={
+                            "feed_health": fixture_market_state.feed_health,
+                            "venue_constraints_ready": True,
+                            "live_market_status_path": paths.live_market_status_path,
+                            "venue_constraints_path": paths.venue_constraints_path,
+                            "updated_at": scheduled_at,
+                        }
+                    )
+                    _persist_runtime_status(status)
                 completed_at = _normalize_datetime(now_fn())
                 completed_session = _completed_session_summary(
-                    session_summary=running_session,
+                    session_summary=replay_session,
                     result=result,
                     completed_at=completed_at,
                 )

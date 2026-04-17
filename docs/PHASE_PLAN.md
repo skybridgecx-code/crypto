@@ -133,3 +133,10 @@ Closeout doc:
 - `docs/PHASE_H1C_FIXTURE_BACKED_SANDBOX_CLI_REHEARSAL_DESIGN.md`
 
 No code is added in H1C. Implementation must be separately scoped.
+
+## Phase H1D — Implement fixture-backed sandbox rehearsal
+
+Phase H1D implements the explicit fixture-backed sandbox CLI rehearsal designed in H1C.
+
+Closeout doc:
+- `docs/PHASE_H1D_IMPLEMENT_FIXTURE_BACKED_SANDBOX_REHEARSAL.md`

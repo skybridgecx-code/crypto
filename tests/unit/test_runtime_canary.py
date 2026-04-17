@@ -616,3 +616,125 @@ def test_shadow_canary_fail_snapshot(tmp_path: Path) -> None:
     snapshot_payload = json.loads(result.shadow_canary_evaluation_path.read_text(encoding="utf-8"))
 
     assert snapshot_payload == _load_snapshot("forward_shadow_canary_fail.snapshot.json")
+
+
+def test_cli_sandbox_fixture_rehearsal_passes_flag_and_prints_paths(
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "paper_test.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "mode: paper",
+                "paths:",
+                f"  runs_dir: {tmp_path / 'runs'}",
+                f"  journals_dir: {tmp_path / 'journals'}",
+                "venue:",
+                "  default_venue: paper",
+                "  allowed_symbols:",
+                "    - BTCUSDT",
+                "risk:",
+                "  risk_per_trade_fraction: 0.005",
+                "  max_portfolio_gross_exposure: 1.0",
+                "  max_symbol_gross_exposure: 0.4",
+                "  max_daily_realized_loss: 0.015",
+                "  max_open_positions: 2",
+                "  max_leverage: 1.0",
+                "  max_spread_bps: 12.0",
+                "  max_expected_slippage_bps: 15.0",
+                "  min_average_dollar_volume_usd: 5000000.0",
+                "policy:",
+                "  allow_live_orders: false",
+                "  require_manual_approval_above_notional_usd: 1000.0",
+                "  kill_switch_enabled: true",
+                "  max_consecutive_order_rejects: 3",
+                "  max_slippage_breaches: 2",
+                "  max_drawdown_fraction: 0.03",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    captured: dict[str, object] = {}
+
+    def _fake_runtime(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+
+        class Result:
+            runtime_id = "sandbox-fixture-cli"
+            execution_mode = "sandbox"
+            status_path = tmp_path / "runs" / "sandbox-fixture-cli" / "status.json"
+            history_path = tmp_path / "runs" / "sandbox-fixture-cli" / "history.jsonl"
+            sessions_dir = tmp_path / "runs" / "sandbox-fixture-cli" / "sessions"
+            account_state_path = tmp_path / "runs" / "sandbox-fixture-cli" / "account.json"
+            execution_state_dir = tmp_path / "runs" / "sandbox-fixture-cli" / "execution"
+            live_control_config_path = tmp_path / "runs" / "sandbox-fixture-cli" / "controls.json"
+            live_control_status_path = (
+                tmp_path / "runs" / "sandbox-fixture-cli" / "control_status.json"
+            )
+            readiness_status_path = tmp_path / "runs" / "sandbox-fixture-cli" / "readiness.json"
+            manual_control_state_path = tmp_path / "runs" / "sandbox-fixture-cli" / "manual.json"
+            shadow_canary_evaluation_path = (
+                tmp_path / "runs" / "sandbox-fixture-cli" / "shadow_canary.json"
+            )
+            live_market_preflight_path = (
+                tmp_path / "runs" / "sandbox-fixture-cli" / "preflight.json"
+            )
+            live_market_status_path = (
+                tmp_path / "runs" / "sandbox-fixture-cli" / "live_market_status.json"
+            )
+            venue_constraints_path = (
+                tmp_path / "runs" / "sandbox-fixture-cli" / "venue_constraints.json"
+            )
+            soak_evaluation_path = tmp_path / "runs" / "sandbox-fixture-cli" / "soak.json"
+            shadow_evaluation_path = tmp_path / "runs" / "sandbox-fixture-cli" / "shadow_eval.json"
+            live_gate_decision_path = tmp_path / "runs" / "sandbox-fixture-cli" / "gate.json"
+            live_gate_threshold_summary_path = (
+                tmp_path / "runs" / "sandbox-fixture-cli" / "thresholds.json"
+            )
+            live_gate_report_path = tmp_path / "runs" / "sandbox-fixture-cli" / "gate.md"
+            live_launch_verdict_path = (
+                tmp_path / "runs" / "sandbox-fixture-cli" / "launch_verdict.json"
+            )
+            reconciliation_report_path = (
+                tmp_path / "runs" / "sandbox-fixture-cli" / "reconcile.json"
+            )
+            recovery_status_path = tmp_path / "runs" / "sandbox-fixture-cli" / "recovery.json"
+            registry_path = tmp_path / "runs" / "forward_paper_registry.json"
+            session_count = 1
+            session_ids = ["session-0001"]
+            session_summaries = []
+
+        return Result()
+
+    monkeypatch.setattr("crypto_agent.cli.forward_paper.run_forward_paper_runtime", _fake_runtime)
+
+    from crypto_agent.cli.forward_paper import main
+
+    exit_code = main(
+        [
+            "--config",
+            str(config_path),
+            "--runtime-id",
+            "sandbox-fixture-cli",
+            "--market-source",
+            "replay",
+            "--execution-mode",
+            "sandbox",
+            "--sandbox-fixture-rehearsal",
+            "--allow-execution-mode",
+            "sandbox",
+            "tests/fixtures/paper_candles_breakout_long.jsonl",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert captured["args"][0] == "tests/fixtures/paper_candles_breakout_long.jsonl"
+    assert captured["kwargs"]["sandbox_fixture_rehearsal"] is True
+    assert output["runtime_id"] == "sandbox-fixture-cli"
+    assert output["execution_mode"] == "sandbox"
+    assert output["live_launch_verdict_path"].endswith("launch_verdict.json")
