@@ -16,26 +16,42 @@ This document defines what must be true before any future bounded phase is allow
 
 For a candidate runtime `runs/<runtime-id>/`, review artifacts in this order:
 
-1. `live_gate_decision.json`
-2. `live_gate_threshold_summary.json`
-3. `live_gate_report.md`
-4. `soak_evaluation.json`
-5. `shadow_evaluation.json`
-6. `live_control_status.json`
-7. `live_readiness_status.json`
-8. `manual_control_state.json`
-9. `account_state.json`
-10. `reconciliation_report.json`
-11. `forward_paper_status.json`
-12. `forward_paper_history.jsonl`
+1. `live_market_preflight.json`
+2. `shadow_canary_evaluation.json`
+3. `live_gate_decision.json`
+4. `live_gate_threshold_summary.json`
+5. `live_gate_report.md`
+6. `soak_evaluation.json`
+7. `shadow_evaluation.json`
+8. `live_control_status.json`
+9. `live_readiness_status.json`
+10. `manual_control_state.json`
+11. `account_state.json`
+12. `reconciliation_report.json`
+13. `forward_paper_status.json`
+14. `forward_paper_history.jsonl`
 
-Do not review these out of order. The gate decision is only trustworthy when the threshold summary, control status, and reconciliation report all agree.
+Do not review these out of order. The gate decision is only trustworthy when the preflight and canary were passable first, and when the threshold summary, control status, and reconciliation report all agree.
+
+## Canonical Launchability Sequence
+
+For a new environment or host path, use this sequence:
+
+1. run the live-market preflight probe
+2. run a bounded shadow canary
+3. run the longer bounded shadow evidence set
+4. review the gate and readiness artifacts
+
+Do not skip from preflight directly to a long shadow evidence run.
 
 ## Pre-Launch Checks
 
 Before any future tiny live launch is attempted, all of the following must be true:
 
 - `live_gate_decision.json` exists and `state == "ready"`
+- `live_market_preflight.json` exists and `batch_readiness == true`
+- `shadow_canary_evaluation.json` exists and `state == "pass"`
+- `shadow_canary_evaluation.json.reason_codes` is empty
 - `live_gate_threshold_summary.json` exists and both `blocking_passed` and `readiness_passed` are `true`
 - `live_gate_decision.json.reason_codes` is empty
 - `reconciliation_report.json.status == "clean"`
@@ -109,6 +125,8 @@ If a halt condition fires, do all of the following in order:
 4. stop new launch attempts
 5. preserve the full runtime artifact directory without cleanup
 6. review:
+   - `live_market_preflight.json`
+   - `shadow_canary_evaluation.json`
    - `live_gate_decision.json`
    - `live_gate_threshold_summary.json`
    - `live_control_status.json`

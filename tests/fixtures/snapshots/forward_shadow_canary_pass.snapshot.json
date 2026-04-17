@@ -1,0 +1,50 @@
+{
+  "all_expected_evidence_present": true,
+  "applicable": true,
+  "blocked_session_count": 0,
+  "completed_session_count": 2,
+  "executed_session_count": 2,
+  "execution_mode": "shadow",
+  "failed_session_count": 0,
+  "generated_at": "2026-04-05T10:00:00Z",
+  "interrupted_session_count": 0,
+  "market_source": "binance_spot",
+  "reason_codes": [],
+  "request_artifact_count": 2,
+  "result_artifact_count": 2,
+  "rows": [
+    {
+      "all_expected_evidence_present": true,
+      "request_artifact_present": true,
+      "result_artifact_present": true,
+      "run_id": "shadow-canary-snapshot-pass-session-0001",
+      "session_id": "session-0001",
+      "session_number": 1,
+      "session_outcome": "executed",
+      "skip_evidence_present": false,
+      "status": "completed",
+      "status_artifact_present": true
+    },
+    {
+      "all_expected_evidence_present": true,
+      "request_artifact_present": true,
+      "result_artifact_present": true,
+      "run_id": "shadow-canary-snapshot-pass-session-0002",
+      "session_id": "session-0002",
+      "session_number": 2,
+      "session_outcome": "executed",
+      "skip_evidence_present": false,
+      "status": "completed",
+      "status_artifact_present": true
+    }
+  ],
+  "runtime_id": "shadow-canary-snapshot-pass",
+  "session_count": 2,
+  "skip_evidence_count": 0,
+  "skipped_degraded_feed_session_count": 0,
+  "skipped_stale_feed_session_count": 0,
+  "skipped_unavailable_feed_session_count": 0,
+  "state": "pass",
+  "status_artifact_count": 2,
+  "summary": "Shadow canary passed: all 2 sessions executed with expected evidence."
+}

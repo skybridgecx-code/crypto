@@ -62,6 +62,10 @@ The current repository state is frozen as the validated baseline documented in [
 - Phase D: shadow and sandbox execution adapter
 - Phase E: live risk controls and ops guardrails
 - Phase F: soak evaluation, shadow evaluation, and live gate
+- Phase G3: venue preflight probe and operator fail-fast diagnostics
+- Phase G4: preflight-to-batch consistency diagnostics
+- Phase G5: preflight launch-truth hardening
+- Phase G6: shadow canary launchability evidence
 - Live Launch Runbook Freeze: canonical first tiny-live review procedure without executable live mode
 
 ## Harness Freeze

@@ -159,6 +159,8 @@ Gate and readiness artifacts:
 
 - runtime status: `runs/<runtime-id>/forward_paper_status.json`
 - runtime history: `runs/<runtime-id>/forward_paper_history.jsonl`
+- live-market preflight probe: `runs/<runtime-id>/live_market_preflight.json`
+- shadow canary evaluation: `runs/<runtime-id>/shadow_canary_evaluation.json`
 - account state: `runs/<runtime-id>/account_state.json`
 - reconciliation report: `runs/<runtime-id>/reconciliation_report.json`
 - live control status: `runs/<runtime-id>/live_control_status.json`
@@ -175,6 +177,13 @@ Canonical first-launch runbook:
 - [docs/LIVE_LAUNCH_RUNBOOK.md](/Users/muhammadaatif/cryp/docs/LIVE_LAUNCH_RUNBOOK.md)
 
 The runbook freezes the future tiny-live review procedure only. It does not enable live execution today.
+
+Forward-runtime operator workflow for a candidate live-market environment:
+
+1. `crypto-agent-forward-paper-run --preflight-only ...`
+2. `crypto-agent-forward-paper-run --canary-only --execution-mode shadow ...`
+3. run the longer bounded shadow evidence session set
+4. review gate and readiness artifacts only after preflight and canary both pass
 
 ## Snapshot-Locked Validation Surfaces
 
@@ -209,6 +218,8 @@ Forward runtime gate and readiness:
 - runtime and recovery validation:
   - [tests/unit/test_forward_paper_runtime.py](/Users/muhammadaatif/cryp/tests/unit/test_forward_paper_runtime.py)
   - [tests/unit/test_runtime_recovery.py](/Users/muhammadaatif/cryp/tests/unit/test_runtime_recovery.py)
+- shadow canary validation and snapshots:
+  - [tests/unit/test_runtime_canary.py](/Users/muhammadaatif/cryp/tests/unit/test_runtime_canary.py)
 - readiness and control validation:
   - [tests/unit/test_readiness_status.py](/Users/muhammadaatif/cryp/tests/unit/test_readiness_status.py)
 - soak evaluation validation:

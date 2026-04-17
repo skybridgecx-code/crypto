@@ -11,6 +11,7 @@ from crypto_agent.runtime.loop import run_forward_paper_runtime
 from crypto_agent.runtime.models import ForwardPaperRuntimeResult
 
 FIXTURES_DIR = Path("tests/fixtures")
+SNAPSHOTS_DIR = FIXTURES_DIR / "snapshots"
 
 
 def _paper_settings_for(tmp_path: Path):
@@ -101,6 +102,10 @@ def _live_adapter(session_count: int) -> BinanceSpotLiveMarketDataAdapter:
             ]
         )
     return BinanceSpotLiveMarketDataAdapter(fetch_json=ScriptedFetcher(responses))
+
+
+def _load_snapshot(snapshot_name: str) -> dict[str, object]:
+    return json.loads((SNAPSHOTS_DIR / snapshot_name).read_text(encoding="utf-8"))
 
 
 def test_shadow_canary_passes_for_repeated_executed_shadow_sessions(tmp_path: Path) -> None:
@@ -354,3 +359,254 @@ def test_cli_canary_only_returns_nonzero_for_failed_canary(
     assert exit_code == 1
     assert output["runtime_id"] == "shadow-canary-cli"
     assert output["shadow_canary_evaluation_path"] == str(canary_path)
+
+
+def test_cli_canary_only_returns_zero_for_passing_canary(
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "paper_test.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "mode: paper",
+                "paths:",
+                f"  runs_dir: {tmp_path / 'runs'}",
+                f"  journals_dir: {tmp_path / 'journals'}",
+                "venue:",
+                "  default_venue: paper",
+                "  allowed_symbols:",
+                "    - BTCUSDT",
+                "risk:",
+                "  risk_per_trade_fraction: 0.005",
+                "  max_portfolio_gross_exposure: 1.0",
+                "  max_symbol_gross_exposure: 0.4",
+                "  max_daily_realized_loss: 0.015",
+                "  max_open_positions: 2",
+                "  max_leverage: 1.0",
+                "  max_spread_bps: 12.0",
+                "  max_expected_slippage_bps: 15.0",
+                "  min_average_dollar_volume_usd: 5000000.0",
+                "policy:",
+                "  allow_live_orders: false",
+                "  require_manual_approval_above_notional_usd: 1000.0",
+                "  kill_switch_enabled: true",
+                "  max_consecutive_order_rejects: 3",
+                "  max_slippage_breaches: 2",
+                "  max_drawdown_fraction: 0.03",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    canary_path = tmp_path / "runs" / "shadow-canary-cli-pass" / "shadow_canary_evaluation.json"
+    canary_path.parent.mkdir(parents=True, exist_ok=True)
+    canary_path.write_text(
+        json.dumps(
+            {
+                "runtime_id": "shadow-canary-cli-pass",
+                "generated_at": _ts(2026, 4, 7, 10, 0).isoformat(),
+                "execution_mode": "shadow",
+                "market_source": "binance_spot",
+                "applicable": True,
+                "state": "pass",
+                "summary": "Shadow canary passed.",
+                "reason_codes": [],
+                "session_count": 1,
+                "completed_session_count": 1,
+                "executed_session_count": 1,
+                "blocked_session_count": 0,
+                "skipped_stale_feed_session_count": 0,
+                "skipped_degraded_feed_session_count": 0,
+                "skipped_unavailable_feed_session_count": 0,
+                "failed_session_count": 0,
+                "interrupted_session_count": 0,
+                "request_artifact_count": 1,
+                "result_artifact_count": 1,
+                "status_artifact_count": 1,
+                "skip_evidence_count": 0,
+                "all_expected_evidence_present": True,
+                "rows": [],
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    def _fake_runtime(*_: object, **__: object) -> ForwardPaperRuntimeResult:
+        return ForwardPaperRuntimeResult.model_validate(
+            {
+                "runtime_id": "shadow-canary-cli-pass",
+                "registry_path": str(tmp_path / "runs" / "forward_paper_registry.json"),
+                "status_path": str(tmp_path / "runs" / "shadow-canary-cli-pass" / "status.json"),
+                "history_path": str(tmp_path / "runs" / "shadow-canary-cli-pass" / "history.jsonl"),
+                "sessions_dir": str(tmp_path / "runs" / "shadow-canary-cli-pass" / "sessions"),
+                "live_market_status_path": None,
+                "venue_constraints_path": None,
+                "account_state_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "account.json"
+                ),
+                "reconciliation_report_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "reconcile.json"
+                ),
+                "recovery_status_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "recovery.json"
+                ),
+                "execution_mode": "shadow",
+                "execution_state_dir": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "execution"
+                ),
+                "live_control_config_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "controls.json"
+                ),
+                "live_control_status_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "control_status.json"
+                ),
+                "readiness_status_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "readiness.json"
+                ),
+                "manual_control_state_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "manual.json"
+                ),
+                "shadow_canary_evaluation_path": str(canary_path),
+                "live_market_preflight_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "preflight.json"
+                ),
+                "soak_evaluation_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "soak.json"
+                ),
+                "shadow_evaluation_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "shadow_eval.json"
+                ),
+                "live_gate_decision_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "gate.json"
+                ),
+                "live_gate_threshold_summary_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "thresholds.json"
+                ),
+                "live_gate_report_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "gate.md"
+                ),
+                "session_count": 1,
+                "session_summaries": [],
+            }
+        )
+
+    monkeypatch.setattr("crypto_agent.cli.forward_paper.run_forward_paper_runtime", _fake_runtime)
+
+    from crypto_agent.cli.forward_paper import main
+
+    exit_code = main(
+        [
+            "--config",
+            str(config_path),
+            "--runtime-id",
+            "shadow-canary-cli-pass",
+            "--market-source",
+            "binance_spot",
+            "--live-symbol",
+            "BTCUSDT",
+            "--execution-mode",
+            "shadow",
+            "--canary-only",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert output["runtime_id"] == "shadow-canary-cli-pass"
+    assert output["shadow_canary_evaluation_path"] == str(canary_path)
+
+
+def test_shadow_canary_pass_snapshot(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    generated_at = _ts(2026, 4, 5, 10, 0)
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="shadow-canary-snapshot-pass",
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=2,
+        tick_times=[
+            _ts(2026, 4, 3, 16, 4),
+            _ts(2026, 4, 3, 16, 5),
+        ],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_live_adapter(2),
+        readiness_status=LiveReadinessStatus(
+            runtime_id="shadow-canary-snapshot-pass",
+            updated_at=_ts(2026, 4, 5, 9, 59),
+            status="ready",
+            limited_live_gate_status="ready_for_review",
+        ),
+        now_fn=lambda: generated_at,
+    )
+
+    snapshot_payload = json.loads(result.shadow_canary_evaluation_path.read_text(encoding="utf-8"))
+
+    assert snapshot_payload == _load_snapshot("forward_shadow_canary_pass.snapshot.json")
+
+
+def test_shadow_canary_fail_snapshot(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    runtime_id = "shadow-canary-snapshot-fail"
+    generated_at = _ts(2026, 4, 5, 10, 0)
+
+    run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id=runtime_id,
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 3, 16, 4)],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_live_adapter(1),
+        readiness_status=LiveReadinessStatus(
+            runtime_id=runtime_id,
+            updated_at=_ts(2026, 4, 5, 9, 59),
+            status="ready",
+            limited_live_gate_status="ready_for_review",
+        ),
+        now_fn=lambda: generated_at,
+    )
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id=runtime_id,
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 3, 16, 5)],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=BinanceSpotLiveMarketDataAdapter(
+            fetch_json=ScriptedFetcher([RuntimeError("HTTP Error 451: ")])
+        ),
+        live_market_poll_retry_count=0,
+        readiness_status=LiveReadinessStatus(
+            runtime_id=runtime_id,
+            updated_at=_ts(2026, 4, 5, 9, 59),
+            status="ready",
+            limited_live_gate_status="ready_for_review",
+        ),
+        now_fn=lambda: generated_at,
+    )
+
+    snapshot_payload = json.loads(result.shadow_canary_evaluation_path.read_text(encoding="utf-8"))
+
+    assert snapshot_payload == _load_snapshot("forward_shadow_canary_fail.snapshot.json")

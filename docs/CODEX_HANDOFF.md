@@ -37,6 +37,8 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - treat `runs/<matrix-run-id>/matrix_comparison.json` as part of the frozen batch operator contract unless the assignment explicitly changes it
 - treat `runs/<matrix-run-id>/matrix_trade_ledger.json` as part of the frozen batch operator contract unless the assignment explicitly changes it
 - treat `docs/OPERATOR_SURFACES.md` as the canonical operator-facing summary of those validated paths
+- treat `runs/<runtime-id>/live_market_preflight.json` as part of the frozen forward-runtime operator contract unless the assignment explicitly changes it
+- treat `runs/<runtime-id>/shadow_canary_evaluation.json` as part of the frozen forward-runtime operator contract unless the assignment explicitly changes it
 - treat `runs/<runtime-id>/soak_evaluation.json` as part of the frozen forward-runtime operator contract unless the assignment explicitly changes it
 - treat `runs/<runtime-id>/shadow_evaluation.json` as part of the frozen forward-runtime operator contract unless the assignment explicitly changes it
 - treat `runs/<runtime-id>/live_gate_threshold_summary.json` as part of the frozen forward-runtime operator contract unless the assignment explicitly changes it
@@ -77,6 +79,11 @@ You are working from a frozen validated baseline in a controlled crypto trading 
   - shadow and sandbox execution evidence
   - live controls and ops guardrails
   - soak evaluation, shadow evaluation, and live gate artifacts
+- G-phase launchability diagnostics are implemented:
+  - live-market preflight probe
+  - preflight-to-batch consistency diagnostics
+  - preflight launch-truth hardening
+  - shadow canary launchability evidence
 - the live-launch runbook is documented in `docs/LIVE_LAUNCH_RUNBOOK.md`
 - `make validate` is the default validation path after edits because it runs Ruff autofix before format, lint, typecheck, and test
 - `make validate-check` is the final verification path for an already-clean tree

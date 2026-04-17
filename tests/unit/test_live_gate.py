@@ -438,6 +438,7 @@ def test_cli_forward_runtime_prints_live_gate_paths(tmp_path: Path, capsys) -> N
     output = json.loads(capsys.readouterr().out)
 
     assert exit_code == 0
+    assert Path(output["shadow_canary_evaluation_path"]).exists()
     assert Path(output["soak_evaluation_path"]).exists()
     assert Path(output["shadow_evaluation_path"]).exists()
     assert Path(output["live_gate_decision_path"]).exists()
