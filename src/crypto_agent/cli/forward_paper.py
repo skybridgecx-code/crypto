@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from typing import Literal, cast
 
 from crypto_agent.config import load_settings
+from crypto_agent.execution.live_adapter import ScriptedSandboxExecutionAdapter
+from crypto_agent.execution.models import VenueExecutionAck, VenueOrderRequest, VenueOrderState
 from crypto_agent.policy.live_controls import (
     default_live_control_config,
     default_manual_control_state,
@@ -223,6 +225,64 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _build_cli_sandbox_execution_adapter() -> ScriptedSandboxExecutionAdapter:
+    """Build a deterministic sandbox-only adapter for CLI rehearsals.
+
+    This adapter is explicitly marked sandbox=True and never transmits live orders.
+    It acknowledges ready requests and returns terminal filled states so operators can
+    rehearse sandbox artifact generation through the normal runtime path.
+    """
+
+    def _submit(request: VenueOrderRequest) -> VenueExecutionAck:
+        return VenueExecutionAck(
+            request_id=request.request_id,
+            client_order_id=request.client_order_id,
+            venue=request.venue,
+            execution_mode="sandbox",
+            sandbox=True,
+            intent_id=request.intent_id,
+            status="accepted",
+            venue_order_id=f"sandbox-{request.client_order_id}",
+            observed_at=datetime.now(UTC),
+        )
+
+    def _fetch_state(client_order_id: str, request: VenueOrderRequest) -> VenueOrderState:
+        return VenueOrderState(
+            request_id=request.request_id,
+            client_order_id=client_order_id,
+            venue=request.venue,
+            execution_mode="sandbox",
+            sandbox=True,
+            intent_id=request.intent_id,
+            venue_order_id=f"sandbox-{client_order_id}",
+            state="filled",
+            terminal=True,
+            filled_quantity=request.quantity,
+            average_fill_price=request.reference_price,
+            updated_at=datetime.now(UTC),
+        )
+
+    def _cancel(client_order_id: str, request: VenueOrderRequest) -> VenueOrderState:
+        return VenueOrderState(
+            request_id=request.request_id,
+            client_order_id=client_order_id,
+            venue=request.venue,
+            execution_mode="sandbox",
+            sandbox=True,
+            intent_id=request.intent_id,
+            venue_order_id=f"sandbox-{client_order_id}",
+            state="canceled",
+            terminal=True,
+            updated_at=datetime.now(UTC),
+        )
+
+    return ScriptedSandboxExecutionAdapter(
+        submit_fn=_submit,
+        fetch_state_fn=_fetch_state,
+        cancel_fn=_cancel,
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -358,6 +418,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         binance_base_url=args.binance_base_url,
         live_market_poll_retry_count=args.live_market_poll_retry_count,
         live_market_poll_retry_delay_seconds=args.live_market_poll_retry_delay_seconds,
+        sandbox_execution_adapter=(
+            _build_cli_sandbox_execution_adapter() if args.execution_mode == "sandbox" else None
+        ),
     )
     print(
         json.dumps(

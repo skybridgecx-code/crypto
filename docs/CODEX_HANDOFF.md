@@ -125,3 +125,9 @@ Future work must preserve these boundaries unless explicitly re-scoped:
 - no strategy/risk/execution rewrites
 - no second accounting system
 - no hidden launch authority
+
+## Phase H1A sandbox CLI wiring
+
+`docs/PHASE_H1A_SANDBOX_CLI_WIRING.md` documents the CLI sandbox adapter wiring.
+
+Sandbox mode remains sandbox-only evidence. It does not authorize production live execution or live order authority.

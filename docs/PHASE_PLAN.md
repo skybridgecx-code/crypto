@@ -106,3 +106,12 @@ Closeout doc:
 - `docs/PHASE_G11_LAUNCH_VERDICT_WORKFLOW_CLOSEOUT.md`
 
 The workflow remains artifact-only and does not authorize production live execution.
+
+## Phase H1A — Sandbox CLI wiring
+
+Phase H1A wires the existing explicit sandbox adapter into the CLI for bounded sandbox rehearsals.
+
+Closeout doc:
+- `docs/PHASE_H1A_SANDBOX_CLI_WIRING.md`
+
+The phase remains sandbox-only and does not authorize production live execution.

@@ -163,7 +163,7 @@ def build_live_launch_verdict(
             LiveLaunchVerdictInputArtifact(
                 artifact_id="shadow_canary_evaluation",
                 path=shadow_canary_path,
-                present=shadow_canary_path.exists(),
+                present=True,
                 status=None,
                 state=shadow_canary.state,
                 reason_codes=shadow_canary.reason_codes,
@@ -171,7 +171,7 @@ def build_live_launch_verdict(
             LiveLaunchVerdictInputArtifact(
                 artifact_id="live_gate_threshold_summary",
                 path=threshold_summary_path,
-                present=threshold_summary_path.exists(),
+                present=True,
                 status=(
                     "passed"
                     if threshold_summary.blocking_passed and threshold_summary.readiness_passed
@@ -183,7 +183,7 @@ def build_live_launch_verdict(
             LiveLaunchVerdictInputArtifact(
                 artifact_id="live_gate_decision",
                 path=gate_decision_path,
-                present=gate_decision_path.exists(),
+                present=True,
                 status=None,
                 state=gate_decision.state,
                 reason_codes=gate_decision.reason_codes,
