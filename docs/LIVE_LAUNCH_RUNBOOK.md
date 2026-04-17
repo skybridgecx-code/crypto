@@ -40,12 +40,15 @@ Do not review these out of order. The gate decision is only trustworthy when the
 For a new environment or host path, use this sequence:
 
 1. run the live-market preflight probe
-2. run a bounded shadow canary
-3. run the longer bounded shadow evidence set
-4. review the gate and readiness artifacts
-5. require `live_launch_verdict.json.verdict == "launchable_here_now"` before proposing any future limited-live review phase
+2. stop immediately if `live_market_preflight.json.batch_readiness != true`
+3. run a bounded shadow canary
+4. stop immediately if `shadow_canary_evaluation.json.state != "pass"`
+5. run the longer bounded shadow evidence set
+6. review the gate and readiness artifacts
+7. require `live_launch_verdict.json.verdict == "launchable_here_now"` before proposing any future limited-live review phase
 
 Do not skip from preflight directly to a long shadow evidence run.
+Do not continue past a failed preflight or failed canary unless you are doing an explicit bounded rehearsal to inspect downstream artifact consistency.
 
 ## Pre-Launch Checks
 
@@ -73,6 +76,13 @@ Before any future tiny live launch is attempted, all of the following must be tr
 - `soak_evaluation.json.interrupted_session_count == 0`
 
 If any one of these checks fails, launch status is `no_go`.
+
+For a launch-review rehearsal, set operator readiness intentionally:
+
+- `live_readiness_status.json.status == "ready"`
+- `live_readiness_status.json.limited_live_gate_status == "ready_for_review"`
+
+If `limited_live_gate_status` remains `not_ready`, `live_launch_verdict.json` should remain `not_launchable_here_now` even when market availability improves. That is an operator hold, not a venue-readiness signal.
 
 ## First-Launch Constraints
 

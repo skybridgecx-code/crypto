@@ -182,9 +182,15 @@ The runbook freezes the future tiny-live review procedure only. It does not enab
 Forward-runtime operator workflow for a candidate live-market environment:
 
 1. `crypto-agent-forward-paper-run --preflight-only ...`
-2. `crypto-agent-forward-paper-run --canary-only --execution-mode shadow ...`
-3. run the longer bounded shadow evidence session set
-4. review the final `live_launch_verdict.json` only after preflight, canary, and gate artifacts exist
+2. stop if `live_market_preflight.json.batch_readiness != true`
+3. `crypto-agent-forward-paper-run --canary-only --execution-mode shadow ...`
+4. stop if `shadow_canary_evaluation.json.state != "pass"`
+5. run the longer bounded shadow evidence session set
+6. review the final `live_launch_verdict.json` only after preflight, canary, and gate artifacts exist
+
+Operator note:
+
+- if you want the verdict to reflect launch-review readiness rather than an intentional operator hold, the runtime readiness surface must already be `status == "ready"` and `limited_live_gate_status == "ready_for_review"`
 
 ## Snapshot-Locked Validation Surfaces
 
