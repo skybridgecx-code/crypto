@@ -137,3 +137,9 @@ Sandbox mode remains sandbox-only evidence. It does not authorize production liv
 `docs/PHASE_H1B_SANDBOX_EXECUTABLE_ORDER_REHEARSAL_BLOCKER.md` records that CLI-level non-zero sandbox order rehearsal is intentionally blocked under current boundaries.
 
 Do not loosen replay + sandbox guards, force live signals, or add fixture-backed sandbox CLI behavior unless a future phase explicitly scopes it.
+
+## Phase H1C fixture-backed sandbox CLI rehearsal design
+
+`docs/PHASE_H1C_FIXTURE_BACKED_SANDBOX_CLI_REHEARSAL_DESIGN.md` defines the safe future shape for fixture-backed sandbox CLI rehearsal.
+
+Do not implement fixture-backed sandbox CLI behavior unless a future phase explicitly scopes it.

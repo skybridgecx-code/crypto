@@ -124,3 +124,12 @@ Closeout doc:
 - `docs/PHASE_H1B_SANDBOX_EXECUTABLE_ORDER_REHEARSAL_BLOCKER.md`
 
 Future work should explicitly scope fixture-backed sandbox CLI rehearsal before changing replay/sandbox guards.
+
+## Phase H1C — Fixture-backed sandbox CLI rehearsal design
+
+Phase H1C defines a design-only path for future deterministic fixture-backed sandbox CLI rehearsal.
+
+Closeout doc:
+- `docs/PHASE_H1C_FIXTURE_BACKED_SANDBOX_CLI_REHEARSAL_DESIGN.md`
+
+No code is added in H1C. Implementation must be separately scoped.
