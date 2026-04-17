@@ -159,3 +159,9 @@ Retries are not allowed in the same launch window unless a new bounded operator 
 - do not allow unattended operation
 - do not ignore reconciliation mismatches or control drift
 - do not create a second launch checklist outside this runbook
+
+## Launch verdict reason-code map
+
+Use `docs/LAUNCH_VERDICT_REASON_CODES.md` when reviewing `live_launch_verdict.json.reason_codes`.
+
+If the verdict is `not_launchable_here_now`, stop and resolve the mapped upstream artifact issue before rerunning from the correct workflow step. Do not manually override the verdict.

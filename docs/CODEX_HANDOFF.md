@@ -107,3 +107,9 @@ Any future assignment must:
 - run `make phase-close-check` on the final clean tree
 - explain how the work will be validated
 - stop after validation and commit
+
+## Phase G10 launch verdict reason-code map
+
+`docs/LAUNCH_VERDICT_REASON_CODES.md` is part of the operator documentation contract for `runs/<runtime-id>/live_launch_verdict.json`.
+
+Do not change verdict semantics, reason-code behavior, live authority, execution modes, or trusted account-state boundaries unless a future assignment explicitly scopes that change.

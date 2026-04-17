@@ -91,3 +91,9 @@ Stop and report if:
 - a dependency or environment issue blocks validation
 - the requested phase would require out-of-scope infrastructure
 - existing repo state conflicts with the bounded phase
+
+## Phase G10 — Launch verdict reason-code operator map
+
+Phase G10 adds `docs/LAUNCH_VERDICT_REASON_CODES.md`, an operator-facing map for `live_launch_verdict.json.reason_codes`.
+
+Scope is docs/runbook only. The verdict remains artifact-only and grants no live execution authority.

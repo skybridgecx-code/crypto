@@ -273,3 +273,9 @@ Additional rule:
 - do not treat these paths as production trading infrastructure
 - do not bypass the journal, replay, or snapshot surfaces for operator outputs
 - do not fork alternative CLIs, manifests, or report artifacts without an explicit bounded assignment
+
+## Launch verdict reason codes
+
+The operator-facing reason-code map for `runs/<runtime-id>/live_launch_verdict.json` is documented in `docs/LAUNCH_VERDICT_REASON_CODES.md`.
+
+This map explains each known reason code, the source artifact, the operator action, whether rerun is allowed, and whether the operator must stop.
