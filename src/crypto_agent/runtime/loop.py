@@ -50,6 +50,7 @@ from crypto_agent.policy.live_gate import (
 from crypto_agent.policy.readiness import LiveReadinessStatus, default_live_readiness_status
 from crypto_agent.runtime.canary import build_forward_paper_shadow_canary_evaluation
 from crypto_agent.runtime.history import append_forward_paper_history
+from crypto_agent.runtime.launch_verdict import build_live_launch_verdict
 from crypto_agent.runtime.models import (
     ForwardPaperHistoryEvent,
     ForwardPaperRuntimeAccountState,
@@ -178,6 +179,12 @@ def _load_live_control_status(path: Path) -> LiveControlStatusArtifact:
     return LiveControlStatusArtifact.model_validate(json.loads(path.read_text(encoding="utf-8")))
 
 
+def _load_live_market_preflight_artifact(path: Path) -> LiveMarketPreflightArtifact | None:
+    if not path.exists():
+        return None
+    return LiveMarketPreflightArtifact.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+
 def _requested_symbols_from_replay(path: Path) -> list[str]:
     return sorted({candle.symbol for candle in load_candle_replay(path)})
 
@@ -224,6 +231,7 @@ def build_forward_paper_runtime_paths(
         live_gate_decision_path=runtime_dir / "live_gate_decision.json",
         live_gate_threshold_summary_path=runtime_dir / "live_gate_threshold_summary.json",
         live_gate_report_path=runtime_dir / "live_gate_report.md",
+        live_launch_verdict_path=runtime_dir / "live_launch_verdict.json",
     )
 
 
@@ -319,6 +327,7 @@ def _initial_runtime_status(
         live_gate_decision_path=paths.live_gate_decision_path,
         live_gate_threshold_summary_path=paths.live_gate_threshold_summary_path,
         live_gate_report_path=paths.live_gate_report_path,
+        live_launch_verdict_path=paths.live_launch_verdict_path,
     )
 
 
@@ -1421,6 +1430,7 @@ def _materialize_live_gate_artifacts(
         sessions=sessions,
         generated_at=generated_at,
     )
+    preflight_artifact = _load_live_market_preflight_artifact(paths.live_market_preflight_path)
     control_status = _load_live_control_status(status.live_control_status_path)
     readiness = _load_readiness_status(status.readiness_status_path)
     manual_controls = _load_manual_control_state(status.manual_control_state_path)
@@ -1451,11 +1461,28 @@ def _materialize_live_gate_artifacts(
         soak=soak_evaluation,
         shadow=shadow_evaluation,
     )
+    launch_verdict = build_live_launch_verdict(
+        runtime_id=status.runtime_id,
+        generated_at=generated_at,
+        preflight_artifact=preflight_artifact,
+        preflight_path=paths.live_market_preflight_path,
+        shadow_canary=shadow_canary,
+        shadow_canary_path=paths.shadow_canary_evaluation_path,
+        threshold_summary=threshold_summary,
+        threshold_summary_path=paths.live_gate_threshold_summary_path,
+        gate_decision=decision,
+        gate_decision_path=paths.live_gate_decision_path,
+        readiness_status=readiness,
+        readiness_status_path=paths.readiness_status_path,
+        control_status=control_status,
+        control_status_path=paths.live_control_status_path,
+    )
     _write_json_artifact(paths.shadow_canary_evaluation_path, shadow_canary)
     _write_json_artifact(paths.soak_evaluation_path, soak_evaluation)
     _write_json_artifact(paths.shadow_evaluation_path, shadow_evaluation)
     _write_json_artifact(paths.live_gate_threshold_summary_path, threshold_summary)
     _write_json_artifact(paths.live_gate_decision_path, decision)
+    _write_json_artifact(paths.live_launch_verdict_path, launch_verdict)
     paths.live_gate_report_path.write_text(report, encoding="utf-8")
 
 
@@ -2101,6 +2128,7 @@ def run_forward_paper_runtime(
         live_gate_decision_path=status.live_gate_decision_path,
         live_gate_threshold_summary_path=status.live_gate_threshold_summary_path,
         live_gate_report_path=status.live_gate_report_path,
+        live_launch_verdict_path=status.live_launch_verdict_path,
         session_count=len(completed_sessions),
         session_summaries=completed_sessions,
     )

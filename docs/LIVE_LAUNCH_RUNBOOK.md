@@ -9,6 +9,7 @@ Current limitation:
 - this repository does not yet implement `limited_live` execution
 - `paper`, `shadow`, and `sandbox` remain the only executable modes
 - `runs/<runtime-id>/live_gate_decision.json` is an artifact-only gate, not executable live authority
+- `runs/<runtime-id>/live_launch_verdict.json` is an artifact-only operator verdict, not executable live authority
 
 This document defines what must be true before any future bounded phase is allowed to widen into a tiny live launch.
 
@@ -18,18 +19,19 @@ For a candidate runtime `runs/<runtime-id>/`, review artifacts in this order:
 
 1. `live_market_preflight.json`
 2. `shadow_canary_evaluation.json`
-3. `live_gate_decision.json`
-4. `live_gate_threshold_summary.json`
-5. `live_gate_report.md`
-6. `soak_evaluation.json`
-7. `shadow_evaluation.json`
-8. `live_control_status.json`
-9. `live_readiness_status.json`
-10. `manual_control_state.json`
-11. `account_state.json`
-12. `reconciliation_report.json`
-13. `forward_paper_status.json`
-14. `forward_paper_history.jsonl`
+3. `live_gate_threshold_summary.json`
+4. `live_gate_decision.json`
+5. `live_launch_verdict.json`
+6. `live_gate_report.md`
+7. `soak_evaluation.json`
+8. `shadow_evaluation.json`
+9. `live_control_status.json`
+10. `live_readiness_status.json`
+11. `manual_control_state.json`
+12. `account_state.json`
+13. `reconciliation_report.json`
+14. `forward_paper_status.json`
+15. `forward_paper_history.jsonl`
 
 Do not review these out of order. The gate decision is only trustworthy when the preflight and canary were passable first, and when the threshold summary, control status, and reconciliation report all agree.
 
@@ -41,6 +43,7 @@ For a new environment or host path, use this sequence:
 2. run a bounded shadow canary
 3. run the longer bounded shadow evidence set
 4. review the gate and readiness artifacts
+5. require `live_launch_verdict.json.verdict == "launchable_here_now"` before proposing any future limited-live review phase
 
 Do not skip from preflight directly to a long shadow evidence run.
 
@@ -48,6 +51,7 @@ Do not skip from preflight directly to a long shadow evidence run.
 
 Before any future tiny live launch is attempted, all of the following must be true:
 
+- `live_launch_verdict.json` exists and `verdict == "launchable_here_now"`
 - `live_gate_decision.json` exists and `state == "ready"`
 - `live_market_preflight.json` exists and `batch_readiness == true`
 - `shadow_canary_evaluation.json` exists and `state == "pass"`
@@ -127,6 +131,7 @@ If a halt condition fires, do all of the following in order:
 6. review:
    - `live_market_preflight.json`
    - `shadow_canary_evaluation.json`
+   - `live_launch_verdict.json`
    - `live_gate_decision.json`
    - `live_gate_threshold_summary.json`
    - `live_control_status.json`

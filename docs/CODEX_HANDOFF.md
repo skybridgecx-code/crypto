@@ -44,6 +44,7 @@ You are working from a frozen validated baseline in a controlled crypto trading 
 - treat `runs/<runtime-id>/live_gate_threshold_summary.json` as part of the frozen forward-runtime operator contract unless the assignment explicitly changes it
 - treat `runs/<runtime-id>/live_gate_decision.json` as part of the frozen forward-runtime operator contract unless the assignment explicitly changes it
 - treat `runs/<runtime-id>/live_gate_report.md` as part of the frozen forward-runtime operator contract unless the assignment explicitly changes it
+- treat `runs/<runtime-id>/live_launch_verdict.json` as part of the frozen forward-runtime operator contract unless the assignment explicitly changes it
 - treat [docs/LIVE_LAUNCH_RUNBOOK.md](/Users/muhammadaatif/cryp/docs/LIVE_LAUNCH_RUNBOOK.md) as the canonical first-launch live review procedure
 - before any edits in a new bounded phase, run `make phase-start` and require it to pass
 - if preflight fails because worktree is dirty, stash or commit interrupted work before starting new work
@@ -84,6 +85,7 @@ You are working from a frozen validated baseline in a controlled crypto trading 
   - preflight-to-batch consistency diagnostics
   - preflight launch-truth hardening
   - shadow canary launchability evidence
+  - operator launch verdict artifact
 - the live-launch runbook is documented in `docs/LIVE_LAUNCH_RUNBOOK.md`
 - `make validate` is the default validation path after edits because it runs Ruff autofix before format, lint, typecheck, and test
 - `make validate-check` is the final verification path for an already-clean tree

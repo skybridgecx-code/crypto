@@ -330,6 +330,9 @@ def test_cli_canary_only_returns_nonzero_for_failed_canary(
                     tmp_path / "runs" / "shadow-canary-cli" / "thresholds.json"
                 ),
                 "live_gate_report_path": str(tmp_path / "runs" / "shadow-canary-cli" / "gate.md"),
+                "live_launch_verdict_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli" / "launch_verdict.json"
+                ),
                 "session_count": 1,
                 "session_summaries": [],
             }
@@ -487,6 +490,9 @@ def test_cli_canary_only_returns_zero_for_passing_canary(
                 ),
                 "live_gate_report_path": str(
                     tmp_path / "runs" / "shadow-canary-cli-pass" / "gate.md"
+                ),
+                "live_launch_verdict_path": str(
+                    tmp_path / "runs" / "shadow-canary-cli-pass" / "launch_verdict.json"
                 ),
                 "session_count": 1,
                 "session_summaries": [],

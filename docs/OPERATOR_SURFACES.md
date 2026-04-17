@@ -170,6 +170,7 @@ Gate and readiness artifacts:
 - shadow evaluation: `runs/<runtime-id>/shadow_evaluation.json`
 - live-gate threshold summary: `runs/<runtime-id>/live_gate_threshold_summary.json`
 - live-gate decision: `runs/<runtime-id>/live_gate_decision.json`
+- live launch verdict: `runs/<runtime-id>/live_launch_verdict.json`
 - live-gate report: `runs/<runtime-id>/live_gate_report.md`
 
 Canonical first-launch runbook:
@@ -183,7 +184,7 @@ Forward-runtime operator workflow for a candidate live-market environment:
 1. `crypto-agent-forward-paper-run --preflight-only ...`
 2. `crypto-agent-forward-paper-run --canary-only --execution-mode shadow ...`
 3. run the longer bounded shadow evidence session set
-4. review gate and readiness artifacts only after preflight and canary both pass
+4. review the final `live_launch_verdict.json` only after preflight, canary, and gate artifacts exist
 
 ## Snapshot-Locked Validation Surfaces
 

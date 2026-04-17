@@ -389,6 +389,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "live_gate_decision_path": str(result.live_gate_decision_path),
                 "live_gate_threshold_summary_path": str(result.live_gate_threshold_summary_path),
                 "live_gate_report_path": str(result.live_gate_report_path),
+                "live_launch_verdict_path": str(result.live_launch_verdict_path),
                 "session_count": result.session_count,
                 "session_ids": [session.session_id for session in result.session_summaries],
             },

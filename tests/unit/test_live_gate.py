@@ -248,6 +248,7 @@ def test_fresh_runtime_materializes_live_gate_artifacts_without_existing_control
     assert result.live_gate_decision_path.exists()
     assert result.live_gate_threshold_summary_path.exists()
     assert result.live_gate_report_path.exists()
+    assert result.live_launch_verdict_path.exists()
     assert control_status["latest_decision_path"] is None
     assert control_status["go_no_go_action"] == "go"
     assert gate["state"] == "not_ready"
@@ -444,3 +445,4 @@ def test_cli_forward_runtime_prints_live_gate_paths(tmp_path: Path, capsys) -> N
     assert Path(output["live_gate_decision_path"]).exists()
     assert Path(output["live_gate_threshold_summary_path"]).exists()
     assert Path(output["live_gate_report_path"]).exists()
+    assert Path(output["live_launch_verdict_path"]).exists()

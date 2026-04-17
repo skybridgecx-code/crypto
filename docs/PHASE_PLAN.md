@@ -66,6 +66,8 @@ The current repository state is frozen as the validated baseline documented in [
 - Phase G4: preflight-to-batch consistency diagnostics
 - Phase G5: preflight launch-truth hardening
 - Phase G6: shadow canary launchability evidence
+- Phase G7: freeze shadow canary operator path
+- Phase G8: operator live-launch verdict artifact
 - Live Launch Runbook Freeze: canonical first tiny-live review procedure without executable live mode
 
 ## Harness Freeze

@@ -43,6 +43,7 @@ class ForwardPaperRuntimePaths(BaseModel):
     live_gate_decision_path: Path
     live_gate_threshold_summary_path: Path
     live_gate_report_path: Path
+    live_launch_verdict_path: Path
 
 
 class RuntimeAccountPosition(BaseModel):
@@ -435,6 +436,55 @@ class LiveGateDecision(BaseModel):
         return _normalize_datetime(value)
 
 
+class LiveLaunchVerdictChecks(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    preflight_batch_ready: bool
+    shadow_canary_passed: bool
+    blocking_thresholds_passed: bool
+    readiness_thresholds_passed: bool
+    live_gate_ready: bool
+    operator_readiness_ready: bool
+    limited_live_gate_ready_for_review: bool
+
+
+class LiveLaunchVerdictInputArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_id: Literal[
+        "live_market_preflight",
+        "shadow_canary_evaluation",
+        "live_gate_threshold_summary",
+        "live_gate_decision",
+        "live_readiness_status",
+        "live_control_status",
+    ]
+    path: Path
+    present: bool
+    status: str | None = None
+    state: str | None = None
+    reason_codes: list[str] = Field(default_factory=list)
+
+
+class LiveLaunchVerdictArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    generated_at: datetime
+    artifact_only: bool = True
+    execution_authority: Literal["none"] = "none"
+    verdict: Literal["launchable_here_now", "not_launchable_here_now"]
+    summary: str
+    reason_codes: list[str] = Field(default_factory=list)
+    checks: LiveLaunchVerdictChecks
+    input_artifacts: list[LiveLaunchVerdictInputArtifact] = Field(default_factory=list)
+
+    @field_validator("generated_at")
+    @classmethod
+    def normalize_generated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
 class LiveMarketPreflightArtifact(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -531,6 +581,7 @@ class ForwardPaperRuntimeStatus(BaseModel):
     live_gate_decision_path: Path
     live_gate_threshold_summary_path: Path
     live_gate_report_path: Path
+    live_launch_verdict_path: Path
     control_status: Literal["go", "no_go", "manual_approval_required"] = "go"
     control_block_reasons: list[str] = Field(default_factory=list)
 
@@ -577,6 +628,7 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
     live_gate_decision_path: Path
     live_gate_threshold_summary_path: Path
     live_gate_report_path: Path
+    live_launch_verdict_path: Path
     starting_equity_usd: float = Field(gt=0)
     session_interval_seconds: int = Field(gt=0)
     status: Literal["idle", "running"]
@@ -652,6 +704,7 @@ class ForwardPaperRuntimeResult(BaseModel):
     live_gate_decision_path: Path
     live_gate_threshold_summary_path: Path
     live_gate_report_path: Path
+    live_launch_verdict_path: Path
     session_count: int = Field(ge=0)
     session_summaries: list[ForwardPaperSessionSummary] = Field(default_factory=list)
 

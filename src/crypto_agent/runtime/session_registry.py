@@ -75,6 +75,7 @@ def registry_entry_from_status(
         live_gate_decision_path=status.live_gate_decision_path,
         live_gate_threshold_summary_path=status.live_gate_threshold_summary_path,
         live_gate_report_path=status.live_gate_report_path,
+        live_launch_verdict_path=status.live_launch_verdict_path,
         starting_equity_usd=status.starting_equity_usd,
         session_interval_seconds=status.session_interval_seconds,
         status=status.status,
