@@ -114,6 +114,14 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--canary-only",
+        action="store_true",
+        help=(
+            "Run a bounded shadow canary batch using the normal forward runtime, "
+            "write shadow_canary_evaluation.json, and exit nonzero unless the canary passes."
+        ),
+    )
+    parser.add_argument(
         "--allow-execution-mode",
         action="append",
         choices=("paper", "shadow", "sandbox"),
@@ -224,6 +232,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--live-symbol is required when --market-source=binance_spot")
     if args.preflight_only and args.market_source != "binance_spot":
         parser.error("--preflight-only requires --market-source=binance_spot")
+    if args.preflight_only and args.canary_only:
+        parser.error("--preflight-only and --canary-only are mutually exclusive")
+    if args.canary_only and args.market_source != "binance_spot":
+        parser.error("--canary-only requires --market-source=binance_spot")
+    if args.canary_only and args.execution_mode != "shadow":
+        parser.error("--canary-only requires --execution-mode=shadow")
     if args.manual_halt and args.manual_resume:
         parser.error("--manual-halt and --manual-resume are mutually exclusive")
     market_source = cast(Literal["replay", "binance_spot"], args.market_source)
@@ -368,6 +382,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "live_control_status_path": str(result.live_control_status_path),
                 "readiness_status_path": str(result.readiness_status_path),
                 "manual_control_state_path": str(result.manual_control_state_path),
+                "shadow_canary_evaluation_path": str(result.shadow_canary_evaluation_path),
                 "live_market_preflight_path": str(result.live_market_preflight_path),
                 "soak_evaluation_path": str(result.soak_evaluation_path),
                 "shadow_evaluation_path": str(result.shadow_evaluation_path),
@@ -381,6 +396,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             sort_keys=True,
         )
     )
+    if args.canary_only:
+        canary = json.loads(result.shadow_canary_evaluation_path.read_text(encoding="utf-8"))
+        return 0 if canary["state"] == "pass" else 1
     return 0
 
 

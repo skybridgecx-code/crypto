@@ -48,6 +48,7 @@ from crypto_agent.policy.live_gate import (
     default_live_gate_config,
 )
 from crypto_agent.policy.readiness import LiveReadinessStatus, default_live_readiness_status
+from crypto_agent.runtime.canary import build_forward_paper_shadow_canary_evaluation
 from crypto_agent.runtime.history import append_forward_paper_history
 from crypto_agent.runtime.models import (
     ForwardPaperHistoryEvent,
@@ -216,6 +217,7 @@ def build_forward_paper_runtime_paths(
         live_control_status_path=runtime_dir / "live_control_status.json",
         readiness_status_path=runtime_dir / "live_readiness_status.json",
         manual_control_state_path=runtime_dir / "manual_control_state.json",
+        shadow_canary_evaluation_path=runtime_dir / "shadow_canary_evaluation.json",
         soak_evaluation_path=runtime_dir / "soak_evaluation.json",
         shadow_evaluation_path=runtime_dir / "shadow_evaluation.json",
         live_market_preflight_path=runtime_dir / "live_market_preflight.json",
@@ -311,6 +313,7 @@ def _initial_runtime_status(
         live_control_status_path=paths.live_control_status_path,
         readiness_status_path=paths.readiness_status_path,
         manual_control_state_path=paths.manual_control_state_path,
+        shadow_canary_evaluation_path=paths.shadow_canary_evaluation_path,
         soak_evaluation_path=paths.soak_evaluation_path,
         shadow_evaluation_path=paths.shadow_evaluation_path,
         live_gate_decision_path=paths.live_gate_decision_path,
@@ -1411,6 +1414,13 @@ def _materialize_live_gate_artifacts(
         sessions=sessions,
         generated_at=generated_at,
     )
+    shadow_canary = build_forward_paper_shadow_canary_evaluation(
+        runtime_id=status.runtime_id,
+        execution_mode=status.execution_mode,
+        market_source=status.market_source,
+        sessions=sessions,
+        generated_at=generated_at,
+    )
     control_status = _load_live_control_status(status.live_control_status_path)
     readiness = _load_readiness_status(status.readiness_status_path)
     manual_controls = _load_manual_control_state(status.manual_control_state_path)
@@ -1441,6 +1451,7 @@ def _materialize_live_gate_artifacts(
         soak=soak_evaluation,
         shadow=shadow_evaluation,
     )
+    _write_json_artifact(paths.shadow_canary_evaluation_path, shadow_canary)
     _write_json_artifact(paths.soak_evaluation_path, soak_evaluation)
     _write_json_artifact(paths.shadow_evaluation_path, shadow_evaluation)
     _write_json_artifact(paths.live_gate_threshold_summary_path, threshold_summary)
@@ -2083,6 +2094,7 @@ def run_forward_paper_runtime(
         live_control_status_path=status.live_control_status_path,
         readiness_status_path=status.readiness_status_path,
         manual_control_state_path=status.manual_control_state_path,
+        shadow_canary_evaluation_path=status.shadow_canary_evaluation_path,
         live_market_preflight_path=paths.live_market_preflight_path,
         soak_evaluation_path=status.soak_evaluation_path,
         shadow_evaluation_path=status.shadow_evaluation_path,

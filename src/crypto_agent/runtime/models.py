@@ -36,6 +36,7 @@ class ForwardPaperRuntimePaths(BaseModel):
     live_control_status_path: Path
     readiness_status_path: Path
     manual_control_state_path: Path
+    shadow_canary_evaluation_path: Path
     soak_evaluation_path: Path
     shadow_evaluation_path: Path
     live_market_preflight_path: Path
@@ -332,6 +333,63 @@ class ForwardPaperShadowEvaluation(BaseModel):
         return _normalize_datetime(value)
 
 
+class ForwardPaperShadowCanaryRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    session_number: int = Field(ge=1)
+    run_id: str | None = None
+    status: Literal["running", "completed", "interrupted", "failed"]
+    session_outcome: (
+        Literal[
+            "executed",
+            "blocked_controls",
+            "skipped_stale_feed",
+            "skipped_degraded_feed",
+            "skipped_unavailable_feed",
+        ]
+        | None
+    ) = None
+    request_artifact_present: bool = False
+    result_artifact_present: bool = False
+    status_artifact_present: bool = False
+    skip_evidence_present: bool = False
+    all_expected_evidence_present: bool = True
+
+
+class ForwardPaperShadowCanaryEvaluation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    generated_at: datetime
+    execution_mode: Literal["paper", "shadow", "sandbox"]
+    market_source: Literal["replay", "binance_spot"]
+    applicable: bool
+    state: Literal["pass", "fail", "not_applicable"]
+    summary: str
+    reason_codes: list[str] = Field(default_factory=list)
+    session_count: int = Field(default=0, ge=0)
+    completed_session_count: int = Field(default=0, ge=0)
+    executed_session_count: int = Field(default=0, ge=0)
+    blocked_session_count: int = Field(default=0, ge=0)
+    skipped_stale_feed_session_count: int = Field(default=0, ge=0)
+    skipped_degraded_feed_session_count: int = Field(default=0, ge=0)
+    skipped_unavailable_feed_session_count: int = Field(default=0, ge=0)
+    failed_session_count: int = Field(default=0, ge=0)
+    interrupted_session_count: int = Field(default=0, ge=0)
+    request_artifact_count: int = Field(default=0, ge=0)
+    result_artifact_count: int = Field(default=0, ge=0)
+    status_artifact_count: int = Field(default=0, ge=0)
+    skip_evidence_count: int = Field(default=0, ge=0)
+    all_expected_evidence_present: bool = True
+    rows: list[ForwardPaperShadowCanaryRow] = Field(default_factory=list)
+
+    @field_validator("generated_at")
+    @classmethod
+    def normalize_generated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
 class LiveGateThresholdCheck(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -467,6 +525,7 @@ class ForwardPaperRuntimeStatus(BaseModel):
     live_control_status_path: Path
     readiness_status_path: Path
     manual_control_state_path: Path
+    shadow_canary_evaluation_path: Path
     soak_evaluation_path: Path
     shadow_evaluation_path: Path
     live_gate_decision_path: Path
@@ -512,6 +571,7 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
     live_control_status_path: Path
     readiness_status_path: Path
     manual_control_state_path: Path
+    shadow_canary_evaluation_path: Path
     soak_evaluation_path: Path
     shadow_evaluation_path: Path
     live_gate_decision_path: Path
@@ -585,6 +645,7 @@ class ForwardPaperRuntimeResult(BaseModel):
     live_control_status_path: Path
     readiness_status_path: Path
     manual_control_state_path: Path
+    shadow_canary_evaluation_path: Path
     live_market_preflight_path: Path
     soak_evaluation_path: Path
     shadow_evaluation_path: Path
