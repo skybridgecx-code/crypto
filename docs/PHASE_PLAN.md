@@ -238,3 +238,10 @@ Phase L1I wires the explicit limited-live transmission boundary into the forward
 
 Closeout doc:
 - `docs/PHASE_L1I_REAL_TRANSMISSION_BOUNDARY_WIRING.md`
+
+## Phase L1J — Tiny positive-path live-authority test
+
+Phase L1J closes out the bounded positive-path limited-live authority test coverage already present after L1I.
+
+Closeout doc:
+- `docs/PHASE_L1J_TINY_POSITIVE_PATH_LIVE_AUTHORITY_TEST.md`
