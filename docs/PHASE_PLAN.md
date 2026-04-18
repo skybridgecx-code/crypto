@@ -189,3 +189,10 @@ Phase L1B defines the bounded control surface required before any live-order tra
 
 Closeout doc:
 - `docs/PHASE_L1B_LIMITED_LIVE_AUTHORITY_DESIGN.md`
+
+## Phase L1C — Limited-live implementation scope map
+
+Phase L1C maps the exact code touchpoints for the first bounded live-authority implementation.
+
+Closeout doc:
+- `docs/PHASE_L1C_LIMITED_LIVE_IMPLEMENTATION_SCOPE_MAP.md`
