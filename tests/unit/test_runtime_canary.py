@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from crypto_agent.config import load_settings
 from crypto_agent.market_data.live_adapter import BinanceSpotLiveMarketDataAdapter
 from crypto_agent.policy.readiness import LiveReadinessStatus
@@ -738,3 +739,126 @@ def test_cli_sandbox_fixture_rehearsal_passes_flag_and_prints_paths(
     assert output["runtime_id"] == "sandbox-fixture-cli"
     assert output["execution_mode"] == "sandbox"
     assert output["live_launch_verdict_path"].endswith("launch_verdict.json")
+
+
+def test_cli_sandbox_fixture_rehearsal_requires_sandbox_execution_mode(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "paper_test.yaml"
+    config_path.write_text(
+        "mode: paper\npaths:\n"
+        f"  runs_dir: {tmp_path / 'runs'}\n"
+        f"  journals_dir: {tmp_path / 'journals'}\n",
+        encoding="utf-8",
+    )
+
+    from crypto_agent.cli.forward_paper import main
+
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--config",
+                str(config_path),
+                "--runtime-id",
+                "bad-fixture-mode",
+                "--market-source",
+                "replay",
+                "--execution-mode",
+                "paper",
+                "--sandbox-fixture-rehearsal",
+                "tests/fixtures/paper_candles_breakout_long.jsonl",
+            ]
+        )
+
+
+def test_cli_sandbox_fixture_rehearsal_requires_replay_market_source(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "paper_test.yaml"
+    config_path.write_text(
+        "mode: paper\npaths:\n"
+        f"  runs_dir: {tmp_path / 'runs'}\n"
+        f"  journals_dir: {tmp_path / 'journals'}\n",
+        encoding="utf-8",
+    )
+
+    from crypto_agent.cli.forward_paper import main
+
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--config",
+                str(config_path),
+                "--runtime-id",
+                "bad-fixture-source",
+                "--market-source",
+                "binance_spot",
+                "--live-symbol",
+                "BTCUSDT",
+                "--execution-mode",
+                "sandbox",
+                "--sandbox-fixture-rehearsal",
+            ]
+        )
+
+
+def test_cli_sandbox_fixture_rehearsal_rejects_preflight_only(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "paper_test.yaml"
+    config_path.write_text(
+        "mode: paper\npaths:\n"
+        f"  runs_dir: {tmp_path / 'runs'}\n"
+        f"  journals_dir: {tmp_path / 'journals'}\n",
+        encoding="utf-8",
+    )
+
+    from crypto_agent.cli.forward_paper import main
+
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--config",
+                str(config_path),
+                "--runtime-id",
+                "bad-fixture-preflight",
+                "--market-source",
+                "replay",
+                "--execution-mode",
+                "sandbox",
+                "--sandbox-fixture-rehearsal",
+                "--preflight-only",
+                "tests/fixtures/paper_candles_breakout_long.jsonl",
+            ]
+        )
+
+
+def test_cli_sandbox_fixture_rehearsal_rejects_canary_only(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "paper_test.yaml"
+    config_path.write_text(
+        "mode: paper\npaths:\n"
+        f"  runs_dir: {tmp_path / 'runs'}\n"
+        f"  journals_dir: {tmp_path / 'journals'}\n",
+        encoding="utf-8",
+    )
+
+    from crypto_agent.cli.forward_paper import main
+
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--config",
+                str(config_path),
+                "--runtime-id",
+                "bad-fixture-canary",
+                "--market-source",
+                "replay",
+                "--execution-mode",
+                "sandbox",
+                "--sandbox-fixture-rehearsal",
+                "--canary-only",
+                "tests/fixtures/paper_candles_breakout_long.jsonl",
+            ]
+        )
