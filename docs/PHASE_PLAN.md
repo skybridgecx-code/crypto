@@ -294,3 +294,10 @@ Phase L2F freezes the operator-enforced rehearsal procedure for the first real t
 
 Closeout doc:
 - `docs/PHASE_L2F_OPERATOR_ENFORCED_FIRST_LIVE_TRANSMIT_REHEARSAL.md`
+
+## Phase L2G — First bounded live transmit evidence review closeout
+
+Phase L2G freezes the evidence-review closeout procedure required after the first bounded real transmitted order.
+
+Closeout doc:
+- `docs/PHASE_L2G_FIRST_BOUNDED_LIVE_TRANSMIT_EVIDENCE_REVIEW_CLOSEOUT.md`
