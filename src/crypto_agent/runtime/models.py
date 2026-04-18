@@ -44,6 +44,9 @@ class ForwardPaperRuntimePaths(BaseModel):
     live_gate_threshold_summary_path: Path
     live_gate_report_path: Path
     live_launch_verdict_path: Path
+    live_authority_state_path: Path
+    live_launch_window_path: Path
+    live_transmission_decision_path: Path
 
 
 class RuntimeAccountPosition(BaseModel):
@@ -485,6 +488,59 @@ class LiveLaunchVerdictArtifact(BaseModel):
         return _normalize_datetime(value)
 
 
+class LiveAuthorityStateArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    generated_at: datetime
+    authority_enabled: bool = False
+    execution_authority: Literal["none", "limited_live"] = "none"
+    scope: Literal["disabled", "tiny_limited_live"] = "disabled"
+    summary: str
+    reason_codes: list[str] = Field(default_factory=list)
+
+    @field_validator("generated_at")
+    @classmethod
+    def normalize_generated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
+class LiveLaunchWindowArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    generated_at: datetime
+    state: Literal["not_configured", "scheduled", "active", "expired"] = "not_configured"
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    summary: str
+    reason_codes: list[str] = Field(default_factory=list)
+
+    @field_validator("generated_at", "starts_at", "ends_at")
+    @classmethod
+    def normalize_timestamps(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        return _normalize_datetime(value)
+
+
+class LiveTransmissionDecisionArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    generated_at: datetime
+    decision: Literal["denied"] = "denied"
+    transmission_authorized: bool = False
+    reason_codes: list[str] = Field(default_factory=list)
+    authority_state_path: Path
+    launch_window_path: Path
+
+    @field_validator("generated_at")
+    @classmethod
+    def normalize_generated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
 class LiveMarketPreflightArtifact(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -582,6 +638,9 @@ class ForwardPaperRuntimeStatus(BaseModel):
     live_gate_threshold_summary_path: Path
     live_gate_report_path: Path
     live_launch_verdict_path: Path
+    live_authority_state_path: Path | None = None
+    live_launch_window_path: Path | None = None
+    live_transmission_decision_path: Path | None = None
     control_status: Literal["go", "no_go", "manual_approval_required"] = "go"
     control_block_reasons: list[str] = Field(default_factory=list)
 
@@ -629,6 +688,9 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
     live_gate_threshold_summary_path: Path
     live_gate_report_path: Path
     live_launch_verdict_path: Path
+    live_authority_state_path: Path | None = None
+    live_launch_window_path: Path | None = None
+    live_transmission_decision_path: Path | None = None
     starting_equity_usd: float = Field(gt=0)
     session_interval_seconds: int = Field(gt=0)
     status: Literal["idle", "running"]
@@ -705,6 +767,9 @@ class ForwardPaperRuntimeResult(BaseModel):
     live_gate_threshold_summary_path: Path
     live_gate_report_path: Path
     live_launch_verdict_path: Path
+    live_authority_state_path: Path | None = None
+    live_launch_window_path: Path | None = None
+    live_transmission_decision_path: Path | None = None
     session_count: int = Field(ge=0)
     session_summaries: list[ForwardPaperSessionSummary] = Field(default_factory=list)
 

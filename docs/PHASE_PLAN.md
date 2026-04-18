@@ -196,3 +196,10 @@ Phase L1C maps the exact code touchpoints for the first bounded live-authority i
 
 Closeout doc:
 - `docs/PHASE_L1C_LIMITED_LIVE_IMPLEMENTATION_SCOPE_MAP.md`
+
+## Phase L1D — Limited-live implementation foundation
+
+Phase L1D adds the deny-by-default limited-live foundation artifacts and runtime path wiring required before any live transmission logic is introduced.
+
+Closeout doc:
+- `docs/PHASE_L1D_LIMITED_LIVE_IMPLEMENTATION_FOUNDATION.md`

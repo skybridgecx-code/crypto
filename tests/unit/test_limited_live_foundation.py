@@ -1,0 +1,74 @@
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime
+from pathlib import Path
+
+from crypto_agent.config import load_settings
+from crypto_agent.runtime.loop import run_forward_paper_runtime
+from crypto_agent.runtime.models import (
+    ForwardPaperRuntimeStatus,
+    LiveAuthorityStateArtifact,
+    LiveLaunchWindowArtifact,
+    LiveTransmissionDecisionArtifact,
+)
+
+
+def _paper_settings_for(tmp_path: Path):
+    settings = load_settings(Path("config/paper.yaml"))
+    return settings.model_copy(
+        update={
+            "paths": settings.paths.model_copy(
+                update={
+                    "runs_dir": tmp_path / "runs",
+                    "journals_dir": tmp_path / "journals",
+                }
+            )
+        }
+    )
+
+
+def _ts(year: int, month: int, day: int, hour: int, minute: int) -> datetime:
+    return datetime(year, month, day, hour, minute, tzinfo=UTC)
+
+
+def test_forward_runtime_writes_limited_live_foundation_artifacts_for_replay_runtime(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+
+    result = run_forward_paper_runtime(
+        Path("tests/fixtures/paper_candles_breakout_long.jsonl"),
+        settings=settings,
+        runtime_id="limited-live-foundation-replay",
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 10, 12, 0)],
+        market_source="replay",
+    )
+
+    assert result.live_authority_state_path is not None
+    assert result.live_launch_window_path is not None
+    assert result.live_transmission_decision_path is not None
+
+    authority = LiveAuthorityStateArtifact.model_validate(
+        json.loads(result.live_authority_state_path.read_text(encoding="utf-8"))
+    )
+    window = LiveLaunchWindowArtifact.model_validate(
+        json.loads(result.live_launch_window_path.read_text(encoding="utf-8"))
+    )
+    decision = LiveTransmissionDecisionArtifact.model_validate(
+        json.loads(result.live_transmission_decision_path.read_text(encoding="utf-8"))
+    )
+    status = ForwardPaperRuntimeStatus.model_validate(
+        json.loads(result.status_path.read_text(encoding="utf-8"))
+    )
+
+    assert authority.authority_enabled is False
+    assert authority.execution_authority == "none"
+    assert window.state == "not_configured"
+    assert decision.transmission_authorized is False
+    assert "live_authority_disabled_by_default" in decision.reason_codes
+    assert status.live_authority_state_path == result.live_authority_state_path
+    assert status.live_launch_window_path == result.live_launch_window_path
+    assert status.live_transmission_decision_path == result.live_transmission_decision_path

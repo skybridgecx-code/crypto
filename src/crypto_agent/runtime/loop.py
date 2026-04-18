@@ -64,8 +64,11 @@ from crypto_agent.runtime.models import (
     ForwardPaperRuntimeStatus,
     ForwardPaperSessionSkipEvidence,
     ForwardPaperSessionSummary,
+    LiveAuthorityStateArtifact,
+    LiveLaunchWindowArtifact,
     LiveMarketPreflightArtifact,
     LiveMarketPreflightResult,
+    LiveTransmissionDecisionArtifact,
 )
 from crypto_agent.runtime.reconciliation import (
     RuntimeAccountMismatchError,
@@ -164,6 +167,48 @@ def _write_json_artifact(path: Path, model: BaseModel) -> None:
     )
 
 
+def _ensure_limited_live_foundation_artifacts(
+    *,
+    runtime_id: str,
+    paths: ForwardPaperRuntimePaths,
+    generated_at: datetime,
+) -> None:
+    if not paths.live_authority_state_path.exists():
+        _write_json_artifact(
+            paths.live_authority_state_path,
+            LiveAuthorityStateArtifact(
+                runtime_id=runtime_id,
+                generated_at=generated_at,
+                summary="Limited-live authority is disabled by default.",
+                reason_codes=["live_authority_disabled_by_default"],
+            ),
+        )
+    if not paths.live_launch_window_path.exists():
+        _write_json_artifact(
+            paths.live_launch_window_path,
+            LiveLaunchWindowArtifact(
+                runtime_id=runtime_id,
+                generated_at=generated_at,
+                summary="No limited-live launch window is configured.",
+                reason_codes=["launch_window_not_configured"],
+            ),
+        )
+    if not paths.live_transmission_decision_path.exists():
+        _write_json_artifact(
+            paths.live_transmission_decision_path,
+            LiveTransmissionDecisionArtifact(
+                runtime_id=runtime_id,
+                generated_at=generated_at,
+                reason_codes=[
+                    "live_authority_disabled_by_default",
+                    "launch_window_not_configured",
+                ],
+                authority_state_path=paths.live_authority_state_path,
+                launch_window_path=paths.live_launch_window_path,
+            ),
+        )
+
+
 def _load_live_control_config(path: Path) -> LiveControlConfig:
     return LiveControlConfig.model_validate(json.loads(path.read_text(encoding="utf-8")))
 
@@ -237,6 +282,9 @@ def build_forward_paper_runtime_paths(
         live_gate_threshold_summary_path=runtime_dir / "live_gate_threshold_summary.json",
         live_gate_report_path=runtime_dir / "live_gate_report.md",
         live_launch_verdict_path=runtime_dir / "live_launch_verdict.json",
+        live_authority_state_path=runtime_dir / "live_authority_state.json",
+        live_launch_window_path=runtime_dir / "live_launch_window.json",
+        live_transmission_decision_path=runtime_dir / "live_transmission_decision.json",
     )
 
 
@@ -392,6 +440,9 @@ def _initial_runtime_status(
         live_gate_threshold_summary_path=paths.live_gate_threshold_summary_path,
         live_gate_report_path=paths.live_gate_report_path,
         live_launch_verdict_path=paths.live_launch_verdict_path,
+        live_authority_state_path=paths.live_authority_state_path,
+        live_launch_window_path=paths.live_launch_window_path,
+        live_transmission_decision_path=paths.live_transmission_decision_path,
     )
 
 
@@ -1670,6 +1721,11 @@ def run_forward_paper_runtime(
         recover_interrupted=recover_interrupted,
     )
     paths = build_forward_paper_runtime_paths(settings.paths.runs_dir, runtime_id)
+    _ensure_limited_live_foundation_artifacts(
+        runtime_id=runtime_id,
+        paths=paths,
+        generated_at=initial_now,
+    )
     controls, readiness, manual_controls = _resolve_control_surfaces(
         runtime_id=runtime_id,
         settings=settings,
@@ -2242,6 +2298,9 @@ def run_forward_paper_runtime(
         live_gate_threshold_summary_path=status.live_gate_threshold_summary_path,
         live_gate_report_path=status.live_gate_report_path,
         live_launch_verdict_path=status.live_launch_verdict_path,
+        live_authority_state_path=status.live_authority_state_path,
+        live_launch_window_path=status.live_launch_window_path,
+        live_transmission_decision_path=status.live_transmission_decision_path,
         session_count=len(completed_sessions),
         session_summaries=completed_sessions,
     )
