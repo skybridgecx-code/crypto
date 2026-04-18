@@ -154,3 +154,10 @@ Phase H1G closes out the H1 sandbox track as a bounded operator rehearsal surfac
 
 Closeout doc:
 - `docs/PHASE_H1G_SANDBOX_TRACK_CLOSEOUT.md`
+
+## Phase H2A — Shipped vs blocked surface audit
+
+Phase H2A records the current operator-facing boundary between shipped surfaces and intentionally blocked surfaces.
+
+Closeout doc:
+- `docs/PHASE_H2A_SHIPPED_VS_BLOCKED_SURFACE_AUDIT.md`
