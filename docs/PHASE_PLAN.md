@@ -308,3 +308,10 @@ Phase L2H records the outcome of the first bounded real live transmitted order a
 
 Closeout doc:
 - `docs/PHASE_L2H_FIRST_BOUNDED_LIVE_TRANSMIT_OUTCOME_CLOSEOUT.md`
+
+## Phase L2I — Second-attempt decision closeout
+
+Phase L2I records whether a second bounded live transmit attempt is allowed or blocked after the first bounded attempt and its L2H outcome review.
+
+Closeout doc:
+- `docs/PHASE_L2I_SECOND_ATTEMPT_DECISION_CLOSEOUT.md`
