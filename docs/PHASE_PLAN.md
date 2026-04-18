@@ -224,3 +224,10 @@ Phase L1G upgrades the limited-live launch-window artifact from a static placeho
 
 Closeout doc:
 - `docs/PHASE_L1G_LAUNCH_WINDOW_FOUNDATION.md`
+
+## Phase L1H — Limited-live enable toggle
+
+Phase L1H upgrades the limited-live authority artifact from a static default into runtime-controlled enabled or disabled state.
+
+Closeout doc:
+- `docs/PHASE_L1H_LIMITED_LIVE_ENABLE_TOGGLE.md`

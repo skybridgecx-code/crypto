@@ -168,6 +168,34 @@ def _write_json_artifact(path: Path, model: BaseModel) -> None:
     )
 
 
+def _build_live_authority_state_artifact(
+    *,
+    runtime_id: str,
+    generated_at: datetime,
+    authority_enabled: bool,
+) -> LiveAuthorityStateArtifact:
+    if not authority_enabled:
+        return LiveAuthorityStateArtifact(
+            runtime_id=runtime_id,
+            generated_at=generated_at,
+            authority_enabled=False,
+            execution_authority="none",
+            scope="disabled",
+            summary="Limited-live authority is disabled by default.",
+            reason_codes=["live_authority_disabled_by_default"],
+        )
+
+    return LiveAuthorityStateArtifact(
+        runtime_id=runtime_id,
+        generated_at=generated_at,
+        authority_enabled=True,
+        execution_authority="limited_live",
+        scope="tiny_limited_live",
+        summary="Limited-live authority is explicitly enabled for this runtime.",
+        reason_codes=[],
+    )
+
+
 def _build_live_launch_window_artifact(
     *,
     runtime_id: str,
@@ -228,19 +256,27 @@ def _ensure_limited_live_foundation_artifacts(
     runtime_id: str,
     paths: ForwardPaperRuntimePaths,
     generated_at: datetime,
+    limited_live_authority_enabled: bool,
     live_launch_window_starts_at: datetime | None,
     live_launch_window_ends_at: datetime | None,
 ) -> None:
-    if not paths.live_authority_state_path.exists():
-        _write_json_artifact(
-            paths.live_authority_state_path,
-            LiveAuthorityStateArtifact(
-                runtime_id=runtime_id,
-                generated_at=generated_at,
-                summary="Limited-live authority is disabled by default.",
-                reason_codes=["live_authority_disabled_by_default"],
-            ),
+    authority_artifact = _build_live_authority_state_artifact(
+        runtime_id=runtime_id,
+        generated_at=generated_at,
+        authority_enabled=limited_live_authority_enabled,
+    )
+    rewrite_authority = not paths.live_authority_state_path.exists()
+    if not rewrite_authority:
+        existing_payload = json.loads(paths.live_authority_state_path.read_text(encoding="utf-8"))
+        desired_payload = authority_artifact.model_dump(mode="json")
+        rewrite_authority = (
+            existing_payload.get("authority_enabled") != desired_payload.get("authority_enabled")
+            or existing_payload.get("execution_authority")
+            != desired_payload.get("execution_authority")
+            or existing_payload.get("scope") != desired_payload.get("scope")
         )
+    if rewrite_authority:
+        _write_json_artifact(paths.live_authority_state_path, authority_artifact)
     launch_window_artifact = _build_live_launch_window_artifact(
         runtime_id=runtime_id,
         generated_at=generated_at,
@@ -1790,6 +1826,7 @@ def run_forward_paper_runtime(
     sandbox_execution_adapter: SandboxExecutionAdapter | None = None,
     live_launch_window_starts_at: datetime | None = None,
     live_launch_window_ends_at: datetime | None = None,
+    limited_live_authority_enabled: bool = False,
     live_control_config: LiveControlConfig | None = None,
     readiness_status: LiveReadinessStatus | None = None,
     manual_control_state: ManualControlState | None = None,
@@ -1831,6 +1868,7 @@ def run_forward_paper_runtime(
         runtime_id=runtime_id,
         paths=paths,
         generated_at=initial_now,
+        limited_live_authority_enabled=limited_live_authority_enabled,
         live_launch_window_starts_at=live_launch_window_starts_at,
         live_launch_window_ends_at=live_launch_window_ends_at,
     )

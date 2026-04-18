@@ -108,3 +108,29 @@ def test_forward_runtime_materializes_active_limited_live_launch_window_when_in_
     assert window.configured is True
     assert window.state == "active"
     assert window.reason_codes == []
+
+
+def test_forward_runtime_materializes_enabled_limited_live_authority_when_requested(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+
+    result = run_forward_paper_runtime(
+        Path("tests/fixtures/paper_candles_breakout_long.jsonl"),
+        settings=settings,
+        runtime_id="limited-live-authority-enabled",
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 13, 12, 0)],
+        market_source="replay",
+        limited_live_authority_enabled=True,
+    )
+
+    authority = LiveAuthorityStateArtifact.model_validate(
+        json.loads(result.live_authority_state_path.read_text(encoding="utf-8"))
+    )
+
+    assert authority.authority_enabled is True
+    assert authority.execution_authority == "limited_live"
+    assert authority.scope == "tiny_limited_live"
+    assert authority.reason_codes == []
