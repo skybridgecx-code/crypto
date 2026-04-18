@@ -245,3 +245,10 @@ Phase L1J closes out the bounded positive-path limited-live authority test cover
 
 Closeout doc:
 - `docs/PHASE_L1J_TINY_POSITIVE_PATH_LIVE_AUTHORITY_TEST.md`
+
+## Phase L1K — Operator dry run / first live checklist
+
+Phase L1K closes the limited-live preparation track with one bounded operator dry-run and first-live checklist.
+
+Closeout doc:
+- `docs/PHASE_L1K_OPERATOR_DRY_RUN_FIRST_LIVE_CHECKLIST.md`
