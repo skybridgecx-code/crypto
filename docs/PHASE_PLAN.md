@@ -147,3 +147,10 @@ Phase H1E documents the shipped fixture-backed sandbox CLI rehearsal for operato
 
 Closeout doc:
 - `docs/PHASE_H1E_SANDBOX_REHEARSAL_OPERATOR_DOCS.md`
+
+## Phase H1G — Sandbox track closeout
+
+Phase H1G closes out the H1 sandbox track as a bounded operator rehearsal surface.
+
+Closeout doc:
+- `docs/PHASE_H1G_SANDBOX_TRACK_CLOSEOUT.md`

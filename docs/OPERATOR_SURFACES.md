@@ -295,3 +295,10 @@ This path is documented in:
 - `docs/PHASE_H1E_SANDBOX_REHEARSAL_OPERATOR_DOCS.md`
 
 It is separate from the live-market preflight/canary/gate workflow and does not authorize live execution.
+
+## H1 sandbox track closeout
+
+The H1 sandbox track is now closed out as a bounded operator rehearsal surface.
+
+See:
+- `docs/PHASE_H1G_SANDBOX_TRACK_CLOSEOUT.md`

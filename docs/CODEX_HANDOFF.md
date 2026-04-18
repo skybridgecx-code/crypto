@@ -155,3 +155,9 @@ Replay + sandbox must remain blocked unless `--sandbox-fixture-rehearsal` is exp
 `docs/PHASE_H1E_SANDBOX_REHEARSAL_OPERATOR_DOCS.md` explains the shipped fixture-backed sandbox CLI rehearsal.
 
 Keep this path clearly separate from the live-market launch workflow.
+
+## Phase H1G sandbox track closeout
+
+`docs/PHASE_H1G_SANDBOX_TRACK_CLOSEOUT.md` records the H1 sandbox track as complete and bounded.
+
+Do not widen sandbox rehearsal into live execution authority unless a future phase explicitly re-scopes that change.
