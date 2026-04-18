@@ -287,3 +287,10 @@ Phase L2E wires the first bounded live adapter call at the authorized runtime se
 
 Closeout doc:
 - `docs/PHASE_L2E_BOUNDED_LIVE_ADAPTER_CALL_WIRING.md`
+
+## Phase L2F — Operator-enforced first live transmit rehearsal
+
+Phase L2F freezes the operator-enforced rehearsal procedure for the first real transmitted order inside the bounded live-transmission envelope.
+
+Closeout doc:
+- `docs/PHASE_L2F_OPERATOR_ENFORCED_FIRST_LIVE_TRANSMIT_REHEARSAL.md`
