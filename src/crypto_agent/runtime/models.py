@@ -512,6 +512,7 @@ class LiveLaunchWindowArtifact(BaseModel):
     runtime_id: str
     generated_at: datetime
     state: Literal["not_configured", "scheduled", "active", "expired"] = "not_configured"
+    configured: bool = False
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     summary: str

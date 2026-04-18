@@ -82,3 +82,29 @@ def test_forward_runtime_writes_limited_live_foundation_artifacts_for_replay_run
     assert status.live_launch_window_path == result.live_launch_window_path
     assert status.live_transmission_decision_path == result.live_transmission_decision_path
     assert status.live_approval_state_path == result.live_approval_state_path
+
+
+def test_forward_runtime_materializes_active_limited_live_launch_window_when_in_window(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+
+    result = run_forward_paper_runtime(
+        Path("tests/fixtures/paper_candles_breakout_long.jsonl"),
+        settings=settings,
+        runtime_id="limited-live-window-active",
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 12, 12, 0)],
+        market_source="replay",
+        live_launch_window_starts_at=_ts(2026, 4, 12, 11, 55),
+        live_launch_window_ends_at=_ts(2026, 4, 12, 12, 5),
+    )
+
+    window = LiveLaunchWindowArtifact.model_validate(
+        json.loads(result.live_launch_window_path.read_text(encoding="utf-8"))
+    )
+
+    assert window.configured is True
+    assert window.state == "active"
+    assert window.reason_codes == []

@@ -217,3 +217,10 @@ Phase L1F adds the typed approval-state artifact and deny-by-default approval wi
 
 Closeout doc:
 - `docs/PHASE_L1F_LIVE_APPROVAL_FOUNDATION.md`
+
+## Phase L1G — Launch window foundation
+
+Phase L1G upgrades the limited-live launch-window artifact from a static placeholder to runtime-controlled state.
+
+Closeout doc:
+- `docs/PHASE_L1G_LAUNCH_WINDOW_FOUNDATION.md`

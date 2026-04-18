@@ -168,11 +168,68 @@ def _write_json_artifact(path: Path, model: BaseModel) -> None:
     )
 
 
+def _build_live_launch_window_artifact(
+    *,
+    runtime_id: str,
+    generated_at: datetime,
+    starts_at: datetime | None,
+    ends_at: datetime | None,
+) -> LiveLaunchWindowArtifact:
+    if starts_at is None or ends_at is None:
+        return LiveLaunchWindowArtifact(
+            runtime_id=runtime_id,
+            generated_at=generated_at,
+            configured=False,
+            state="not_configured",
+            starts_at=starts_at,
+            ends_at=ends_at,
+            summary="No limited-live launch window is configured.",
+            reason_codes=["launch_window_not_configured"],
+        )
+
+    if generated_at < starts_at:
+        return LiveLaunchWindowArtifact(
+            runtime_id=runtime_id,
+            generated_at=generated_at,
+            configured=True,
+            state="scheduled",
+            starts_at=starts_at,
+            ends_at=ends_at,
+            summary="Limited-live launch window is scheduled but not active yet.",
+            reason_codes=["launch_window_not_active_yet"],
+        )
+
+    if generated_at > ends_at:
+        return LiveLaunchWindowArtifact(
+            runtime_id=runtime_id,
+            generated_at=generated_at,
+            configured=True,
+            state="expired",
+            starts_at=starts_at,
+            ends_at=ends_at,
+            summary="Limited-live launch window has expired.",
+            reason_codes=["launch_window_expired"],
+        )
+
+    return LiveLaunchWindowArtifact(
+        runtime_id=runtime_id,
+        generated_at=generated_at,
+        configured=True,
+        state="active",
+        starts_at=starts_at,
+        ends_at=ends_at,
+        summary="Limited-live launch window is active.",
+        reason_codes=[],
+    )
+
+
 def _ensure_limited_live_foundation_artifacts(
     *,
     runtime_id: str,
     paths: ForwardPaperRuntimePaths,
     generated_at: datetime,
+    live_launch_window_starts_at: datetime | None,
+    live_launch_window_ends_at: datetime | None,
 ) -> None:
     if not paths.live_authority_state_path.exists():
         _write_json_artifact(
@@ -184,16 +241,24 @@ def _ensure_limited_live_foundation_artifacts(
                 reason_codes=["live_authority_disabled_by_default"],
             ),
         )
-    if not paths.live_launch_window_path.exists():
-        _write_json_artifact(
-            paths.live_launch_window_path,
-            LiveLaunchWindowArtifact(
-                runtime_id=runtime_id,
-                generated_at=generated_at,
-                summary="No limited-live launch window is configured.",
-                reason_codes=["launch_window_not_configured"],
-            ),
+    launch_window_artifact = _build_live_launch_window_artifact(
+        runtime_id=runtime_id,
+        generated_at=generated_at,
+        starts_at=live_launch_window_starts_at,
+        ends_at=live_launch_window_ends_at,
+    )
+    rewrite_launch_window = not paths.live_launch_window_path.exists()
+    if not rewrite_launch_window:
+        existing_payload = json.loads(paths.live_launch_window_path.read_text(encoding="utf-8"))
+        desired_payload = launch_window_artifact.model_dump(mode="json")
+        rewrite_launch_window = (
+            existing_payload.get("configured") != desired_payload.get("configured")
+            or existing_payload.get("state") != desired_payload.get("state")
+            or existing_payload.get("starts_at") != desired_payload.get("starts_at")
+            or existing_payload.get("ends_at") != desired_payload.get("ends_at")
         )
+    if rewrite_launch_window:
+        _write_json_artifact(paths.live_launch_window_path, launch_window_artifact)
     if not paths.live_approval_state_path.exists():
         _write_json_artifact(
             paths.live_approval_state_path,
@@ -1723,6 +1788,8 @@ def run_forward_paper_runtime(
     live_market_poll_retry_delay_seconds: float = 2.0,
     sandbox_fixture_rehearsal: bool = False,
     sandbox_execution_adapter: SandboxExecutionAdapter | None = None,
+    live_launch_window_starts_at: datetime | None = None,
+    live_launch_window_ends_at: datetime | None = None,
     live_control_config: LiveControlConfig | None = None,
     readiness_status: LiveReadinessStatus | None = None,
     manual_control_state: ManualControlState | None = None,
@@ -1732,6 +1799,16 @@ def run_forward_paper_runtime(
         [_normalize_datetime(tick) for tick in tick_times] if tick_times is not None else None
     )
     initial_now = scheduled_ticks[0] if scheduled_ticks else _normalize_datetime(now_fn())
+    live_launch_window_starts_at = (
+        _normalize_datetime(live_launch_window_starts_at)
+        if live_launch_window_starts_at is not None
+        else None
+    )
+    live_launch_window_ends_at = (
+        _normalize_datetime(live_launch_window_ends_at)
+        if live_launch_window_ends_at is not None
+        else None
+    )
     status, account_state, recovered_session_id, recovery_note = _ensure_runtime_status(
         settings=settings,
         execution_mode=execution_mode,
@@ -1754,6 +1831,8 @@ def run_forward_paper_runtime(
         runtime_id=runtime_id,
         paths=paths,
         generated_at=initial_now,
+        live_launch_window_starts_at=live_launch_window_starts_at,
+        live_launch_window_ends_at=live_launch_window_ends_at,
     )
     controls, readiness, manual_controls = _resolve_control_surfaces(
         runtime_id=runtime_id,
