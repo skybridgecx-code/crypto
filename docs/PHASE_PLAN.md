@@ -140,3 +140,10 @@ Phase H1D implements the explicit fixture-backed sandbox CLI rehearsal designed 
 
 Closeout doc:
 - `docs/PHASE_H1D_IMPLEMENT_FIXTURE_BACKED_SANDBOX_REHEARSAL.md`
+
+## Phase H1E — Sandbox rehearsal operator docs
+
+Phase H1E documents the shipped fixture-backed sandbox CLI rehearsal for operators.
+
+Closeout doc:
+- `docs/PHASE_H1E_SANDBOX_REHEARSAL_OPERATOR_DOCS.md`

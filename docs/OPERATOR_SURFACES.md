@@ -279,3 +279,19 @@ Additional rule:
 The operator-facing reason-code map for `runs/<runtime-id>/live_launch_verdict.json` is documented in `docs/LAUNCH_VERDICT_REASON_CODES.md`.
 
 This map explains each known reason code, the source artifact, the operator action, whether rerun is allowed, and whether the operator must stop.
+
+## Fixture-backed sandbox rehearsal
+
+The repo supports an explicit fixture-backed sandbox CLI rehearsal for deterministic sandbox-only evidence generation.
+
+Use:
+- `--market-source replay`
+- `--execution-mode sandbox`
+- `--allow-execution-mode sandbox`
+- `--sandbox-fixture-rehearsal`
+- `tests/fixtures/paper_candles_breakout_long.jsonl`
+
+This path is documented in:
+- `docs/PHASE_H1E_SANDBOX_REHEARSAL_OPERATOR_DOCS.md`
+
+It is separate from the live-market preflight/canary/gate workflow and does not authorize live execution.

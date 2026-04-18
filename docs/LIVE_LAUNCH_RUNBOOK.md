@@ -165,3 +165,17 @@ Retries are not allowed in the same launch window unless a new bounded operator 
 Use `docs/LAUNCH_VERDICT_REASON_CODES.md` when reviewing `live_launch_verdict.json.reason_codes`.
 
 If the verdict is `not_launchable_here_now`, stop and resolve the mapped upstream artifact issue before rerunning from the correct workflow step. Do not manually override the verdict.
+
+## Fixture-backed sandbox rehearsal is separate
+
+The H1D fixture-backed sandbox CLI rehearsal is not part of the live-market launch workflow.
+
+Do not substitute fixture-backed sandbox rehearsal for:
+- live-market preflight
+- shadow canary
+- bounded shadow evidence
+- live gate review
+- launch verdict review
+
+See:
+- `docs/PHASE_H1E_SANDBOX_REHEARSAL_OPERATOR_DOCS.md`

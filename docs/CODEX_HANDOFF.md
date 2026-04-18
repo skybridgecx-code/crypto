@@ -149,3 +149,9 @@ Do not implement fixture-backed sandbox CLI behavior unless a future phase expli
 `docs/PHASE_H1D_IMPLEMENT_FIXTURE_BACKED_SANDBOX_REHEARSAL.md` records the shipped bounded replay+sandbox CLI rehearsal path.
 
 Replay + sandbox must remain blocked unless `--sandbox-fixture-rehearsal` is explicitly set.
+
+## Phase H1E sandbox rehearsal operator docs
+
+`docs/PHASE_H1E_SANDBOX_REHEARSAL_OPERATOR_DOCS.md` explains the shipped fixture-backed sandbox CLI rehearsal.
+
+Keep this path clearly separate from the live-market launch workflow.
