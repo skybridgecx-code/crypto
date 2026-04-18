@@ -266,3 +266,10 @@ Phase L2B defines the exact live adapter boundary for the first bounded real liv
 
 Closeout doc:
 - `docs/PHASE_L2B_BOUNDED_LIVE_TRANSMISSION_ADAPTER_DESIGN.md`
+
+## Phase L2C — Bounded live transmission implementation map
+
+Phase L2C maps the exact code touchpoints for the first bounded live transmission implementation.
+
+Closeout doc:
+- `docs/PHASE_L2C_BOUNDED_LIVE_TRANSMISSION_IMPLEMENTATION_MAP.md`
