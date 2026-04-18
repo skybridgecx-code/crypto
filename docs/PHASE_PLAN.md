@@ -252,3 +252,10 @@ Phase L1K closes the limited-live preparation track with one bounded operator dr
 
 Closeout doc:
 - `docs/PHASE_L1K_OPERATOR_DRY_RUN_FIRST_LIVE_CHECKLIST.md`
+
+## Phase L2A — Bounded live transmission scope lock
+
+Phase L2A defines the smallest acceptable first real live transmission envelope before any code widens authority.
+
+Closeout doc:
+- `docs/PHASE_L2A_BOUNDED_LIVE_TRANSMISSION_SCOPE_LOCK.md`
