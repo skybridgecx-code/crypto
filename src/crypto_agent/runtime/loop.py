@@ -64,6 +64,7 @@ from crypto_agent.runtime.models import (
     ForwardPaperRuntimeStatus,
     ForwardPaperSessionSkipEvidence,
     ForwardPaperSessionSummary,
+    LiveApprovalStateArtifact,
     LiveAuthorityStateArtifact,
     LiveLaunchWindowArtifact,
     LiveMarketPreflightArtifact,
@@ -193,7 +194,23 @@ def _ensure_limited_live_foundation_artifacts(
                 reason_codes=["launch_window_not_configured"],
             ),
         )
-    if not paths.live_transmission_decision_path.exists():
+    if not paths.live_approval_state_path.exists():
+        _write_json_artifact(
+            paths.live_approval_state_path,
+            LiveApprovalStateArtifact(
+                runtime_id=runtime_id,
+                generated_at=generated_at,
+                summary="No live approvals are active. Limited-live transmission remains denied.",
+                reason_codes=["no_active_live_approval"],
+            ),
+        )
+    rewrite_transmission_decision = not paths.live_transmission_decision_path.exists()
+    if not rewrite_transmission_decision:
+        decision_payload = json.loads(
+            paths.live_transmission_decision_path.read_text(encoding="utf-8")
+        )
+        rewrite_transmission_decision = "approval_state_path" not in decision_payload
+    if rewrite_transmission_decision:
         _write_json_artifact(
             paths.live_transmission_decision_path,
             LiveTransmissionDecisionArtifact(
@@ -202,9 +219,11 @@ def _ensure_limited_live_foundation_artifacts(
                 reason_codes=[
                     "live_authority_disabled_by_default",
                     "launch_window_not_configured",
+                    "no_active_live_approval",
                 ],
                 authority_state_path=paths.live_authority_state_path,
                 launch_window_path=paths.live_launch_window_path,
+                approval_state_path=paths.live_approval_state_path,
             ),
         )
 
@@ -285,6 +304,7 @@ def build_forward_paper_runtime_paths(
         live_authority_state_path=runtime_dir / "live_authority_state.json",
         live_launch_window_path=runtime_dir / "live_launch_window.json",
         live_transmission_decision_path=runtime_dir / "live_transmission_decision.json",
+        live_approval_state_path=runtime_dir / "live_approval_state.json",
     )
 
 
@@ -443,6 +463,7 @@ def _initial_runtime_status(
         live_authority_state_path=paths.live_authority_state_path,
         live_launch_window_path=paths.live_launch_window_path,
         live_transmission_decision_path=paths.live_transmission_decision_path,
+        live_approval_state_path=paths.live_approval_state_path,
     )
 
 
@@ -528,6 +549,14 @@ def _ensure_runtime_status(
         return reconciled_status, reconciled_account_state, None, None
 
     status = _load_runtime_status(paths.status_path)
+    status = status.model_copy(
+        update={
+            "live_authority_state_path": paths.live_authority_state_path,
+            "live_launch_window_path": paths.live_launch_window_path,
+            "live_transmission_decision_path": paths.live_transmission_decision_path,
+            "live_approval_state_path": paths.live_approval_state_path,
+        }
+    )
     if status.execution_mode != execution_mode:
         raise ValueError("Existing runtime execution_mode does not match requested value")
     if status.market_source != market_source:
@@ -2301,6 +2330,7 @@ def run_forward_paper_runtime(
         live_authority_state_path=status.live_authority_state_path,
         live_launch_window_path=status.live_launch_window_path,
         live_transmission_decision_path=status.live_transmission_decision_path,
+        live_approval_state_path=status.live_approval_state_path,
         session_count=len(completed_sessions),
         session_summaries=completed_sessions,
     )

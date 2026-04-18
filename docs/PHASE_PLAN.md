@@ -210,3 +210,10 @@ Phase L1E adds deny-by-default limited-live gate evaluation using the L1D author
 
 Closeout doc:
 - `docs/PHASE_L1E_LIMITED_LIVE_GATE_EVALUATION.md`
+
+## Phase L1F — Live approval foundation
+
+Phase L1F adds the typed approval-state artifact and deny-by-default approval wiring required before any bounded limited-live transmission path can advance.
+
+Closeout doc:
+- `docs/PHASE_L1F_LIVE_APPROVAL_FOUNDATION.md`

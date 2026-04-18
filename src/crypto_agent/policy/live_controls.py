@@ -386,6 +386,7 @@ def build_limited_live_transmission_decision_artifact(
     runtime_id: str,
     authority_state_path: Path,
     launch_window_path: Path,
+    approval_state_path: Path,
     readiness_status: Literal["ready", "not_ready"],
     limited_live_gate_status: Literal["not_ready", "ready_for_review"],
     manual_controls: ManualControlState,
@@ -394,6 +395,7 @@ def build_limited_live_transmission_decision_artifact(
     generated_at: datetime,
 ) -> LiveTransmissionDecisionArtifact:
     from crypto_agent.runtime.models import (
+        LiveApprovalStateArtifact,
         LiveAuthorityStateArtifact,
         LiveLaunchWindowArtifact,
         LiveTransmissionDecisionArtifact,
@@ -404,6 +406,9 @@ def build_limited_live_transmission_decision_artifact(
     )
     launch_window = LiveLaunchWindowArtifact.model_validate(
         json.loads(launch_window_path.read_text(encoding="utf-8"))
+    )
+    approval_state = LiveApprovalStateArtifact.model_validate(
+        json.loads(approval_state_path.read_text(encoding="utf-8"))
     )
 
     reasons: list[str] = []
@@ -418,6 +423,12 @@ def build_limited_live_transmission_decision_artifact(
             launch_window.reason_codes
             if launch_window.reason_codes
             else ["launch_window_not_active"]
+        )
+    if approval_state.required_for_live_transmission and approval_state.active_approval_count < 1:
+        reasons.extend(
+            approval_state.reason_codes
+            if approval_state.reason_codes
+            else ["no_active_live_approval"]
         )
     if readiness_status != "ready":
         reasons.append("operator_not_ready")
@@ -442,4 +453,5 @@ def build_limited_live_transmission_decision_artifact(
         reason_codes=deduped_reasons,
         authority_state_path=authority_state_path,
         launch_window_path=launch_window_path,
+        approval_state_path=approval_state_path,
     )

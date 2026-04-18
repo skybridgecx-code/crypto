@@ -17,6 +17,7 @@ from crypto_agent.policy.live_controls import (
 from crypto_agent.runtime.models import (
     ForwardPaperRuntimeAccountState,
     ForwardPaperSessionSummary,
+    LiveApprovalStateArtifact,
     LiveAuthorityStateArtifact,
     LiveLaunchWindowArtifact,
 )
@@ -221,6 +222,7 @@ def test_post_run_controls_enforce_sandbox_testnet_suffix() -> None:
 def test_limited_live_gate_decision_stays_denied_by_default(tmp_path: Path) -> None:
     authority_path = tmp_path / "live_authority_state.json"
     launch_window_path = tmp_path / "live_launch_window.json"
+    approval_state_path = tmp_path / "live_approval_state.json"
 
     authority_path.write_text(
         json.dumps(
@@ -248,11 +250,25 @@ def test_limited_live_gate_decision_stays_denied_by_default(tmp_path: Path) -> N
         ),
         encoding="utf-8",
     )
+    approval_state_path.write_text(
+        json.dumps(
+            LiveApprovalStateArtifact(
+                runtime_id="runtime-demo",
+                generated_at=_ts(2026, 4, 11, 9, 0),
+                summary="No live approvals are active. Limited-live transmission remains denied.",
+                reason_codes=["no_active_live_approval"],
+            ).model_dump(mode="json"),
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
 
     decision = build_limited_live_transmission_decision_artifact(
         runtime_id="runtime-demo",
         authority_state_path=authority_path,
         launch_window_path=launch_window_path,
+        approval_state_path=approval_state_path,
         readiness_status="ready",
         limited_live_gate_status="ready_for_review",
         manual_controls=ManualControlState(
@@ -276,4 +292,6 @@ def test_limited_live_gate_decision_stays_denied_by_default(tmp_path: Path) -> N
     assert decision.transmission_authorized is False
     assert "live_authority_disabled_by_default" in decision.reason_codes
     assert "launch_window_not_configured" in decision.reason_codes
+    assert "no_active_live_approval" in decision.reason_codes
     assert "limited_live_transmission_not_implemented" in decision.reason_codes
+    assert decision.approval_state_path == approval_state_path
