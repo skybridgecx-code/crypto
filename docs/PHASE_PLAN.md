@@ -259,3 +259,10 @@ Phase L2A defines the smallest acceptable first real live transmission envelope 
 
 Closeout doc:
 - `docs/PHASE_L2A_BOUNDED_LIVE_TRANSMISSION_SCOPE_LOCK.md`
+
+## Phase L2B — Bounded live transmission adapter design
+
+Phase L2B defines the exact live adapter boundary for the first bounded real live transmission phase.
+
+Closeout doc:
+- `docs/PHASE_L2B_BOUNDED_LIVE_TRANSMISSION_ADAPTER_DESIGN.md`
