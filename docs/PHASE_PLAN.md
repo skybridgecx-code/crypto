@@ -301,3 +301,10 @@ Phase L2G freezes the evidence-review closeout procedure required after the firs
 
 Closeout doc:
 - `docs/PHASE_L2G_FIRST_BOUNDED_LIVE_TRANSMIT_EVIDENCE_REVIEW_CLOSEOUT.md`
+
+## Phase L2H — First bounded live transmit outcome closeout
+
+Phase L2H records the outcome of the first bounded real live transmitted order and whether a second attempt is allowed or blocked.
+
+Closeout doc:
+- `docs/PHASE_L2H_FIRST_BOUNDED_LIVE_TRANSMIT_OUTCOME_CLOSEOUT.md`
