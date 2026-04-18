@@ -161,3 +161,24 @@ Phase H2A records the current operator-facing boundary between shipped surfaces 
 
 Closeout doc:
 - `docs/PHASE_H2A_SHIPPED_VS_BLOCKED_SURFACE_AUDIT.md`
+
+## Phase H2B — Guard and flag coverage audit
+
+Phase H2B audits the shipped forward-runtime guardrails and operator-facing flag contract against the current docs and tests.
+
+Closeout doc:
+- `docs/PHASE_H2B_GUARD_FLAG_COVERAGE_AUDIT.md`
+
+## Phase H2C — Operator command reference audit
+
+Phase H2C audits the operator-facing command references in the frozen docs against the shipped CLI entrypoints and current guard contract.
+
+Closeout doc:
+- `docs/PHASE_H2C_OPERATOR_COMMAND_REFERENCE_AUDIT.md`
+
+## Phase L1A — Tiny limited-live scope lock
+
+Phase L1A locks the smallest acceptable first live-authority envelope without enabling live order transmission.
+
+Closeout doc:
+- `docs/PHASE_L1A_TINY_LIMITED_LIVE_SCOPE_LOCK.md`
