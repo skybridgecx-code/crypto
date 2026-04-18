@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
     from crypto_agent.runtime.models import (
         ForwardPaperRuntimeAccountState,
         ForwardPaperSessionSummary,
+        LiveTransmissionDecisionArtifact,
     )
 
 
@@ -376,4 +378,68 @@ def build_live_control_status_artifact(
         go_no_go_action=latest_decision.action,
         go_no_go_summary=latest_decision.summary,
         go_no_go_reason_codes=latest_decision.reason_codes,
+    )
+
+
+def build_limited_live_transmission_decision_artifact(
+    *,
+    runtime_id: str,
+    authority_state_path: Path,
+    launch_window_path: Path,
+    readiness_status: Literal["ready", "not_ready"],
+    limited_live_gate_status: Literal["not_ready", "ready_for_review"],
+    manual_controls: ManualControlState,
+    reconciliation_status: Literal["not_checked", "clean", "mismatch"],
+    latest_decision: LiveControlDecision,
+    generated_at: datetime,
+) -> LiveTransmissionDecisionArtifact:
+    from crypto_agent.runtime.models import (
+        LiveAuthorityStateArtifact,
+        LiveLaunchWindowArtifact,
+        LiveTransmissionDecisionArtifact,
+    )
+
+    authority_state = LiveAuthorityStateArtifact.model_validate(
+        json.loads(authority_state_path.read_text(encoding="utf-8"))
+    )
+    launch_window = LiveLaunchWindowArtifact.model_validate(
+        json.loads(launch_window_path.read_text(encoding="utf-8"))
+    )
+
+    reasons: list[str] = []
+    if not authority_state.authority_enabled:
+        reasons.extend(
+            authority_state.reason_codes
+            if authority_state.reason_codes
+            else ["live_authority_disabled"]
+        )
+    if launch_window.state != "active":
+        reasons.extend(
+            launch_window.reason_codes
+            if launch_window.reason_codes
+            else ["launch_window_not_active"]
+        )
+    if readiness_status != "ready":
+        reasons.append("operator_not_ready")
+    if limited_live_gate_status != "ready_for_review":
+        reasons.append("limited_live_gate_not_ready_for_review")
+    if manual_controls.halt_active:
+        reasons.append("manual_halt_active")
+    if reconciliation_status != "clean":
+        reasons.append("reconciliation_not_clean")
+    if latest_decision.action != "go":
+        reasons.append(f"live_control_not_go:{latest_decision.action}")
+    reasons.append("limited_live_transmission_not_implemented")
+
+    deduped_reasons: list[str] = []
+    for reason in reasons:
+        if reason not in deduped_reasons:
+            deduped_reasons.append(reason)
+
+    return LiveTransmissionDecisionArtifact(
+        runtime_id=runtime_id,
+        generated_at=generated_at,
+        reason_codes=deduped_reasons,
+        authority_state_path=authority_state_path,
+        launch_window_path=launch_window_path,
     )

@@ -1,18 +1,24 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 from crypto_agent.evaluation.models import ReplayPnLSummary
 from crypto_agent.execution.models import ExecutionRequestArtifact, VenueOrderRequest
 from crypto_agent.policy.live_controls import (
     LiveControlConfig,
+    LiveControlDecision,
     ManualControlState,
+    build_limited_live_transmission_decision_artifact,
     evaluate_post_run_controls,
     evaluate_preflight_controls,
 )
 from crypto_agent.runtime.models import (
     ForwardPaperRuntimeAccountState,
     ForwardPaperSessionSummary,
+    LiveAuthorityStateArtifact,
+    LiveLaunchWindowArtifact,
 )
 
 
@@ -210,3 +216,64 @@ def test_post_run_controls_enforce_sandbox_testnet_suffix() -> None:
 
     assert decision.action == "no_go"
     assert decision.reason_codes == ["sandbox_venue_not_testnet"]
+
+
+def test_limited_live_gate_decision_stays_denied_by_default(tmp_path: Path) -> None:
+    authority_path = tmp_path / "live_authority_state.json"
+    launch_window_path = tmp_path / "live_launch_window.json"
+
+    authority_path.write_text(
+        json.dumps(
+            LiveAuthorityStateArtifact(
+                runtime_id="runtime-demo",
+                generated_at=_ts(2026, 4, 11, 9, 0),
+                summary="Limited-live authority is disabled by default.",
+                reason_codes=["live_authority_disabled_by_default"],
+            ).model_dump(mode="json"),
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    launch_window_path.write_text(
+        json.dumps(
+            LiveLaunchWindowArtifact(
+                runtime_id="runtime-demo",
+                generated_at=_ts(2026, 4, 11, 9, 0),
+                summary="No limited-live launch window is configured.",
+                reason_codes=["launch_window_not_configured"],
+            ).model_dump(mode="json"),
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    decision = build_limited_live_transmission_decision_artifact(
+        runtime_id="runtime-demo",
+        authority_state_path=authority_path,
+        launch_window_path=launch_window_path,
+        readiness_status="ready",
+        limited_live_gate_status="ready_for_review",
+        manual_controls=ManualControlState(
+            runtime_id="runtime-demo",
+            updated_at=_ts(2026, 4, 11, 9, 0),
+            halt_active=False,
+        ),
+        reconciliation_status="clean",
+        latest_decision=LiveControlDecision(
+            runtime_id="runtime-demo",
+            session_id="session-0001",
+            checked_at=_ts(2026, 4, 11, 9, 1),
+            stage="preflight",
+            execution_mode="paper",
+            action="go",
+            summary="Controls passed.",
+        ),
+        generated_at=_ts(2026, 4, 11, 9, 1),
+    )
+
+    assert decision.transmission_authorized is False
+    assert "live_authority_disabled_by_default" in decision.reason_codes
+    assert "launch_window_not_configured" in decision.reason_codes
+    assert "limited_live_transmission_not_implemented" in decision.reason_codes

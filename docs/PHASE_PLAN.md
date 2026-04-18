@@ -203,3 +203,10 @@ Phase L1D adds the deny-by-default limited-live foundation artifacts and runtime
 
 Closeout doc:
 - `docs/PHASE_L1D_LIMITED_LIVE_IMPLEMENTATION_FOUNDATION.md`
+
+## Phase L1E — Limited-live gate evaluation
+
+Phase L1E adds deny-by-default limited-live gate evaluation using the L1D authority and launch-window artifacts.
+
+Closeout doc:
+- `docs/PHASE_L1E_LIMITED_LIVE_GATE_EVALUATION.md`
