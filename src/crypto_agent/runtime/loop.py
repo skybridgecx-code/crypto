@@ -18,6 +18,10 @@ from crypto_agent.execution.models import (
     ExecutionRequestArtifact,
     ExecutionResultArtifact,
     ExecutionStatusArtifact,
+    LiveTransmissionRequest,
+    LiveTransmissionRequestArtifact,
+    LiveTransmissionResultArtifact,
+    LiveTransmissionStateArtifact,
 )
 from crypto_agent.execution.sandbox import execute_sandbox_requests
 from crypto_agent.execution.shadow import (
@@ -139,6 +143,18 @@ def _session_execution_result_path(sessions_dir: Path, session_id: str) -> Path:
 
 def _session_execution_status_path(sessions_dir: Path, session_id: str) -> Path:
     return sessions_dir / f"{session_id}.execution_status.json"
+
+
+def _session_live_transmission_request_path(sessions_dir: Path, session_id: str) -> Path:
+    return sessions_dir / f"{session_id}.live_transmission_request.json"
+
+
+def _session_live_transmission_result_path(sessions_dir: Path, session_id: str) -> Path:
+    return sessions_dir / f"{session_id}.live_transmission_result.json"
+
+
+def _session_live_transmission_state_path(sessions_dir: Path, session_id: str) -> Path:
+    return sessions_dir / f"{session_id}.live_transmission_state.json"
 
 
 def _session_control_decision_path(sessions_dir: Path, session_id: str) -> Path:
@@ -350,6 +366,12 @@ def _load_live_control_status(path: Path) -> LiveControlStatusArtifact:
     return LiveControlStatusArtifact.model_validate(json.loads(path.read_text(encoding="utf-8")))
 
 
+def _load_live_transmission_decision(path: Path) -> LiveTransmissionDecisionArtifact:
+    return LiveTransmissionDecisionArtifact.model_validate(
+        json.loads(path.read_text(encoding="utf-8"))
+    )
+
+
 def _load_live_market_preflight_artifact(path: Path) -> LiveMarketPreflightArtifact | None:
     if not path.exists():
         return None
@@ -500,6 +522,51 @@ def _write_execution_artifact(
     path.write_text(
         json.dumps(artifact.model_dump(mode="json"), indent=2, sort_keys=True),
         encoding="utf-8",
+    )
+
+
+def _build_live_transmission_request_artifact(
+    *,
+    runtime_id: str,
+    session_id: str,
+    run_id: str,
+    generated_at: datetime,
+    request_artifact: ExecutionRequestArtifact | None,
+) -> LiveTransmissionRequestArtifact:
+    requests: list[LiveTransmissionRequest] = []
+    rejected_request_count = 0
+    if request_artifact is not None:
+        for request in request_artifact.requests:
+            requests.append(
+                LiveTransmissionRequest(
+                    request_id=request.request_id,
+                    client_order_id=request.client_order_id,
+                    venue=request.venue,
+                    proposal_id=request.proposal_id,
+                    intent_id=request.intent_id,
+                    symbol=request.symbol,
+                    side=request.side,
+                    order_type=request.order_type,
+                    time_in_force=request.time_in_force,
+                    quantity=request.quantity,
+                    price=request.price,
+                    reference_price=request.reference_price,
+                    estimated_notional_usd=request.estimated_notional_usd,
+                    min_notional_usd=request.min_notional_usd,
+                    normalization_status=request.normalization_status,
+                    normalization_reject_reason=request.normalization_reject_reason,
+                )
+            )
+            if request.normalization_status == "rejected":
+                rejected_request_count += 1
+    return LiveTransmissionRequestArtifact(
+        runtime_id=runtime_id,
+        session_id=session_id,
+        run_id=run_id,
+        generated_at=generated_at,
+        request_count=len(requests),
+        rejected_request_count=rejected_request_count,
+        requests=requests,
     )
 
 
@@ -1559,6 +1626,32 @@ def _session_summary_with_request_artifact(
     )
 
 
+def _session_summary_with_live_transmission_artifacts(
+    *,
+    session_summary: ForwardPaperSessionSummary,
+    request_path: Path,
+    result_path: Path,
+    state_path: Path,
+) -> ForwardPaperSessionSummary:
+    artifact_paths_exist = dict(session_summary.artifact_paths_exist)
+    artifact_paths_exist.update(
+        {
+            "live_transmission_request_path": request_path.exists(),
+            "live_transmission_result_path": result_path.exists(),
+            "live_transmission_state_path": state_path.exists(),
+        }
+    )
+    return session_summary.model_copy(
+        update={
+            "live_transmission_request_path": request_path,
+            "live_transmission_result_path": result_path,
+            "live_transmission_state_path": state_path,
+            "artifact_paths_exist": artifact_paths_exist,
+            "all_artifact_paths_exist": all(artifact_paths_exist.values()),
+        }
+    )
+
+
 def _session_summary_with_control_decision(
     *,
     session_summary: ForwardPaperSessionSummary,
@@ -1836,6 +1929,67 @@ def _materialize_execution_mode_artifacts(
         status_path=status_path,
         request_artifact=request_artifact,
         status_artifact=status_artifact,
+    )
+
+
+def _materialize_limited_live_transmission_artifacts(
+    *,
+    runtime_id: str,
+    session_summary: ForwardPaperSessionSummary,
+    sessions_dir: Path,
+    observed_at: datetime,
+    decision: LiveTransmissionDecisionArtifact,
+    request_artifact: ExecutionRequestArtifact | None,
+) -> ForwardPaperSessionSummary:
+    if session_summary.run_id is None:
+        raise ValueError("Limited-live transmission artifacts require session run_id.")
+    request_path = _session_live_transmission_request_path(sessions_dir, session_summary.session_id)
+    result_path = _session_live_transmission_result_path(sessions_dir, session_summary.session_id)
+    state_path = _session_live_transmission_state_path(sessions_dir, session_summary.session_id)
+
+    request_model = _build_live_transmission_request_artifact(
+        runtime_id=runtime_id,
+        session_id=session_summary.session_id,
+        run_id=session_summary.run_id,
+        generated_at=observed_at,
+        request_artifact=request_artifact,
+    )
+    reason_codes = sorted(
+        {
+            *decision.reason_codes,
+            "live_adapter_call_not_implemented_l2d",
+            "live_transmission_placeholder_no_submission",
+        }
+    )
+    result_model = LiveTransmissionResultArtifact(
+        runtime_id=runtime_id,
+        session_id=session_summary.session_id,
+        run_id=session_summary.run_id,
+        generated_at=observed_at,
+        summary=(
+            "Limited-live boundary authorized, but adapter call is intentionally not "
+            "implemented in this phase."
+        ),
+        reason_codes=reason_codes,
+    )
+    state_model = LiveTransmissionStateArtifact(
+        runtime_id=runtime_id,
+        session_id=session_summary.session_id,
+        run_id=session_summary.run_id,
+        generated_at=observed_at,
+        summary="No live submission was attempted in this bounded artifact-foundation phase.",
+        reason_codes=reason_codes,
+    )
+
+    # Write in fixed order for deterministic operator/audit flow.
+    _write_json_artifact(request_path, request_model)
+    _write_json_artifact(result_path, result_model)
+    _write_json_artifact(state_path, state_model)
+    return _session_summary_with_live_transmission_artifacts(
+        session_summary=session_summary,
+        request_path=request_path,
+        result_path=result_path,
+        state_path=state_path,
     )
 
 
@@ -2282,6 +2436,26 @@ def run_forward_paper_runtime(
                     latest_decision=post_run_decision,
                     updated_at=completed_session.completed_at or scheduled_at,
                 )
+                if status.live_transmission_decision_path is None:
+                    raise ValueError(
+                        "Limited-live transmission decision path must exist before artifact "
+                        "materialization."
+                    )
+                transmission_decision = _load_live_transmission_decision(
+                    status.live_transmission_decision_path
+                )
+                if (
+                    status.market_source == "binance_spot"
+                    and transmission_decision.transmission_authorized
+                ):
+                    completed_session = _materialize_limited_live_transmission_artifacts(
+                        runtime_id=runtime_id,
+                        session_summary=completed_session,
+                        sessions_dir=status.sessions_dir,
+                        observed_at=completed_session.completed_at or scheduled_at,
+                        decision=transmission_decision,
+                        request_artifact=request_artifact,
+                    )
 
                 if execution_mode != "paper" and post_run_decision.action == "go":
                     completed_session = _materialize_execution_mode_artifacts(

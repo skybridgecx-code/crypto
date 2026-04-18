@@ -273,3 +273,10 @@ Phase L2C maps the exact code touchpoints for the first bounded live transmissio
 
 Closeout doc:
 - `docs/PHASE_L2C_BOUNDED_LIVE_TRANSMISSION_IMPLEMENTATION_MAP.md`
+
+## Phase L2D — Bounded live transmission artifact foundation
+
+Phase L2D adds bounded live request/result/state artifact foundations at the runtime seam without enabling live transmission.
+
+Closeout doc:
+- `docs/PHASE_L2D_BOUNDED_LIVE_TRANSMISSION_ARTIFACT_FOUNDATION.md`

@@ -140,3 +140,78 @@ class ExecutionStatusArtifact(BaseModel):
     status_count: int = Field(ge=0)
     terminal_status_count: int = Field(ge=0)
     statuses: list[VenueOrderState] = Field(default_factory=list)
+
+
+class LiveTransmissionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    client_order_id: str
+    venue: str
+    proposal_id: str
+    intent_id: str
+    symbol: str
+    side: str
+    order_type: str
+    time_in_force: str
+    quantity: float = Field(gt=0)
+    price: float | None = Field(default=None, gt=0)
+    reference_price: float = Field(gt=0)
+    estimated_notional_usd: float = Field(gt=0)
+    min_notional_usd: float = Field(ge=0)
+    normalization_status: Literal["ready", "rejected"]
+    normalization_reject_reason: str | None = None
+
+
+class LiveTransmissionRequestArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    session_id: str
+    run_id: str
+    generated_at: datetime
+    request_count: int = Field(ge=0)
+    rejected_request_count: int = Field(ge=0)
+    requests: list[LiveTransmissionRequest] = Field(default_factory=list)
+
+    @field_validator("generated_at")
+    @classmethod
+    def normalize_generated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
+class LiveTransmissionResultArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    session_id: str
+    run_id: str
+    generated_at: datetime
+    adapter_call_attempted: bool = False
+    submission_status: Literal["not_submitted"] = "not_submitted"
+    summary: str
+    reason_codes: list[str] = Field(default_factory=list)
+
+    @field_validator("generated_at")
+    @classmethod
+    def normalize_generated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
+class LiveTransmissionStateArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    session_id: str
+    run_id: str
+    generated_at: datetime
+    state: Literal["not_submitted_terminal_blocked"] = "not_submitted_terminal_blocked"
+    terminal: bool = True
+    submission_present: bool = False
+    summary: str
+    reason_codes: list[str] = Field(default_factory=list)
+
+    @field_validator("generated_at")
+    @classmethod
+    def normalize_generated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)

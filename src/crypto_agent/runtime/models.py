@@ -202,6 +202,9 @@ class ForwardPaperSessionSummary(BaseModel):
     execution_request_path: Path | None = None
     execution_result_path: Path | None = None
     execution_status_path: Path | None = None
+    live_transmission_request_path: Path | None = None
+    live_transmission_result_path: Path | None = None
+    live_transmission_state_path: Path | None = None
     skip_evidence_path: Path | None = None
     control_decision_path: Path | None = None
     control_action: Literal["go", "no_go", "manual_approval_required"] | None = None

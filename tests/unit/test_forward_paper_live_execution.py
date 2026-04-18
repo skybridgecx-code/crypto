@@ -11,6 +11,9 @@ from crypto_agent.execution.models import (
     ExecutionRequestArtifact,
     ExecutionResultArtifact,
     ExecutionStatusArtifact,
+    LiveTransmissionRequestArtifact,
+    LiveTransmissionResultArtifact,
+    LiveTransmissionStateArtifact,
     VenueExecutionAck,
     VenueOrderState,
 )
@@ -313,11 +316,26 @@ def test_limited_live_boundary_authorizes_without_affecting_shadow_path(tmp_path
     results = ExecutionResultArtifact.model_validate(
         json.loads(Path(session.execution_result_path).read_text(encoding="utf-8"))
     )
+    live_request = LiveTransmissionRequestArtifact.model_validate(
+        json.loads(Path(session.live_transmission_request_path).read_text(encoding="utf-8"))
+    )
+    live_result = LiveTransmissionResultArtifact.model_validate(
+        json.loads(Path(session.live_transmission_result_path).read_text(encoding="utf-8"))
+    )
+    live_state = LiveTransmissionStateArtifact.model_validate(
+        json.loads(Path(session.live_transmission_state_path).read_text(encoding="utf-8"))
+    )
 
     assert decision.decision == "authorized"
     assert decision.transmission_authorized is True
     assert session.execution_mode == "shadow"
     assert all(result.status == "would_send" for result in results.results)
+    assert live_request.request_count == results.result_count
+    assert live_result.adapter_call_attempted is False
+    assert live_result.submission_status == "not_submitted"
+    assert live_state.state == "not_submitted_terminal_blocked"
+    assert live_state.terminal is True
+    assert live_result.generated_at <= live_state.generated_at
 
 
 def test_limited_live_boundary_authorizes_without_affecting_sandbox_path(tmp_path: Path) -> None:
@@ -399,11 +417,86 @@ def test_limited_live_boundary_authorizes_without_affecting_sandbox_path(tmp_pat
     statuses = ExecutionStatusArtifact.model_validate(
         json.loads(Path(session.execution_status_path).read_text(encoding="utf-8"))
     )
+    live_request = LiveTransmissionRequestArtifact.model_validate(
+        json.loads(Path(session.live_transmission_request_path).read_text(encoding="utf-8"))
+    )
+    live_result = LiveTransmissionResultArtifact.model_validate(
+        json.loads(Path(session.live_transmission_result_path).read_text(encoding="utf-8"))
+    )
+    live_state = LiveTransmissionStateArtifact.model_validate(
+        json.loads(Path(session.live_transmission_state_path).read_text(encoding="utf-8"))
+    )
 
     assert decision.decision == "authorized"
     assert decision.transmission_authorized is True
     assert session.execution_mode == "sandbox"
     assert statuses.statuses[0].state == "filled"
+    assert live_request.request_count >= 1
+    assert live_result.adapter_call_attempted is False
+    assert live_result.submission_status == "not_submitted"
+    assert live_state.submission_present is False
+
+
+def test_limited_live_boundary_authorized_writes_live_artifacts_in_order(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    runtime_id = "forward-live-shadow-live-artifacts-order"
+    tick_time = _ts(2026, 4, 3, 16, 4)
+    _write_active_live_approval(tmp_path=tmp_path, runtime_id=runtime_id, generated_at=tick_time)
+    readiness = default_live_readiness_status(
+        runtime_id=runtime_id,
+        updated_at=tick_time,
+    ).model_copy(update={"limited_live_gate_status": "ready_for_review"})
+    controls = _permissive_live_controls(runtime_id=runtime_id, updated_at=tick_time)
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id=runtime_id,
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=1,
+        tick_times=[tick_time],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_live_adapter(),
+        limited_live_authority_enabled=True,
+        live_launch_window_starts_at=_ts(2026, 4, 3, 16, 0),
+        live_launch_window_ends_at=_ts(2026, 4, 3, 16, 10),
+        live_control_config=controls,
+        readiness_status=readiness,
+    )
+
+    session = result.session_summaries[0]
+    assert session.live_transmission_request_path is not None
+    assert session.live_transmission_result_path is not None
+    assert session.live_transmission_state_path is not None
+
+    live_request_path = Path(session.live_transmission_request_path)
+    live_result_path = Path(session.live_transmission_result_path)
+    live_state_path = Path(session.live_transmission_state_path)
+    live_request = LiveTransmissionRequestArtifact.model_validate(
+        json.loads(live_request_path.read_text(encoding="utf-8"))
+    )
+    live_result = LiveTransmissionResultArtifact.model_validate(
+        json.loads(live_result_path.read_text(encoding="utf-8"))
+    )
+    live_state = LiveTransmissionStateArtifact.model_validate(
+        json.loads(live_state_path.read_text(encoding="utf-8"))
+    )
+
+    assert live_request.request_count >= 1
+    assert live_result.adapter_call_attempted is False
+    assert live_result.submission_status == "not_submitted"
+    assert live_state.state == "not_submitted_terminal_blocked"
+    assert live_state.submission_present is False
+    assert (
+        live_request_path.stat().st_mtime_ns
+        <= live_result_path.stat().st_mtime_ns
+        <= live_state_path.stat().st_mtime_ns
+    )
 
 
 def test_forward_runtime_replay_sandbox_requires_fixture_rehearsal_flag(
