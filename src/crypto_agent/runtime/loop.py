@@ -40,6 +40,7 @@ from crypto_agent.policy.live_controls import (
     LiveControlDecision,
     LiveControlStatusArtifact,
     ManualControlState,
+    build_limited_live_transmission_decision_artifact,
     build_live_control_status_artifact,
     default_live_control_config,
     default_manual_control_state,
@@ -1615,8 +1616,46 @@ def _persist_control_status(
             "updated_at": updated_at,
         }
     )
+    _refresh_limited_live_transmission_boundary(
+        status=updated_status,
+        readiness=readiness,
+        manual_controls=manual_controls,
+        latest_decision=latest_decision,
+        updated_at=updated_at,
+    )
     _persist_runtime_status(updated_status)
     return updated_status
+
+
+def _refresh_limited_live_transmission_boundary(
+    *,
+    status: ForwardPaperRuntimeStatus,
+    readiness: LiveReadinessStatus,
+    manual_controls: ManualControlState,
+    latest_decision: LiveControlDecision,
+    updated_at: datetime,
+) -> None:
+    if (
+        status.live_authority_state_path is None
+        or status.live_launch_window_path is None
+        or status.live_approval_state_path is None
+        or status.live_transmission_decision_path is None
+    ):
+        raise ValueError("Limited-live foundation artifacts must exist before boundary refresh.")
+
+    decision = build_limited_live_transmission_decision_artifact(
+        runtime_id=status.runtime_id,
+        authority_state_path=status.live_authority_state_path,
+        launch_window_path=status.live_launch_window_path,
+        approval_state_path=status.live_approval_state_path,
+        readiness_status=readiness.status,
+        limited_live_gate_status=readiness.limited_live_gate_status,
+        manual_controls=manual_controls,
+        reconciliation_status=status.reconciliation_status,
+        latest_decision=latest_decision,
+        generated_at=updated_at,
+    )
+    _write_json_artifact(status.live_transmission_decision_path, decision)
 
 
 def _ensure_live_control_status_artifact(

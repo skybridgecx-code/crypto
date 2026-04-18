@@ -293,7 +293,6 @@ def test_limited_live_gate_decision_stays_denied_by_default(tmp_path: Path) -> N
     assert "live_authority_disabled_by_default" in decision.reason_codes
     assert "launch_window_not_configured" in decision.reason_codes
     assert "no_active_live_approval" in decision.reason_codes
-    assert "limited_live_transmission_not_implemented" in decision.reason_codes
     assert decision.approval_state_path == approval_state_path
 
 
@@ -380,10 +379,10 @@ def test_limited_live_gate_decision_stays_denied_when_window_not_active(
 
     assert decision.transmission_authorized is False
     assert "launch_window_not_active_yet" in decision.reason_codes
-    assert "limited_live_transmission_not_implemented" in decision.reason_codes
+    assert decision.decision == "denied"
 
 
-def test_limited_live_gate_stays_denied_with_ready_inputs(
+def test_limited_live_gate_authorizes_with_ready_inputs(
     tmp_path: Path,
 ) -> None:
     authority_path = tmp_path / "live_authority_state.json"
@@ -465,5 +464,6 @@ def test_limited_live_gate_stays_denied_with_ready_inputs(
         generated_at=_ts(2026, 4, 13, 9, 1),
     )
 
-    assert decision.transmission_authorized is False
-    assert decision.reason_codes == ["limited_live_transmission_not_implemented"]
+    assert decision.decision == "authorized"
+    assert decision.transmission_authorized is True
+    assert decision.reason_codes == []

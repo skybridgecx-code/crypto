@@ -15,8 +15,14 @@ from crypto_agent.execution.models import (
     VenueOrderState,
 )
 from crypto_agent.market_data.live_adapter import BinanceSpotLiveMarketDataAdapter
+from crypto_agent.policy.live_controls import LiveControlConfig
+from crypto_agent.policy.readiness import default_live_readiness_status
 from crypto_agent.runtime.loop import run_forward_paper_runtime
-from crypto_agent.runtime.models import ForwardPaperRuntimeStatus
+from crypto_agent.runtime.models import (
+    ForwardPaperRuntimeStatus,
+    LiveApprovalStateArtifact,
+    LiveTransmissionDecisionArtifact,
+)
 
 FIXTURES_DIR = Path("tests/fixtures")
 
@@ -107,6 +113,46 @@ def _live_adapter() -> BinanceSpotLiveMarketDataAdapter:
         ]
     )
     return BinanceSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+
+def _write_active_live_approval(
+    *,
+    tmp_path: Path,
+    runtime_id: str,
+    generated_at: datetime,
+) -> Path:
+    approval_path = tmp_path / "runs" / runtime_id / "live_approval_state.json"
+    approval_path.parent.mkdir(parents=True, exist_ok=True)
+    approval_path.write_text(
+        json.dumps(
+            LiveApprovalStateArtifact(
+                runtime_id=runtime_id,
+                generated_at=generated_at,
+                required_for_live_transmission=True,
+                active_approval_count=1,
+                approvals=[],
+                summary="One live approval is active for boundary testing.",
+                reason_codes=[],
+            ).model_dump(mode="json"),
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    return approval_path
+
+
+def _permissive_live_controls(runtime_id: str, updated_at: datetime) -> LiveControlConfig:
+    return LiveControlConfig(
+        runtime_id=runtime_id,
+        updated_at=updated_at,
+        symbol_allowlist=["BTCUSDT"],
+        per_symbol_max_notional_usd={"BTCUSDT": 1_000_000.0},
+        max_session_loss_fraction=1.0,
+        max_daily_loss_fraction=1.0,
+        max_open_positions=10,
+        manual_approval_above_notional_usd=1_000_000.0,
+    )
 
 
 def test_forward_runtime_live_shadow_mode_writes_execution_artifacts(tmp_path: Path) -> None:
@@ -225,6 +271,138 @@ def test_forward_runtime_live_sandbox_mode_writes_adapter_evidence(tmp_path: Pat
     assert session.execution_mode == "sandbox"
     assert requests.request_count >= 1
     assert results.results[0].status == "accepted"
+    assert statuses.statuses[0].state == "filled"
+
+
+def test_limited_live_boundary_authorizes_without_affecting_shadow_path(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    runtime_id = "forward-live-shadow-boundary"
+    tick_time = _ts(2026, 4, 3, 16, 4)
+    _write_active_live_approval(tmp_path=tmp_path, runtime_id=runtime_id, generated_at=tick_time)
+    readiness = default_live_readiness_status(
+        runtime_id=runtime_id,
+        updated_at=tick_time,
+    ).model_copy(update={"limited_live_gate_status": "ready_for_review"})
+    controls = _permissive_live_controls(runtime_id=runtime_id, updated_at=tick_time)
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id=runtime_id,
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=1,
+        tick_times=[tick_time],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_live_adapter(),
+        limited_live_authority_enabled=True,
+        live_launch_window_starts_at=_ts(2026, 4, 3, 16, 0),
+        live_launch_window_ends_at=_ts(2026, 4, 3, 16, 10),
+        live_control_config=controls,
+        readiness_status=readiness,
+    )
+
+    decision = LiveTransmissionDecisionArtifact.model_validate(
+        json.loads(result.live_transmission_decision_path.read_text(encoding="utf-8"))
+    )
+    session = result.session_summaries[0]
+    results = ExecutionResultArtifact.model_validate(
+        json.loads(Path(session.execution_result_path).read_text(encoding="utf-8"))
+    )
+
+    assert decision.decision == "authorized"
+    assert decision.transmission_authorized is True
+    assert session.execution_mode == "shadow"
+    assert all(result.status == "would_send" for result in results.results)
+
+
+def test_limited_live_boundary_authorizes_without_affecting_sandbox_path(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    runtime_id = "forward-live-sandbox-boundary"
+    tick_time = _ts(2026, 4, 3, 16, 4)
+    _write_active_live_approval(tmp_path=tmp_path, runtime_id=runtime_id, generated_at=tick_time)
+    readiness = default_live_readiness_status(
+        runtime_id=runtime_id,
+        updated_at=tick_time,
+    ).model_copy(update={"limited_live_gate_status": "ready_for_review"})
+    controls = _permissive_live_controls(runtime_id=runtime_id, updated_at=tick_time)
+    adapter = ScriptedSandboxExecutionAdapter(
+        submit_fn=lambda request: VenueExecutionAck(
+            request_id=request.request_id,
+            client_order_id=request.client_order_id,
+            venue=request.venue,
+            execution_mode="sandbox",
+            sandbox=True,
+            intent_id=request.intent_id,
+            status="accepted",
+            venue_order_id="sandbox-order-1",
+            observed_at=tick_time,
+        ),
+        fetch_state_fn=lambda client_order_id, request: VenueOrderState(
+            request_id=request.request_id,
+            client_order_id=client_order_id,
+            venue=request.venue,
+            execution_mode="sandbox",
+            sandbox=True,
+            intent_id=request.intent_id,
+            venue_order_id="sandbox-order-1",
+            state="filled",
+            terminal=True,
+            filled_quantity=request.quantity,
+            average_fill_price=request.reference_price,
+            updated_at=tick_time,
+        ),
+        cancel_fn=lambda client_order_id, request: VenueOrderState(
+            request_id=request.request_id,
+            client_order_id=client_order_id,
+            venue=request.venue,
+            execution_mode="sandbox",
+            sandbox=True,
+            intent_id=request.intent_id,
+            venue_order_id="sandbox-order-1",
+            state="canceled",
+            terminal=True,
+            updated_at=tick_time,
+        ),
+    )
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id=runtime_id,
+        session_interval_seconds=60,
+        execution_mode="sandbox",
+        max_sessions=1,
+        tick_times=[tick_time],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_live_adapter(),
+        sandbox_execution_adapter=adapter,
+        limited_live_authority_enabled=True,
+        live_launch_window_starts_at=_ts(2026, 4, 3, 16, 0),
+        live_launch_window_ends_at=_ts(2026, 4, 3, 16, 10),
+        live_control_config=controls,
+        readiness_status=readiness,
+    )
+
+    decision = LiveTransmissionDecisionArtifact.model_validate(
+        json.loads(result.live_transmission_decision_path.read_text(encoding="utf-8"))
+    )
+    session = result.session_summaries[0]
+    statuses = ExecutionStatusArtifact.model_validate(
+        json.loads(Path(session.execution_status_path).read_text(encoding="utf-8"))
+    )
+
+    assert decision.decision == "authorized"
+    assert decision.transmission_authorized is True
+    assert session.execution_mode == "sandbox"
     assert statuses.statuses[0].state == "filled"
 
 

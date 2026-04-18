@@ -531,7 +531,7 @@ class LiveTransmissionDecisionArtifact(BaseModel):
 
     runtime_id: str
     generated_at: datetime
-    decision: Literal["denied"] = "denied"
+    decision: Literal["authorized", "denied"] = "denied"
     transmission_authorized: bool = False
     reason_codes: list[str] = Field(default_factory=list)
     authority_state_path: Path

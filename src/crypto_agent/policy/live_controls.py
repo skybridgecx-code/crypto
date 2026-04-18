@@ -440,7 +440,6 @@ def build_limited_live_transmission_decision_artifact(
         reasons.append("reconciliation_not_clean")
     if latest_decision.action != "go":
         reasons.append(f"live_control_not_go:{latest_decision.action}")
-    reasons.append("limited_live_transmission_not_implemented")
 
     deduped_reasons: list[str] = []
     for reason in reasons:
@@ -450,6 +449,8 @@ def build_limited_live_transmission_decision_artifact(
     return LiveTransmissionDecisionArtifact(
         runtime_id=runtime_id,
         generated_at=generated_at,
+        decision="authorized" if not deduped_reasons else "denied",
+        transmission_authorized=not deduped_reasons,
         reason_codes=deduped_reasons,
         authority_state_path=authority_state_path,
         launch_window_path=launch_window_path,

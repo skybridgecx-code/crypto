@@ -231,3 +231,10 @@ Phase L1H upgrades the limited-live authority artifact from a static default int
 
 Closeout doc:
 - `docs/PHASE_L1H_LIMITED_LIVE_ENABLE_TOGGLE.md`
+
+## Phase L1I — Real transmission boundary wiring
+
+Phase L1I wires the explicit limited-live transmission boundary into the forward runtime execution seam while keeping the repository without executable live trading behavior.
+
+Closeout doc:
+- `docs/PHASE_L1I_REAL_TRANSMISSION_BOUNDARY_WIRING.md`
