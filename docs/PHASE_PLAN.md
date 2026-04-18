@@ -182,3 +182,10 @@ Phase L1A locks the smallest acceptable first live-authority envelope without en
 
 Closeout doc:
 - `docs/PHASE_L1A_TINY_LIMITED_LIVE_SCOPE_LOCK.md`
+
+## Phase L1B — Limited-live authority design
+
+Phase L1B defines the bounded control surface required before any live-order transmission code is added.
+
+Closeout doc:
+- `docs/PHASE_L1B_LIMITED_LIVE_AUTHORITY_DESIGN.md`
