@@ -5,7 +5,14 @@ from datetime import UTC, datetime
 from typing import Literal, Protocol
 from uuid import NAMESPACE_URL, uuid5
 
-from crypto_agent.execution.models import VenueExecutionAck, VenueOrderRequest, VenueOrderState
+from crypto_agent.execution.models import (
+    LiveTransmissionAck,
+    LiveTransmissionOrderState,
+    LiveTransmissionRequest,
+    VenueExecutionAck,
+    VenueOrderRequest,
+    VenueOrderState,
+)
 from crypto_agent.market_data.live_models import LiveMarketState
 from crypto_agent.market_data.venue_constraints import VenueSymbolConstraints
 from crypto_agent.types import OrderIntent
@@ -34,6 +41,26 @@ class SandboxExecutionAdapter(Protocol):
         client_order_id: str,
         request: VenueOrderRequest,
     ) -> VenueOrderState: ...
+
+
+class LiveExecutionAdapter(Protocol):
+    venue: str
+
+    def submit_order(self, request: LiveTransmissionRequest) -> LiveTransmissionAck: ...
+
+    def fetch_order_state(
+        self,
+        *,
+        client_order_id: str,
+        request: LiveTransmissionRequest,
+    ) -> LiveTransmissionOrderState: ...
+
+    def cancel_order(
+        self,
+        *,
+        client_order_id: str,
+        request: LiveTransmissionRequest,
+    ) -> LiveTransmissionOrderState: ...
 
 
 class ScriptedSandboxExecutionAdapter:
@@ -85,6 +112,40 @@ class BinanceSpotSandboxExecutionAdapter(ScriptedSandboxExecutionAdapter):
             fetch_state_fn=fetch_state_fn,
             cancel_fn=cancel_fn,
         )
+
+
+class ScriptedLiveExecutionAdapter:
+    def __init__(
+        self,
+        *,
+        venue: str = "binance_spot",
+        submit_fn: Callable[[LiveTransmissionRequest], LiveTransmissionAck],
+        fetch_state_fn: Callable[[str, LiveTransmissionRequest], LiveTransmissionOrderState],
+        cancel_fn: Callable[[str, LiveTransmissionRequest], LiveTransmissionOrderState],
+    ) -> None:
+        self.venue = venue
+        self._submit_fn = submit_fn
+        self._fetch_state_fn = fetch_state_fn
+        self._cancel_fn = cancel_fn
+
+    def submit_order(self, request: LiveTransmissionRequest) -> LiveTransmissionAck:
+        return self._submit_fn(request)
+
+    def fetch_order_state(
+        self,
+        *,
+        client_order_id: str,
+        request: LiveTransmissionRequest,
+    ) -> LiveTransmissionOrderState:
+        return self._fetch_state_fn(client_order_id, request)
+
+    def cancel_order(
+        self,
+        *,
+        client_order_id: str,
+        request: LiveTransmissionRequest,
+    ) -> LiveTransmissionOrderState:
+        return self._cancel_fn(client_order_id, request)
 
 
 def build_venue_order_request(

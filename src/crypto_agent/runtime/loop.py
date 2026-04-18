@@ -13,11 +13,13 @@ from pydantic import BaseModel
 from crypto_agent.cli.main import PaperRunResult, run_paper_replay
 from crypto_agent.config import Settings
 from crypto_agent.enums import Mode
-from crypto_agent.execution.live_adapter import SandboxExecutionAdapter
+from crypto_agent.execution.live_adapter import LiveExecutionAdapter, SandboxExecutionAdapter
 from crypto_agent.execution.models import (
     ExecutionRequestArtifact,
     ExecutionResultArtifact,
     ExecutionStatusArtifact,
+    LiveTransmissionAck,
+    LiveTransmissionOrderState,
     LiveTransmissionRequest,
     LiveTransmissionRequestArtifact,
     LiveTransmissionResultArtifact,
@@ -1940,6 +1942,8 @@ def _materialize_limited_live_transmission_artifacts(
     observed_at: datetime,
     decision: LiveTransmissionDecisionArtifact,
     request_artifact: ExecutionRequestArtifact | None,
+    expected_symbol: str | None,
+    live_execution_adapter: LiveExecutionAdapter | None,
 ) -> ForwardPaperSessionSummary:
     if session_summary.run_id is None:
         raise ValueError("Limited-live transmission artifacts require session run_id.")
@@ -1954,35 +1958,171 @@ def _materialize_limited_live_transmission_artifacts(
         generated_at=observed_at,
         request_artifact=request_artifact,
     )
-    reason_codes = sorted(
-        {
-            *decision.reason_codes,
-            "live_adapter_call_not_implemented_l2d",
-            "live_transmission_placeholder_no_submission",
-        }
-    )
-    result_model = LiveTransmissionResultArtifact(
-        runtime_id=runtime_id,
-        session_id=session_summary.session_id,
-        run_id=session_summary.run_id,
-        generated_at=observed_at,
-        summary=(
-            "Limited-live boundary authorized, but adapter call is intentionally not "
-            "implemented in this phase."
-        ),
-        reason_codes=reason_codes,
-    )
-    state_model = LiveTransmissionStateArtifact(
-        runtime_id=runtime_id,
-        session_id=session_summary.session_id,
-        run_id=session_summary.run_id,
-        generated_at=observed_at,
-        summary="No live submission was attempted in this bounded artifact-foundation phase.",
-        reason_codes=reason_codes,
-    )
-
     # Write in fixed order for deterministic operator/audit flow.
     _write_json_artifact(request_path, request_model)
+    reason_codes = set(decision.reason_codes)
+    result_model: LiveTransmissionResultArtifact
+    state_model: LiveTransmissionStateArtifact
+
+    if request_model.request_count != 1:
+        reason_codes.add("bounded_live_requires_single_request")
+        result_model = LiveTransmissionResultArtifact(
+            runtime_id=runtime_id,
+            session_id=session_summary.session_id,
+            run_id=session_summary.run_id,
+            generated_at=observed_at,
+            submission_status="not_submitted",
+            summary=(
+                "Live transmission blocked because bounded live mode requires exactly one "
+                "normalized request."
+            ),
+            reason_codes=sorted(reason_codes),
+        )
+        state_model = LiveTransmissionStateArtifact(
+            runtime_id=runtime_id,
+            session_id=session_summary.session_id,
+            run_id=session_summary.run_id,
+            generated_at=observed_at,
+            state="not_submitted_terminal_blocked",
+            terminal=True,
+            submission_present=False,
+            summary="No live submission attempted because request cardinality was not one.",
+            reason_codes=sorted(reason_codes),
+        )
+        _write_json_artifact(result_path, result_model)
+        _write_json_artifact(state_path, state_model)
+        return _session_summary_with_live_transmission_artifacts(
+            session_summary=session_summary,
+            request_path=request_path,
+            result_path=result_path,
+            state_path=state_path,
+        )
+
+    live_request = request_model.requests[0]
+    if expected_symbol is None:
+        reason_codes.add("bounded_live_symbol_not_configured")
+    elif live_request.symbol != expected_symbol:
+        reason_codes.add("bounded_live_symbol_mismatch")
+    if live_execution_adapter is None:
+        reason_codes.add("live_execution_adapter_missing")
+
+    if reason_codes:
+        result_model = LiveTransmissionResultArtifact(
+            runtime_id=runtime_id,
+            session_id=session_summary.session_id,
+            run_id=session_summary.run_id,
+            generated_at=observed_at,
+            submission_status="not_submitted",
+            summary=(
+                "Live transmission blocked because bounded prerequisites were ambiguous or "
+                "incomplete."
+            ),
+            reason_codes=sorted(reason_codes),
+        )
+        state_model = LiveTransmissionStateArtifact(
+            runtime_id=runtime_id,
+            session_id=session_summary.session_id,
+            run_id=session_summary.run_id,
+            generated_at=observed_at,
+            state="not_submitted_terminal_blocked",
+            terminal=True,
+            submission_present=False,
+            summary="No live submission attempted because bounded prerequisites were not met.",
+            reason_codes=sorted(reason_codes),
+        )
+        _write_json_artifact(result_path, result_model)
+        _write_json_artifact(state_path, state_model)
+        return _session_summary_with_live_transmission_artifacts(
+            session_summary=session_summary,
+            request_path=request_path,
+            result_path=result_path,
+            state_path=state_path,
+        )
+
+    adapter = live_execution_adapter
+    if adapter is None:
+        raise ValueError("Live execution adapter must be configured for bounded transmission.")
+
+    try:
+        ack: LiveTransmissionAck = adapter.submit_order(live_request)
+        if ack.status == "accepted":
+            submission_status: Literal["submitted", "rejected"] = "submitted"
+            summary = "Live adapter accepted the bounded live request."
+        else:
+            submission_status = "rejected"
+            reason_codes.add("live_submission_not_accepted")
+            summary = "Live adapter did not accept the bounded live request."
+        result_model = LiveTransmissionResultArtifact(
+            runtime_id=runtime_id,
+            session_id=session_summary.session_id,
+            run_id=session_summary.run_id,
+            generated_at=observed_at,
+            adapter_call_attempted=True,
+            submission_status=submission_status,
+            ack=ack,
+            summary=summary,
+            reason_codes=sorted(reason_codes),
+        )
+
+        if ack.status != "accepted":
+            state_model = LiveTransmissionStateArtifact(
+                runtime_id=runtime_id,
+                session_id=session_summary.session_id,
+                run_id=session_summary.run_id,
+                generated_at=observed_at,
+                state="rejected",
+                terminal=True,
+                submission_present=False,
+                summary="Live request was not accepted; no live order state fetch attempted.",
+                reason_codes=sorted(reason_codes),
+            )
+        else:
+            order_state: LiveTransmissionOrderState = adapter.fetch_order_state(
+                client_order_id=live_request.client_order_id,
+                request=live_request,
+            )
+            if not order_state.terminal:
+                reason_codes.add("live_order_non_terminal_canceled")
+                order_state = adapter.cancel_order(
+                    client_order_id=live_request.client_order_id,
+                    request=live_request,
+                )
+            state_model = LiveTransmissionStateArtifact(
+                runtime_id=runtime_id,
+                session_id=session_summary.session_id,
+                run_id=session_summary.run_id,
+                generated_at=observed_at,
+                state=order_state.state,
+                terminal=order_state.terminal,
+                submission_present=True,
+                order_state=order_state,
+                summary="Live order state captured from bounded adapter lifecycle.",
+                reason_codes=sorted(reason_codes),
+            )
+    except Exception as exc:
+        reason_codes.update({"live_adapter_error", "live_transmission_failed_closed"})
+        result_model = LiveTransmissionResultArtifact(
+            runtime_id=runtime_id,
+            session_id=session_summary.session_id,
+            run_id=session_summary.run_id,
+            generated_at=observed_at,
+            adapter_call_attempted=True,
+            submission_status="error",
+            summary=f"Live adapter call failed closed: {exc}",
+            reason_codes=sorted(reason_codes),
+        )
+        state_model = LiveTransmissionStateArtifact(
+            runtime_id=runtime_id,
+            session_id=session_summary.session_id,
+            run_id=session_summary.run_id,
+            generated_at=observed_at,
+            state="error_terminal_blocked",
+            terminal=True,
+            submission_present=False,
+            summary="Live transmission failed closed after adapter error.",
+            reason_codes=sorted(reason_codes),
+        )
+
     _write_json_artifact(result_path, result_model)
     _write_json_artifact(state_path, state_model)
     return _session_summary_with_live_transmission_artifacts(
@@ -2017,6 +2157,7 @@ def run_forward_paper_runtime(
     live_market_poll_retry_delay_seconds: float = 2.0,
     sandbox_fixture_rehearsal: bool = False,
     sandbox_execution_adapter: SandboxExecutionAdapter | None = None,
+    live_execution_adapter: LiveExecutionAdapter | None = None,
     live_launch_window_starts_at: datetime | None = None,
     live_launch_window_ends_at: datetime | None = None,
     limited_live_authority_enabled: bool = False,
@@ -2455,6 +2596,8 @@ def run_forward_paper_runtime(
                         observed_at=completed_session.completed_at or scheduled_at,
                         decision=transmission_decision,
                         request_artifact=request_artifact,
+                        expected_symbol=status.live_symbol,
+                        live_execution_adapter=live_execution_adapter,
                     )
 
                 if execution_mode != "paper" and post_run_decision.action == "go":

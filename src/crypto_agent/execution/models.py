@@ -163,6 +163,52 @@ class LiveTransmissionRequest(BaseModel):
     normalization_reject_reason: str | None = None
 
 
+class LiveTransmissionAck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    client_order_id: str
+    venue: str
+    intent_id: str
+    status: Literal["accepted", "rejected", "duplicate"]
+    venue_order_id: str | None = None
+    reject_reason: str | None = None
+    observed_at: datetime
+
+    @field_validator("observed_at")
+    @classmethod
+    def normalize_observed_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
+class LiveTransmissionOrderState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    client_order_id: str
+    venue: str
+    intent_id: str
+    venue_order_id: str | None = None
+    state: Literal[
+        "accepted",
+        "open",
+        "partially_filled",
+        "filled",
+        "canceled",
+        "rejected",
+    ]
+    terminal: bool
+    filled_quantity: float = Field(default=0.0, ge=0)
+    average_fill_price: float | None = Field(default=None, gt=0)
+    fee_usd: float = Field(default=0.0, ge=0)
+    updated_at: datetime
+
+    @field_validator("updated_at")
+    @classmethod
+    def normalize_updated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
 class LiveTransmissionRequestArtifact(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -188,7 +234,8 @@ class LiveTransmissionResultArtifact(BaseModel):
     run_id: str
     generated_at: datetime
     adapter_call_attempted: bool = False
-    submission_status: Literal["not_submitted"] = "not_submitted"
+    submission_status: Literal["not_submitted", "submitted", "rejected", "error"] = "not_submitted"
+    ack: LiveTransmissionAck | None = None
     summary: str
     reason_codes: list[str] = Field(default_factory=list)
 
@@ -205,9 +252,19 @@ class LiveTransmissionStateArtifact(BaseModel):
     session_id: str
     run_id: str
     generated_at: datetime
-    state: Literal["not_submitted_terminal_blocked"] = "not_submitted_terminal_blocked"
+    state: Literal[
+        "not_submitted_terminal_blocked",
+        "accepted",
+        "open",
+        "partially_filled",
+        "filled",
+        "canceled",
+        "rejected",
+        "error_terminal_blocked",
+    ] = "not_submitted_terminal_blocked"
     terminal: bool = True
     submission_present: bool = False
+    order_state: LiveTransmissionOrderState | None = None
     summary: str
     reason_codes: list[str] = Field(default_factory=list)
 

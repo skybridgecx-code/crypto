@@ -280,3 +280,10 @@ Phase L2D adds bounded live request/result/state artifact foundations at the run
 
 Closeout doc:
 - `docs/PHASE_L2D_BOUNDED_LIVE_TRANSMISSION_ARTIFACT_FOUNDATION.md`
+
+## Phase L2E — Bounded live adapter call wiring
+
+Phase L2E wires the first bounded live adapter call at the authorized runtime seam with fail-closed artifacted behavior.
+
+Closeout doc:
+- `docs/PHASE_L2E_BOUNDED_LIVE_ADAPTER_CALL_WIRING.md`
