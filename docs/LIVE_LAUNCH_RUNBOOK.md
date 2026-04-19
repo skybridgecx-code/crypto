@@ -160,6 +160,19 @@ Retries are not allowed in the same launch window unless a new bounded operator 
 - do not ignore reconciliation mismatches or control drift
 - do not create a second launch checklist outside this runbook
 
+## Orphaned Runtime Handling
+
+If a forward runtime is persisted as `running` but no process is alive:
+
+1. preserve the runtime evidence directory as-is
+2. verify process liveness explicitly before taking any action
+3. inspect `forward_paper_status.json`, `forward_paper_history.jsonl`, and session summary artifacts
+4. use next-invocation recovery for restart-safe interrupted cases
+5. open a bounded hardening phase if evidence shows a real shutdown durability gap
+6. do not run live/shadow again just to "unstick" runtime state
+
+This is an operator diagnostics and durability boundary, not a launch override.
+
 ## Launch verdict reason-code map
 
 Use `docs/LAUNCH_VERDICT_REASON_CODES.md` when reviewing `live_launch_verdict.json.reason_codes`.
