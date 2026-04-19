@@ -339,3 +339,53 @@ def test_cli_forward_paper_runtime_runs_single_session_and_prints_status(
     assert Path(output["manual_control_state_path"]).exists()
     assert output["session_count"] == 1
     assert output["session_ids"] == ["session-0001"]
+
+
+def test_forward_paper_runtime_persists_interrupted_state_on_keyboard_interrupt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    runtime_id = "forward-paper-interrupt-during-session"
+    interrupt_at = _tick(2026, 4, 6, 13, 0)
+
+    def _raise_keyboard_interrupt(*args: object, **kwargs: object) -> object:
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(
+        "crypto_agent.runtime.loop.run_paper_replay",
+        _raise_keyboard_interrupt,
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        run_forward_paper_runtime(
+            FIXTURES_DIR / "paper_candles_breakout_long.jsonl",
+            settings=settings,
+            runtime_id=runtime_id,
+            session_interval_seconds=60,
+            max_sessions=1,
+            tick_times=[interrupt_at],
+            now_fn=lambda: interrupt_at,
+        )
+
+    paths = build_forward_paper_runtime_paths(settings.paths.runs_dir, runtime_id)
+    status = ForwardPaperRuntimeStatus.model_validate(
+        json.loads(paths.status_path.read_text(encoding="utf-8"))
+    )
+    session = ForwardPaperSessionSummary.model_validate(
+        json.loads((paths.sessions_dir / "session-0001.json").read_text(encoding="utf-8"))
+    )
+    history_lines = [
+        line for line in paths.history_path.read_text(encoding="utf-8").splitlines() if line
+    ]
+
+    assert status.status == "idle"
+    assert status.active_session_id is None
+    assert status.interrupted_session_count == 1
+    assert status.last_session_id == "session-0001"
+    assert session.status == "interrupted"
+    assert session.recovery_note == "recovered_after_restart"
+    assert session.completed_at == interrupt_at
+    assert len(history_lines) == 2
+    assert '"event_type": "session.started"' in history_lines[0]
+    assert '"event_type": "session.interrupted"' in history_lines[1]
