@@ -315,3 +315,10 @@ Phase L2I records whether a second bounded live transmit attempt is allowed or b
 
 Closeout doc:
 - `docs/PHASE_L2I_SECOND_ATTEMPT_DECISION_CLOSEOUT.md`
+
+## Phase L2K — Orphaned forward runtime operator closeout
+
+Phase L2K freezes the operator handling contract for orphaned forward runtimes after L2J interrupt hardening.
+
+Closeout doc:
+- `docs/PHASE_L2K_ORPHANED_RUNTIME_OPERATOR_CLOSEOUT.md`
