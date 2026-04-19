@@ -329,3 +329,11 @@ Phase L2L records that an `executed` shadow session can still have zero shadow r
 
 Closeout doc:
 - `docs/PHASE_L2L_SHADOW_ZERO_REQUEST_DIAGNOSIS_CLOSEOUT.md`
+
+## Phase L2M — Second-attempt prerequisites closeout
+
+Phase L2M records the exact prerequisites that must be true before any future bounded second soak attempt can even be considered. It is a decision-criteria closeout, not a retry authorization.
+
+Closeout doc:
+- `docs/PHASE_L2M_SECOND_ATTEMPT_PREREQUISITES_CLOSEOUT.md`
+
