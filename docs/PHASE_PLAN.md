@@ -322,3 +322,10 @@ Phase L2K freezes the operator handling contract for orphaned forward runtimes a
 
 Closeout doc:
 - `docs/PHASE_L2K_ORPHANED_RUNTIME_OPERATOR_CLOSEOUT.md`
+
+## Phase L2L — Shadow zero-request diagnosis closeout
+
+Phase L2L records that an `executed` shadow session can still have zero shadow requests when the underlying paper run emits no order intents.
+
+Closeout doc:
+- `docs/PHASE_L2L_SHADOW_ZERO_REQUEST_DIAGNOSIS_CLOSEOUT.md`

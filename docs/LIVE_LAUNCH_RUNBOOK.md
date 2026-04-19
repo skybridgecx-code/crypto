@@ -77,6 +77,11 @@ Before any future tiny live launch is attempted, all of the following must be tr
 
 If any one of these checks fails, launch status is `no_go`.
 
+Operator interpretation note for shadow sessions:
+- an `executed` shadow session can still produce `request_count == 0` when the underlying paper run emits no proposals or `ORDER_INTENT_CREATED`
+- treat this as a non-firing signal session, not an artifact bug
+- readiness remains blocked until shadow request thresholds are met
+
 For a launch-review rehearsal, set operator readiness intentionally:
 
 - `live_readiness_status.json.status == "ready"`
