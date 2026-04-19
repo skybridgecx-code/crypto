@@ -2741,6 +2741,13 @@ def run_forward_paper_runtime(
             recovery_note = None
             _persist_runtime_status(status)
             completed_sessions.append(skipped_session)
+        except (KeyboardInterrupt, SystemExit):
+            interrupted_at = _normalize_datetime(now_fn())
+            status, _, _ = _recover_interrupted_session(
+                status=status,
+                recovered_at=interrupted_at,
+            )
+            raise
         except Exception as exc:
             failed_at = _normalize_datetime(now_fn())
             failed_session = _failed_session_summary(
