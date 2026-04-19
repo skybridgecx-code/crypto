@@ -5,6 +5,7 @@
 This document aligns `cryp` with the shipped producer-side local transport contract in:
 
 - `/Users/muhammadaatif/polymarket-arb/docs/PHASE_37I_LOCAL_TRANSPORT_WORKFLOW_CONTRACT.md`
+- `/Users/muhammadaatif/polymarket-arb/docs/PHASE_37K_CROSS_REPO_CONTRACT_DRIFT_CHECKLIST.md` (cross-repo drift gate/checklist)
 
 Scope is consumer-side docs only. No runtime behavior changes.
 
