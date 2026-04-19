@@ -178,6 +178,16 @@ If a forward runtime is persisted as `running` but no process is alive:
 
 This is an operator diagnostics and durability boundary, not a launch override.
 
+## Second-Attempt Prerequisites
+
+Before any future bounded second soak attempt can be considered:
+
+- do not retry just to gather more data
+- do not retry while feed availability remains unstable enough to cause repeated `skipped_unavailable_feed` sessions
+- do not retry until there is a bounded operator rationale for expecting actual shadow requests instead of another non-firing session
+- use archived evidence plus L2H, L2I, L2K, and L2L as the decision basis
+- this is a decision and criteria boundary, not a launch authorization
+
 ## Launch verdict reason-code map
 
 Use `docs/LAUNCH_VERDICT_REASON_CODES.md` when reviewing `live_launch_verdict.json.reason_codes`.
