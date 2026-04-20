@@ -19,6 +19,7 @@ crypto-agent-paper-matrix-run = "crypto_agent.cli.matrix:main"
 crypto-agent-forward-paper-run = "crypto_agent.cli.forward_paper:main"
 crypto-agent-transport-pickup = "crypto_agent.cli.transport_pickup:main"
 crypto-agent-transport-boundary-response = "crypto_agent.cli.transport_boundary_response:main"
+crypto-agent-transport-archive = "crypto_agent.cli.transport_archive:main"
 
 [project.optional-dependencies]
 dev = [
