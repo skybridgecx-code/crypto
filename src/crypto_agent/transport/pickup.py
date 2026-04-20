@@ -39,7 +39,7 @@ class LocalTransportPickupResult(BaseModel):
     picked_up_at_epoch_ns: int = Field(ge=0)
 
 
-def _read_handoff_request(path: Path) -> dict[str, Any]:
+def read_handoff_request(path: Path) -> dict[str, Any]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -65,7 +65,7 @@ def _require_non_empty_str(
     return normalized
 
 
-def _validated_transport_fields(payload: dict[str, Any]) -> tuple[str, str]:
+def validated_transport_fields(payload: dict[str, Any]) -> tuple[str, str]:
     contract_version = _require_non_empty_str(payload, field_name="contract_version")
     producer_system = _require_non_empty_str(payload, field_name="producer_system")
     consumer_system = _require_non_empty_str(payload, field_name="consumer_system")
@@ -82,7 +82,7 @@ def _validated_transport_fields(payload: dict[str, Any]) -> tuple[str, str]:
     return correlation_id, idempotency_key
 
 
-def _canonical_transport_context(handoff_request_path: Path) -> tuple[str, str, Path]:
+def canonical_transport_context(handoff_request_path: Path) -> tuple[str, str, Path]:
     if handoff_request_path.name != "handoff_request.json":
         raise ValueError("handoff_request_path_invalid_filename")
 
@@ -110,9 +110,9 @@ def write_local_transport_pickup_receipt(
     picked_up_at_epoch_ns: int,
 ) -> LocalTransportPickupResult:
     resolved_handoff_path = handoff_request_path.resolve()
-    payload = _read_handoff_request(resolved_handoff_path)
-    correlation_id, idempotency_key = _validated_transport_fields(payload)
-    correlation_id_from_path, attempt_id, transport_root = _canonical_transport_context(
+    payload = read_handoff_request(resolved_handoff_path)
+    correlation_id, idempotency_key = validated_transport_fields(payload)
+    correlation_id_from_path, attempt_id, transport_root = canonical_transport_context(
         resolved_handoff_path
     )
     normalized_operator = pickup_operator.strip()
