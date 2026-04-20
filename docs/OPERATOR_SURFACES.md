@@ -222,6 +222,8 @@ Canonical local workflow:
      - `<TRANSPORT_ROOT>/responses/<correlation_id>/<attempt_id>/<correlation_id>.execution_boundary_reject.json`
 4. archive the full attempt bundle:
    - `<TRANSPORT_ROOT>/archive/<correlation_id>/<attempt_id>/`
+5. write one run step-state artifact:
+   - `<TRANSPORT_ROOT>/state/<correlation_id>/<attempt_id>/cryp_transport_run_once_step_state.json`
 
 Pickup example:
 
@@ -260,6 +262,7 @@ crypto-agent-transport-pickup \
   - reject responses require non-empty reason_codes and a validation_error
   - boundary response refuses to write the opposite response kind once one canonical response already exists
   - archive fails closed unless the handoff request, pickup receipt, and exactly one boundary response artifact all exist and match
+  - one-shot runner writes one machine-readable step-state artifact with pickup, boundary, and archive step states plus final outcome
 
 Local transport artifacts:
 
@@ -275,6 +278,8 @@ boundary artifacts:
 
  - <correlation_id>.execution_boundary_ack.json
  - <correlation_id>.execution_boundary_reject.json
+ - one-shot step-state artifact:
+ - `state/<correlation_id>/<attempt_id>/cryp_transport_run_once_step_state.json`
  - archive copies:
  - handoff_request.json
  - cryp_pickup_receipt.json
