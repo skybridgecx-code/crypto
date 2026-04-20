@@ -7,7 +7,11 @@ import pytest
 from crypto_agent.cli.transport_run_once import main
 from crypto_agent.transport.boundary_response import write_local_transport_boundary_response
 from crypto_agent.transport.pickup import write_local_transport_pickup_receipt
-from crypto_agent.transport.runner import LocalTransportOneShotResult, run_local_transport_one_shot
+from crypto_agent.transport.runner import (
+    LocalTransportOneShotResult,
+    LocalTransportOneShotStepState,
+    run_local_transport_one_shot,
+)
 
 
 def _write_handoff_request(
@@ -67,6 +71,15 @@ def test_run_local_transport_one_shot_ack_writes_pickup_response_and_archive(
     assert Path(validated.archived_handoff_request_path).is_file()
     assert Path(validated.archived_pickup_receipt_path).is_file()
     assert Path(validated.archived_response_artifact_path).is_file()
+    assert Path(validated.step_state_artifact_path).is_file()
+    step_state = LocalTransportOneShotStepState.model_validate(
+        json.loads(Path(validated.step_state_artifact_path).read_text(encoding="utf-8"))
+    )
+    assert step_state.final_outcome == "succeeded"
+    assert step_state.pickup_step_state == "succeeded"
+    assert step_state.boundary_response_step_state == "succeeded"
+    assert step_state.archive_step_state == "succeeded"
+    assert step_state.final_status == "accepted_for_local_execution_review"
 
 
 def test_run_local_transport_one_shot_reject_writes_pickup_response_and_archive(
@@ -124,8 +137,26 @@ def test_run_local_transport_one_shot_reject_validation_failure_creates_no_respo
         tmp_path / "transport" / "pickup" / correlation_id / attempt_id / "cryp_pickup_receipt.json"
     )
     responses_dir = tmp_path / "transport" / "responses" / correlation_id / attempt_id
+    step_state_path = (
+        tmp_path
+        / "transport"
+        / "state"
+        / correlation_id
+        / attempt_id
+        / "cryp_transport_run_once_step_state.json"
+    )
     assert pickup_path.is_file()
     assert not responses_dir.exists()
+    assert step_state_path.is_file()
+    step_state = LocalTransportOneShotStepState.model_validate(
+        json.loads(step_state_path.read_text(encoding="utf-8"))
+    )
+    assert step_state.final_outcome == "failed"
+    assert step_state.pickup_step_state == "succeeded"
+    assert step_state.boundary_response_step_state == "failed"
+    assert step_state.archive_step_state == "not_started"
+    assert step_state.final_status == "failed_before_boundary_response"
+    assert step_state.error_code == "boundary_response_reject_reason_codes_required"
 
 
 def test_run_local_transport_one_shot_blocks_opposite_existing_response(tmp_path: Path) -> None:
@@ -199,3 +230,7 @@ def test_transport_run_once_cli_emits_machine_readable_result(
     assert output["response_kind"] == "ack"
     assert output["correlation_id"] == correlation_id
     assert output["attempt_id"] == attempt_id
+    assert output["step_state_artifact_path"].endswith(
+        "/state/theme_ctx_strong.analysis_success_export/1700000000000000001_approve/"
+        "cryp_transport_run_once_step_state.json"
+    )
