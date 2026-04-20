@@ -555,6 +555,8 @@ class LiveTransmissionRuntimeResultArtifact(BaseModel):
     generated_at: datetime
     transmission_attempted: bool = False
     adapter_submission_attempted: bool = False
+    transmission_eligible: bool = False
+    eligibility_state: Literal["eligible", "ineligible"] = "ineligible"
     final_state: Literal["not_attempted"] = "not_attempted"
     summary: str
     reason_codes: list[str] = Field(default_factory=list)

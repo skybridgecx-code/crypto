@@ -368,15 +368,21 @@ def _build_live_transmission_result_artifact(
     decision: LiveTransmissionDecisionArtifact,
     decision_path: Path,
 ) -> LiveTransmissionRuntimeResultArtifact:
+    transmission_eligible = decision.transmission_authorized
     return LiveTransmissionRuntimeResultArtifact(
         runtime_id=runtime_id,
         generated_at=generated_at,
         transmission_attempted=False,
         adapter_submission_attempted=False,
+        transmission_eligible=transmission_eligible,
+        eligibility_state="eligible" if transmission_eligible else "ineligible",
         final_state="not_attempted",
         summary=(
-            "No live transmission attempt executed. "
-            "Runtime remains artifact-only and deny-by-default."
+            "Bounded live transmission eligibility passed, but no live transmission attempt "
+            "executed. Runtime remains artifact-only."
+            if transmission_eligible
+            else "No live transmission attempt executed. Runtime remains artifact-only and "
+            "deny-by-default."
         ),
         reason_codes=list(decision.reason_codes),
         transmission_decision_path=decision_path,
