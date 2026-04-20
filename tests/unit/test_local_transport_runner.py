@@ -196,6 +196,27 @@ def test_run_local_transport_one_shot_blocks_opposite_existing_response(tmp_path
     assert not ack_path.exists()
 
 
+def test_run_local_transport_one_shot_noncanonical_path_writes_no_step_state(
+    tmp_path: Path,
+) -> None:
+    handoff_request_path = _write_handoff_request(
+        tmp_path / "transport" / "not_inbound" / "run-1" / "att-1" / "handoff_request.json",
+        correlation_id="run-1",
+        idempotency_key="run-1:1700000000000000001:approve",
+    )
+
+    with pytest.raises(ValueError, match="handoff_request_path_not_inbound_tree"):
+        run_local_transport_one_shot(
+            handoff_request_path=handoff_request_path,
+            pickup_operator="operator-epsilon",
+            picked_up_at_epoch_ns=1700000000000000100,
+            response_kind="ack",
+            responded_at_epoch_ns=1700000000000000200,
+        )
+
+    assert not (tmp_path / "transport" / "state").exists()
+
+
 def test_transport_run_once_cli_emits_machine_readable_result(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
