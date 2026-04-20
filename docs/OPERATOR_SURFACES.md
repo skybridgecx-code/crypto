@@ -263,6 +263,7 @@ crypto-agent-transport-pickup \
   - boundary response refuses to write the opposite response kind once one canonical response already exists
   - archive fails closed unless the handoff request, pickup receipt, and exactly one boundary response artifact all exist and match
   - one-shot runner writes one machine-readable step-state artifact with pickup, boundary, and archive step states plus final outcome
+  - if the inbound handoff path is non-canonical, failure occurs before canonical context exists, no one-shot step-state artifact is emitted, and operators must correct the inbound path then rerun from `<TRANSPORT_ROOT>/inbound/<correlation_id>/<attempt_id>/handoff_request.json`
 
 Local transport artifacts:
 
