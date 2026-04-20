@@ -30,6 +30,7 @@ from crypto_agent.runtime.models import (
     ForwardPaperRuntimeStatus,
     LiveApprovalStateArtifact,
     LiveTransmissionDecisionArtifact,
+    LiveTransmissionRuntimeResultArtifact,
 )
 
 FIXTURES_DIR = Path("tests/fixtures")
@@ -317,6 +318,9 @@ def test_limited_live_boundary_authorizes_without_affecting_shadow_path(tmp_path
     decision = LiveTransmissionDecisionArtifact.model_validate(
         json.loads(result.live_transmission_decision_path.read_text(encoding="utf-8"))
     )
+    runtime_transmission_result = LiveTransmissionRuntimeResultArtifact.model_validate(
+        json.loads(result.live_transmission_result_path.read_text(encoding="utf-8"))
+    )
     session = result.session_summaries[0]
     results = ExecutionResultArtifact.model_validate(
         json.loads(Path(session.execution_result_path).read_text(encoding="utf-8"))
@@ -333,6 +337,9 @@ def test_limited_live_boundary_authorizes_without_affecting_shadow_path(tmp_path
 
     assert decision.decision == "authorized"
     assert decision.transmission_authorized is True
+    assert runtime_transmission_result.transmission_eligible is True
+    assert runtime_transmission_result.transmission_attempted is False
+    assert runtime_transmission_result.adapter_submission_attempted is False
     assert session.execution_mode == "shadow"
     assert all(result.status == "would_send" for result in results.results)
     assert live_request.request_count == results.result_count
@@ -418,6 +425,9 @@ def test_limited_live_boundary_authorizes_without_affecting_sandbox_path(tmp_pat
     decision = LiveTransmissionDecisionArtifact.model_validate(
         json.loads(result.live_transmission_decision_path.read_text(encoding="utf-8"))
     )
+    runtime_transmission_result = LiveTransmissionRuntimeResultArtifact.model_validate(
+        json.loads(result.live_transmission_result_path.read_text(encoding="utf-8"))
+    )
     session = result.session_summaries[0]
     statuses = ExecutionStatusArtifact.model_validate(
         json.loads(Path(session.execution_status_path).read_text(encoding="utf-8"))
@@ -434,6 +444,9 @@ def test_limited_live_boundary_authorizes_without_affecting_sandbox_path(tmp_pat
 
     assert decision.decision == "authorized"
     assert decision.transmission_authorized is True
+    assert runtime_transmission_result.transmission_eligible is True
+    assert runtime_transmission_result.transmission_attempted is False
+    assert runtime_transmission_result.adapter_submission_attempted is False
     assert session.execution_mode == "sandbox"
     assert statuses.statuses[0].state == "filled"
     assert live_request.request_count >= 1
