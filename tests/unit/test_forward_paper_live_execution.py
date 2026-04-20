@@ -29,6 +29,7 @@ from crypto_agent.runtime.loop import run_forward_paper_runtime
 from crypto_agent.runtime.models import (
     ForwardPaperRuntimeStatus,
     LiveApprovalStateArtifact,
+    LiveRehearsalGateScope,
     LiveTransmissionDecisionArtifact,
     LiveTransmissionRuntimeResultArtifact,
 )
@@ -341,6 +342,8 @@ def test_limited_live_boundary_authorizes_without_affecting_shadow_path(tmp_path
     assert runtime_transmission_result.transmission_attempted is False
     assert runtime_transmission_result.adapter_submission_attempted is False
     assert runtime_transmission_result.rehearsal_gate_state == "inactive"
+    assert runtime_transmission_result.rehearsal_gate_scope_state == "absent"
+    assert runtime_transmission_result.rehearsal_gate_match is False
     assert runtime_transmission_result.rehearsal_gate_passed is False
     assert runtime_transmission_result.final_state == "not_submitted_terminal_blocked"
     assert session.execution_mode == "shadow"
@@ -452,6 +455,8 @@ def test_limited_live_boundary_authorizes_without_affecting_sandbox_path(tmp_pat
     assert runtime_transmission_result.transmission_attempted is False
     assert runtime_transmission_result.adapter_submission_attempted is False
     assert runtime_transmission_result.rehearsal_gate_state == "inactive"
+    assert runtime_transmission_result.rehearsal_gate_scope_state == "absent"
+    assert runtime_transmission_result.rehearsal_gate_match is False
     assert runtime_transmission_result.rehearsal_gate_passed is False
     assert runtime_transmission_result.final_state == "not_submitted_terminal_blocked"
     assert session.execution_mode == "sandbox"
@@ -599,7 +604,11 @@ def test_limited_live_boundary_authorized_invokes_live_adapter_once(tmp_path: Pa
         live_control_config=controls,
         readiness_status=readiness,
         live_execution_adapter=live_adapter,
-        live_rehearsal_gate_open=True,
+        live_rehearsal_gate_scope=LiveRehearsalGateScope(
+            runtime_id=runtime_id,
+            session_id="session-0001",
+            request_id="single_request",
+        ),
     )
 
     session = result.session_summaries[0]
@@ -626,8 +635,112 @@ def test_limited_live_boundary_authorized_invokes_live_adapter_once(tmp_path: Pa
     assert runtime_transmission_result.transmission_attempted is True
     assert runtime_transmission_result.adapter_submission_attempted is True
     assert runtime_transmission_result.rehearsal_gate_state == "active"
+    assert runtime_transmission_result.rehearsal_gate_scope_state == "matched"
+    assert runtime_transmission_result.rehearsal_gate_match is True
     assert runtime_transmission_result.rehearsal_gate_passed is True
     assert runtime_transmission_result.final_state == "filled"
+
+
+def test_limited_live_rehearsal_gate_scope_mismatch_blocks_adapter_call(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    runtime_id = "forward-live-shadow-gate-mismatch"
+    tick_time = _ts(2026, 4, 3, 16, 4)
+    _write_active_live_approval(tmp_path=tmp_path, runtime_id=runtime_id, generated_at=tick_time)
+    readiness = default_live_readiness_status(
+        runtime_id=runtime_id,
+        updated_at=tick_time,
+    ).model_copy(update={"limited_live_gate_status": "ready_for_review"})
+    controls = _permissive_live_controls(runtime_id=runtime_id, updated_at=tick_time)
+    call_counts = {"submit": 0, "fetch": 0, "cancel": 0}
+
+    live_adapter = ScriptedLiveExecutionAdapter(
+        submit_fn=lambda request: (
+            call_counts.__setitem__("submit", call_counts["submit"] + 1)
+            or LiveTransmissionAck(
+                request_id=request.request_id,
+                client_order_id=request.client_order_id,
+                venue=request.venue,
+                intent_id=request.intent_id,
+                status="accepted",
+                venue_order_id="live-order-1",
+                observed_at=tick_time,
+            )
+        ),
+        fetch_state_fn=lambda client_order_id, request: (
+            call_counts.__setitem__("fetch", call_counts["fetch"] + 1)
+            or LiveTransmissionOrderState(
+                request_id=request.request_id,
+                client_order_id=client_order_id,
+                venue=request.venue,
+                intent_id=request.intent_id,
+                venue_order_id="live-order-1",
+                state="filled",
+                terminal=True,
+                filled_quantity=request.quantity,
+                average_fill_price=request.reference_price,
+                updated_at=tick_time,
+            )
+        ),
+        cancel_fn=lambda client_order_id, request: (
+            call_counts.__setitem__("cancel", call_counts["cancel"] + 1)
+            or LiveTransmissionOrderState(
+                request_id=request.request_id,
+                client_order_id=client_order_id,
+                venue=request.venue,
+                intent_id=request.intent_id,
+                venue_order_id="live-order-1",
+                state="canceled",
+                terminal=True,
+                updated_at=tick_time,
+            )
+        ),
+    )
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id=runtime_id,
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=1,
+        tick_times=[tick_time],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_live_adapter(),
+        limited_live_authority_enabled=True,
+        live_launch_window_starts_at=_ts(2026, 4, 3, 16, 0),
+        live_launch_window_ends_at=_ts(2026, 4, 3, 16, 10),
+        live_control_config=controls,
+        readiness_status=readiness,
+        live_execution_adapter=live_adapter,
+        live_rehearsal_gate_scope=LiveRehearsalGateScope(
+            runtime_id=runtime_id,
+            session_id="session-0001",
+            request_id="wrong-request-id",
+        ),
+    )
+
+    session = result.session_summaries[0]
+    live_result = LiveTransmissionResultArtifact.model_validate(
+        json.loads(Path(session.live_transmission_result_path).read_text(encoding="utf-8"))
+    )
+    runtime_transmission_result = LiveTransmissionRuntimeResultArtifact.model_validate(
+        json.loads(result.live_transmission_result_path.read_text(encoding="utf-8"))
+    )
+
+    assert call_counts == {"submit": 0, "fetch": 0, "cancel": 0}
+    assert live_result.adapter_call_attempted is False
+    assert live_result.submission_status == "not_submitted"
+    assert "operator_rehearsal_gate_scope_mismatch" in live_result.reason_codes
+    assert runtime_transmission_result.transmission_attempted is False
+    assert runtime_transmission_result.adapter_submission_attempted is False
+    assert runtime_transmission_result.rehearsal_gate_state == "inactive"
+    assert runtime_transmission_result.rehearsal_gate_scope_state == "mismatched"
+    assert runtime_transmission_result.rehearsal_gate_match is False
+    assert runtime_transmission_result.rehearsal_gate_passed is False
 
 
 def test_forward_runtime_replay_sandbox_requires_fixture_rehearsal_flag(

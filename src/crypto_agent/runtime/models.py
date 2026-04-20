@@ -559,6 +559,8 @@ class LiveTransmissionRuntimeResultArtifact(BaseModel):
     eligibility_state: Literal["eligible", "ineligible"] = "ineligible"
     rehearsal_gate_required: bool = True
     rehearsal_gate_state: Literal["inactive", "active"] = "inactive"
+    rehearsal_gate_scope_state: Literal["absent", "mismatched", "matched"] = "absent"
+    rehearsal_gate_match: bool = False
     rehearsal_gate_passed: bool = False
     final_state: Literal[
         "not_attempted",
@@ -579,6 +581,14 @@ class LiveTransmissionRuntimeResultArtifact(BaseModel):
     @classmethod
     def normalize_generated_at(cls, value: datetime) -> datetime:
         return _normalize_datetime(value)
+
+
+class LiveRehearsalGateScope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    session_id: str
+    request_id: str
 
 
 class LiveApprovalRecord(BaseModel):
