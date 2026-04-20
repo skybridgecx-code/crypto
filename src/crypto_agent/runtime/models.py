@@ -47,6 +47,7 @@ class ForwardPaperRuntimePaths(BaseModel):
     live_authority_state_path: Path
     live_launch_window_path: Path
     live_transmission_decision_path: Path
+    live_transmission_result_path: Path
     live_approval_state_path: Path
 
 
@@ -547,6 +548,24 @@ class LiveTransmissionDecisionArtifact(BaseModel):
         return _normalize_datetime(value)
 
 
+class LiveTransmissionRuntimeResultArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    generated_at: datetime
+    transmission_attempted: bool = False
+    adapter_submission_attempted: bool = False
+    final_state: Literal["not_attempted"] = "not_attempted"
+    summary: str
+    reason_codes: list[str] = Field(default_factory=list)
+    transmission_decision_path: Path
+
+    @field_validator("generated_at")
+    @classmethod
+    def normalize_generated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
 class LiveApprovalRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -691,6 +710,7 @@ class ForwardPaperRuntimeStatus(BaseModel):
     live_authority_state_path: Path | None = None
     live_launch_window_path: Path | None = None
     live_transmission_decision_path: Path | None = None
+    live_transmission_result_path: Path | None = None
     live_approval_state_path: Path | None = None
     control_status: Literal["go", "no_go", "manual_approval_required"] = "go"
     control_block_reasons: list[str] = Field(default_factory=list)
@@ -742,6 +762,7 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
     live_authority_state_path: Path | None = None
     live_launch_window_path: Path | None = None
     live_transmission_decision_path: Path | None = None
+    live_transmission_result_path: Path | None = None
     live_approval_state_path: Path | None = None
     starting_equity_usd: float = Field(gt=0)
     session_interval_seconds: int = Field(gt=0)
@@ -822,6 +843,7 @@ class ForwardPaperRuntimeResult(BaseModel):
     live_authority_state_path: Path | None = None
     live_launch_window_path: Path | None = None
     live_transmission_decision_path: Path | None = None
+    live_transmission_result_path: Path | None = None
     live_approval_state_path: Path | None = None
     session_count: int = Field(ge=0)
     session_summaries: list[ForwardPaperSessionSummary] = Field(default_factory=list)
