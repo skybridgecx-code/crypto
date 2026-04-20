@@ -376,6 +376,13 @@ def test_limited_live_boundary_authorizes_without_affecting_shadow_path(tmp_path
     assert per_request_decision.live_transmission_result_path == Path(
         session.live_transmission_result_path
     )
+    assert runtime_transmission_result.per_request_request_id == per_request_decision.request_id
+    assert runtime_transmission_result.per_request_decision_path == Path(
+        session.live_transmission_request_decision_path
+    )
+    assert runtime_transmission_result.per_request_result_path == Path(
+        session.live_transmission_request_result_path
+    )
     assert per_request_result.request_id == per_request_decision.request_id
     assert per_request_result.bounded_result_state == "not_submitted_terminal_blocked"
     assert per_request_result.submission_status == "not_submitted"
@@ -699,6 +706,13 @@ def test_limited_live_boundary_authorized_invokes_live_adapter_once(tmp_path: Pa
     assert runtime_transmission_result.rehearsal_gate_reason_codes == []
     assert runtime_transmission_result.rehearsal_gate_passed is True
     assert runtime_transmission_result.final_state == "filled"
+    assert runtime_transmission_result.per_request_request_id == live_result.ack.request_id
+    assert runtime_transmission_result.per_request_decision_path == Path(
+        session.live_transmission_request_decision_path
+    )
+    assert runtime_transmission_result.per_request_result_path == Path(
+        session.live_transmission_request_result_path
+    )
     assert per_request_decision.request_id == live_result.ack.request_id
     assert per_request_decision.bounded_decision == "allowed"
     assert per_request_decision.bounded_seam_allowed is True
@@ -1190,6 +1204,9 @@ def test_bounded_live_zero_request_emits_explicit_reason(
     assert live_result.adapter_call_attempted is False
     assert live_state.state == "not_submitted_terminal_blocked"
     assert runtime_transmission_result.transmission_attempted is False
+    assert runtime_transmission_result.per_request_request_id is None
+    assert runtime_transmission_result.per_request_decision_path is None
+    assert runtime_transmission_result.per_request_result_path is None
     assert session.live_transmission_request_decision_path is None
     assert session.live_transmission_request_result_path is None
 
@@ -1269,5 +1286,8 @@ def test_bounded_live_multi_request_emits_explicit_reason(
     assert live_result.adapter_call_attempted is False
     assert live_state.state == "not_submitted_terminal_blocked"
     assert runtime_transmission_result.transmission_attempted is False
+    assert runtime_transmission_result.per_request_request_id is None
+    assert runtime_transmission_result.per_request_decision_path is None
+    assert runtime_transmission_result.per_request_result_path is None
     assert session.live_transmission_request_decision_path is None
     assert session.live_transmission_request_result_path is None

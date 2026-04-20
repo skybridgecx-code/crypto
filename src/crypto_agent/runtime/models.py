@@ -578,6 +578,9 @@ class LiveTransmissionRuntimeResultArtifact(BaseModel):
     ] = "not_attempted"
     summary: str
     reason_codes: list[str] = Field(default_factory=list)
+    per_request_request_id: str | None = None
+    per_request_decision_path: Path | None = None
+    per_request_result_path: Path | None = None
     transmission_decision_path: Path
 
     @field_validator("generated_at")
