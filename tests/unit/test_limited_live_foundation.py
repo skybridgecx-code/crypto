@@ -12,6 +12,7 @@ from crypto_agent.runtime.models import (
     LiveAuthorityStateArtifact,
     LiveLaunchWindowArtifact,
     LiveTransmissionDecisionArtifact,
+    LiveTransmissionRuntimeResultArtifact,
 )
 
 
@@ -51,6 +52,7 @@ def test_forward_runtime_writes_limited_live_foundation_artifacts_for_replay_run
     assert result.live_authority_state_path is not None
     assert result.live_launch_window_path is not None
     assert result.live_transmission_decision_path is not None
+    assert result.live_transmission_result_path is not None
     assert result.live_approval_state_path is not None
 
     authority = LiveAuthorityStateArtifact.model_validate(
@@ -61,6 +63,9 @@ def test_forward_runtime_writes_limited_live_foundation_artifacts_for_replay_run
     )
     decision = LiveTransmissionDecisionArtifact.model_validate(
         json.loads(result.live_transmission_decision_path.read_text(encoding="utf-8"))
+    )
+    transmission_result = LiveTransmissionRuntimeResultArtifact.model_validate(
+        json.loads(result.live_transmission_result_path.read_text(encoding="utf-8"))
     )
     approval = LiveApprovalStateArtifact.model_validate(
         json.loads(result.live_approval_state_path.read_text(encoding="utf-8"))
@@ -78,9 +83,15 @@ def test_forward_runtime_writes_limited_live_foundation_artifacts_for_replay_run
     assert "live_authority_disabled_by_default" in decision.reason_codes
     assert "no_active_live_approval" in decision.reason_codes
     assert decision.approval_state_path == result.live_approval_state_path
+    assert transmission_result.transmission_attempted is False
+    assert transmission_result.adapter_submission_attempted is False
+    assert transmission_result.final_state == "not_attempted"
+    assert transmission_result.reason_codes == decision.reason_codes
+    assert transmission_result.transmission_decision_path == result.live_transmission_decision_path
     assert status.live_authority_state_path == result.live_authority_state_path
     assert status.live_launch_window_path == result.live_launch_window_path
     assert status.live_transmission_decision_path == result.live_transmission_decision_path
+    assert status.live_transmission_result_path == result.live_transmission_result_path
     assert status.live_approval_state_path == result.live_approval_state_path
 
 

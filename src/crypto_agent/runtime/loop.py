@@ -77,6 +77,7 @@ from crypto_agent.runtime.models import (
     LiveMarketPreflightArtifact,
     LiveMarketPreflightResult,
     LiveTransmissionDecisionArtifact,
+    LiveTransmissionRuntimeResultArtifact,
 )
 from crypto_agent.runtime.reconciliation import (
     RuntimeAccountMismatchError,
@@ -346,6 +347,40 @@ def _ensure_limited_live_foundation_artifacts(
                 approval_state_path=paths.live_approval_state_path,
             ),
         )
+    decision = LiveTransmissionDecisionArtifact.model_validate(
+        json.loads(paths.live_transmission_decision_path.read_text(encoding="utf-8"))
+    )
+    _write_json_artifact(
+        paths.live_transmission_result_path,
+        _build_live_transmission_result_artifact(
+            runtime_id=runtime_id,
+            generated_at=generated_at,
+            decision=decision,
+            decision_path=paths.live_transmission_decision_path,
+        ),
+    )
+
+
+def _build_live_transmission_result_artifact(
+    *,
+    runtime_id: str,
+    generated_at: datetime,
+    decision: LiveTransmissionDecisionArtifact,
+    decision_path: Path,
+) -> LiveTransmissionRuntimeResultArtifact:
+    return LiveTransmissionRuntimeResultArtifact(
+        runtime_id=runtime_id,
+        generated_at=generated_at,
+        transmission_attempted=False,
+        adapter_submission_attempted=False,
+        final_state="not_attempted",
+        summary=(
+            "No live transmission attempt executed. "
+            "Runtime remains artifact-only and deny-by-default."
+        ),
+        reason_codes=list(decision.reason_codes),
+        transmission_decision_path=decision_path,
+    )
 
 
 def _load_live_control_config(path: Path) -> LiveControlConfig:
@@ -430,6 +465,7 @@ def build_forward_paper_runtime_paths(
         live_authority_state_path=runtime_dir / "live_authority_state.json",
         live_launch_window_path=runtime_dir / "live_launch_window.json",
         live_transmission_decision_path=runtime_dir / "live_transmission_decision.json",
+        live_transmission_result_path=runtime_dir / "live_transmission_result.json",
         live_approval_state_path=runtime_dir / "live_approval_state.json",
     )
 
@@ -634,6 +670,7 @@ def _initial_runtime_status(
         live_authority_state_path=paths.live_authority_state_path,
         live_launch_window_path=paths.live_launch_window_path,
         live_transmission_decision_path=paths.live_transmission_decision_path,
+        live_transmission_result_path=paths.live_transmission_result_path,
         live_approval_state_path=paths.live_approval_state_path,
     )
 
@@ -725,6 +762,7 @@ def _ensure_runtime_status(
             "live_authority_state_path": paths.live_authority_state_path,
             "live_launch_window_path": paths.live_launch_window_path,
             "live_transmission_decision_path": paths.live_transmission_decision_path,
+            "live_transmission_result_path": paths.live_transmission_result_path,
             "live_approval_state_path": paths.live_approval_state_path,
         }
     )
@@ -1735,6 +1773,7 @@ def _refresh_limited_live_transmission_boundary(
         or status.live_launch_window_path is None
         or status.live_approval_state_path is None
         or status.live_transmission_decision_path is None
+        or status.live_transmission_result_path is None
     ):
         raise ValueError("Limited-live foundation artifacts must exist before boundary refresh.")
 
@@ -1751,6 +1790,15 @@ def _refresh_limited_live_transmission_boundary(
         generated_at=updated_at,
     )
     _write_json_artifact(status.live_transmission_decision_path, decision)
+    _write_json_artifact(
+        status.live_transmission_result_path,
+        _build_live_transmission_result_artifact(
+            runtime_id=status.runtime_id,
+            generated_at=updated_at,
+            decision=decision,
+            decision_path=status.live_transmission_decision_path,
+        ),
+    )
 
 
 def _ensure_live_control_status_artifact(
@@ -2810,6 +2858,7 @@ def run_forward_paper_runtime(
         live_authority_state_path=status.live_authority_state_path,
         live_launch_window_path=status.live_launch_window_path,
         live_transmission_decision_path=status.live_transmission_decision_path,
+        live_transmission_result_path=status.live_transmission_result_path,
         live_approval_state_path=status.live_approval_state_path,
         session_count=len(completed_sessions),
         session_summaries=completed_sessions,
