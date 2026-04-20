@@ -2257,16 +2257,35 @@ def _materialize_limited_live_transmission_artifacts(
 
     if request_model.request_count != 1:
         reason_codes.add("bounded_live_requires_single_request")
+        if request_model.request_count == 0:
+            reason_codes.add("bounded_live_request_count_zero")
+            blocked_summary = (
+                "Live transmission blocked because bounded live mode received zero normalized "
+                "requests."
+            )
+            blocked_state_summary = (
+                "No live submission attempted because bounded live mode received zero normalized "
+                "requests."
+            )
+        else:
+            reason_codes.add("bounded_live_request_count_multiple")
+            blocked_summary = (
+                "Live transmission blocked because bounded live mode received more than one "
+                "normalized request."
+            )
+            blocked_state_summary = (
+                "No live submission attempted because bounded live mode received more than one "
+                "normalized request."
+            )
+
         result_model = LiveTransmissionResultArtifact(
             runtime_id=runtime_id,
             session_id=session_summary.session_id,
             run_id=session_summary.run_id,
             generated_at=observed_at,
+            adapter_call_attempted=False,
             submission_status="not_submitted",
-            summary=(
-                "Live transmission blocked because bounded live mode requires exactly one "
-                "normalized request."
-            ),
+            summary=blocked_summary,
             reason_codes=sorted(reason_codes),
         )
         state_model = LiveTransmissionStateArtifact(
@@ -2277,7 +2296,7 @@ def _materialize_limited_live_transmission_artifacts(
             state="not_submitted_terminal_blocked",
             terminal=True,
             submission_present=False,
-            summary="No live submission attempted because request cardinality was not one.",
+            summary=blocked_state_summary,
             reason_codes=sorted(reason_codes),
         )
         _write_json_artifact(result_path, result_model)
