@@ -253,6 +253,35 @@ Phase L1K closes the limited-live preparation track with one bounded operator dr
 Closeout doc:
 - `docs/PHASE_L1K_OPERATOR_DRY_RUN_FIRST_LIVE_CHECKLIST.md`
 
+
+## Phase C6-C11 — Transport runner hardening sequence closeout
+
+The C6-C11 transport runner hardening sequence is complete.
+
+Shipped scope:
+- C6: one-shot local transport runner
+- C7: manual smoke and rerun guidance
+- C8: additive one-shot step-state artifact
+- C9: pinned non-canonical inbound-path failure behavior
+- C10: operator-facing pre-canonical failure clarification
+- C11: transport runner hardening checkpoint
+
+Reference docs:
+- `docs/OPERATOR_SURFACES.md`
+- `docs/PHASE_C7_TRANSPORT_RUNNER_MANUAL_SMOKE.md`
+- `docs/PHASE_C11_TRANSPORT_RUNNER_HARDENING_CHECKPOINT.md`
+
+Current boundary:
+- local file-based consumer-side transport only
+- no network transport
+- no auth, DB, queue, or worker behavior
+- no polling or watcher behavior
+- no producer-side changes
+- no live execution expansion
+
+Future work rule:
+- do not reopen this sequence unless a new bounded consumer-side requirement is explicitly scoped
+
 ## Phase L2A — Bounded live transmission scope lock
 
 Phase L2A defines the smallest acceptable first real live transmission envelope before any code widens authority.
