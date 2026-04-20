@@ -602,6 +602,13 @@ def _sync_runtime_live_transmission_result_from_session(
             final_state=session_state.state,
             summary=session_result.summary,
             reason_codes=session_result.reason_codes,
+            per_request_request_id=(
+                session_request.requests[0].request_id
+                if session_request.request_count == 1
+                else None
+            ),
+            per_request_decision_path=session_summary.live_transmission_request_decision_path,
+            per_request_result_path=session_summary.live_transmission_request_result_path,
             transmission_decision_path=status.live_transmission_decision_path,
         ),
     )
