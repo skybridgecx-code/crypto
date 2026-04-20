@@ -205,6 +205,9 @@ Command path:
 - archive helper:
   - console entrypoint: `crypto-agent-transport-archive`
   - module entrypoint: `crypto_agent.cli.transport_archive:main`
+- one-shot runner:
+  - console entrypoint: `crypto-agent-transport-run-once`
+  - module entrypoint: `crypto_agent.cli.transport_run_once:main`
 
 Canonical local workflow:
 
@@ -242,6 +245,13 @@ crypto-agent-transport-pickup \
 
   crypto-agent-transport-archive \
   <TRANSPORT_ROOT>/inbound/<correlation_id>/<attempt_id>/handoff_request.json
+
+  crypto-agent-transport-run-once \
+  <TRANSPORT_ROOT>/inbound/<correlation_id>/<attempt_id>/handoff_request.json \
+  --pickup-operator operator@example.com \
+  --picked-up-at-epoch-ns 1700000000000000000 \
+  --response-kind ack \
+  --responded-at-epoch-ns 1700000000000000100
 
   Expected behavior:
 
