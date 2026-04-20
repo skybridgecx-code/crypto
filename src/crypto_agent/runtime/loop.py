@@ -78,6 +78,7 @@ from crypto_agent.runtime.models import (
     LiveMarketPreflightResult,
     LiveRehearsalGateScope,
     LiveTransmissionDecisionArtifact,
+    LiveTransmissionPerRequestDecisionArtifact,
     LiveTransmissionRuntimeResultArtifact,
 )
 from crypto_agent.runtime.reconciliation import (
@@ -167,6 +168,10 @@ def _session_live_transmission_result_path(sessions_dir: Path, session_id: str) 
 
 def _session_live_transmission_state_path(sessions_dir: Path, session_id: str) -> Path:
     return sessions_dir / f"{session_id}.live_transmission_state.json"
+
+
+def _session_live_transmission_request_decision_path(sessions_dir: Path, session_id: str) -> Path:
+    return sessions_dir / f"{session_id}.live_transmission_request_decision.json"
 
 
 def _session_control_decision_path(sessions_dir: Path, session_id: str) -> Path:
@@ -442,6 +447,41 @@ def _evaluate_rehearsal_gate_scope(
             "operator_rehearsal_gate_scope_mismatch",
             *tuple(mismatch_reason_codes),
         ),
+    )
+
+
+def _build_live_transmission_per_request_decision_artifact(
+    *,
+    runtime_id: str,
+    session_id: str,
+    run_id: str,
+    generated_at: datetime,
+    live_request: LiveTransmissionRequest,
+    gate_evaluation: _RehearsalGateEvaluation,
+    bounded_seam_allowed: bool,
+    reason_codes: set[str],
+    result_model: LiveTransmissionResultArtifact,
+    result_path: Path,
+    state_path: Path,
+) -> LiveTransmissionPerRequestDecisionArtifact:
+    return LiveTransmissionPerRequestDecisionArtifact(
+        runtime_id=runtime_id,
+        session_id=session_id,
+        run_id=run_id,
+        generated_at=generated_at,
+        request_id=live_request.request_id,
+        client_order_id=live_request.client_order_id,
+        intent_id=live_request.intent_id,
+        symbol=live_request.symbol,
+        side=live_request.side,
+        bounded_decision="allowed" if bounded_seam_allowed else "denied",
+        bounded_seam_allowed=bounded_seam_allowed,
+        reason_codes=sorted(reason_codes),
+        rehearsal_gate_reason_codes=list(gate_evaluation.reason_codes),
+        adapter_call_attempted=result_model.adapter_call_attempted,
+        submission_status=result_model.submission_status,
+        live_transmission_result_path=result_path,
+        live_transmission_state_path=state_path,
     )
 
 
@@ -1802,6 +1842,7 @@ def _session_summary_with_live_transmission_artifacts(
     request_path: Path,
     result_path: Path,
     state_path: Path,
+    request_decision_path: Path | None = None,
 ) -> ForwardPaperSessionSummary:
     artifact_paths_exist = dict(session_summary.artifact_paths_exist)
     artifact_paths_exist.update(
@@ -1811,15 +1852,20 @@ def _session_summary_with_live_transmission_artifacts(
             "live_transmission_state_path": state_path.exists(),
         }
     )
-    return session_summary.model_copy(
-        update={
-            "live_transmission_request_path": request_path,
-            "live_transmission_result_path": result_path,
-            "live_transmission_state_path": state_path,
-            "artifact_paths_exist": artifact_paths_exist,
-            "all_artifact_paths_exist": all(artifact_paths_exist.values()),
-        }
-    )
+    if request_decision_path is not None:
+        artifact_paths_exist["live_transmission_request_decision_path"] = (
+            request_decision_path.exists()
+        )
+    update_payload: dict[str, object] = {
+        "live_transmission_request_path": request_path,
+        "live_transmission_result_path": result_path,
+        "live_transmission_state_path": state_path,
+        "artifact_paths_exist": artifact_paths_exist,
+        "all_artifact_paths_exist": all(artifact_paths_exist.values()),
+    }
+    if request_decision_path is not None:
+        update_payload["live_transmission_request_decision_path"] = request_decision_path
+    return session_summary.model_copy(update=update_payload)
 
 
 def _session_summary_with_control_decision(
@@ -2129,6 +2175,9 @@ def _materialize_limited_live_transmission_artifacts(
     request_path = _session_live_transmission_request_path(sessions_dir, session_summary.session_id)
     result_path = _session_live_transmission_result_path(sessions_dir, session_summary.session_id)
     state_path = _session_live_transmission_state_path(sessions_dir, session_summary.session_id)
+    request_decision_path = _session_live_transmission_request_decision_path(
+        sessions_dir, session_summary.session_id
+    )
 
     request_model = _build_live_transmission_request_artifact(
         runtime_id=runtime_id,
@@ -2219,11 +2268,28 @@ def _materialize_limited_live_transmission_artifacts(
         )
         _write_json_artifact(result_path, result_model)
         _write_json_artifact(state_path, state_model)
+        _write_json_artifact(
+            request_decision_path,
+            _build_live_transmission_per_request_decision_artifact(
+                runtime_id=runtime_id,
+                session_id=session_summary.session_id,
+                run_id=session_summary.run_id,
+                generated_at=observed_at,
+                live_request=live_request,
+                gate_evaluation=gate_evaluation,
+                bounded_seam_allowed=False,
+                reason_codes=reason_codes,
+                result_model=result_model,
+                result_path=result_path,
+                state_path=state_path,
+            ),
+        )
         return _session_summary_with_live_transmission_artifacts(
             session_summary=session_summary,
             request_path=request_path,
             result_path=result_path,
             state_path=state_path,
+            request_decision_path=request_decision_path,
         )
 
     adapter = live_execution_adapter
@@ -2312,11 +2378,28 @@ def _materialize_limited_live_transmission_artifacts(
 
     _write_json_artifact(result_path, result_model)
     _write_json_artifact(state_path, state_model)
+    _write_json_artifact(
+        request_decision_path,
+        _build_live_transmission_per_request_decision_artifact(
+            runtime_id=runtime_id,
+            session_id=session_summary.session_id,
+            run_id=session_summary.run_id,
+            generated_at=observed_at,
+            live_request=live_request,
+            gate_evaluation=gate_evaluation,
+            bounded_seam_allowed=True,
+            reason_codes=reason_codes,
+            result_model=result_model,
+            result_path=result_path,
+            state_path=state_path,
+        ),
+    )
     return _session_summary_with_live_transmission_artifacts(
         session_summary=session_summary,
         request_path=request_path,
         result_path=result_path,
         state_path=state_path,
+        request_decision_path=request_decision_path,
     )
 
 

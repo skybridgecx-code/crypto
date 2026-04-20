@@ -206,6 +206,7 @@ class ForwardPaperSessionSummary(BaseModel):
     live_transmission_request_path: Path | None = None
     live_transmission_result_path: Path | None = None
     live_transmission_state_path: Path | None = None
+    live_transmission_request_decision_path: Path | None = None
     skip_evidence_path: Path | None = None
     control_decision_path: Path | None = None
     control_action: Literal["go", "no_go", "manual_approval_required"] | None = None
@@ -577,6 +578,33 @@ class LiveTransmissionRuntimeResultArtifact(BaseModel):
     summary: str
     reason_codes: list[str] = Field(default_factory=list)
     transmission_decision_path: Path
+
+    @field_validator("generated_at")
+    @classmethod
+    def normalize_generated_at(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
+
+class LiveTransmissionPerRequestDecisionArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_id: str
+    session_id: str
+    run_id: str
+    generated_at: datetime
+    request_id: str
+    client_order_id: str
+    intent_id: str
+    symbol: str
+    side: str
+    bounded_decision: Literal["allowed", "denied"] = "denied"
+    bounded_seam_allowed: bool = False
+    reason_codes: list[str] = Field(default_factory=list)
+    rehearsal_gate_reason_codes: list[str] = Field(default_factory=list)
+    adapter_call_attempted: bool = False
+    submission_status: Literal["not_submitted", "submitted", "rejected", "error"] = "not_submitted"
+    live_transmission_result_path: Path
+    live_transmission_state_path: Path
 
     @field_validator("generated_at")
     @classmethod

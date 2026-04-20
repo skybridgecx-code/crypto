@@ -31,6 +31,7 @@ from crypto_agent.runtime.models import (
     LiveApprovalStateArtifact,
     LiveRehearsalGateScope,
     LiveTransmissionDecisionArtifact,
+    LiveTransmissionPerRequestDecisionArtifact,
     LiveTransmissionRuntimeResultArtifact,
 )
 
@@ -335,6 +336,11 @@ def test_limited_live_boundary_authorizes_without_affecting_shadow_path(tmp_path
     live_state = LiveTransmissionStateArtifact.model_validate(
         json.loads(Path(session.live_transmission_state_path).read_text(encoding="utf-8"))
     )
+    per_request_decision = LiveTransmissionPerRequestDecisionArtifact.model_validate(
+        json.loads(
+            Path(session.live_transmission_request_decision_path).read_text(encoding="utf-8")
+        )
+    )
 
     assert decision.decision == "authorized"
     assert decision.transmission_authorized is True
@@ -356,6 +362,15 @@ def test_limited_live_boundary_authorizes_without_affecting_shadow_path(tmp_path
     assert live_result.adapter_call_attempted is False
     assert live_result.submission_status == "not_submitted"
     assert "operator_rehearsal_gate_inactive" in live_result.reason_codes
+    assert per_request_decision.request_id == live_request.requests[0].request_id
+    assert per_request_decision.bounded_decision == "denied"
+    assert per_request_decision.bounded_seam_allowed is False
+    assert "operator_rehearsal_gate_scope_absent" in per_request_decision.reason_codes
+    assert per_request_decision.adapter_call_attempted is False
+    assert per_request_decision.submission_status == "not_submitted"
+    assert per_request_decision.live_transmission_result_path == Path(
+        session.live_transmission_result_path
+    )
     assert live_state.state == "not_submitted_terminal_blocked"
     assert live_state.terminal is True
     assert live_result.generated_at <= live_state.generated_at
@@ -452,6 +467,11 @@ def test_limited_live_boundary_authorizes_without_affecting_sandbox_path(tmp_pat
     live_state = LiveTransmissionStateArtifact.model_validate(
         json.loads(Path(session.live_transmission_state_path).read_text(encoding="utf-8"))
     )
+    per_request_decision = LiveTransmissionPerRequestDecisionArtifact.model_validate(
+        json.loads(
+            Path(session.live_transmission_request_decision_path).read_text(encoding="utf-8")
+        )
+    )
 
     assert decision.decision == "authorized"
     assert decision.transmission_authorized is True
@@ -473,6 +493,11 @@ def test_limited_live_boundary_authorizes_without_affecting_sandbox_path(tmp_pat
     assert live_result.adapter_call_attempted is False
     assert live_result.submission_status == "not_submitted"
     assert "operator_rehearsal_gate_inactive" in live_result.reason_codes
+    assert per_request_decision.bounded_decision == "denied"
+    assert per_request_decision.bounded_seam_allowed is False
+    assert "operator_rehearsal_gate_scope_absent" in per_request_decision.reason_codes
+    assert per_request_decision.adapter_call_attempted is False
+    assert per_request_decision.submission_status == "not_submitted"
     assert live_state.submission_present is False
 
 
@@ -626,6 +651,11 @@ def test_limited_live_boundary_authorized_invokes_live_adapter_once(tmp_path: Pa
     live_state = LiveTransmissionStateArtifact.model_validate(
         json.loads(Path(session.live_transmission_state_path).read_text(encoding="utf-8"))
     )
+    per_request_decision = LiveTransmissionPerRequestDecisionArtifact.model_validate(
+        json.loads(
+            Path(session.live_transmission_request_decision_path).read_text(encoding="utf-8")
+        )
+    )
     runtime_transmission_result = LiveTransmissionRuntimeResultArtifact.model_validate(
         json.loads(result.live_transmission_result_path.read_text(encoding="utf-8"))
     )
@@ -648,6 +678,16 @@ def test_limited_live_boundary_authorized_invokes_live_adapter_once(tmp_path: Pa
     assert runtime_transmission_result.rehearsal_gate_reason_codes == []
     assert runtime_transmission_result.rehearsal_gate_passed is True
     assert runtime_transmission_result.final_state == "filled"
+    assert per_request_decision.request_id == live_result.ack.request_id
+    assert per_request_decision.bounded_decision == "allowed"
+    assert per_request_decision.bounded_seam_allowed is True
+    assert per_request_decision.reason_codes == []
+    assert per_request_decision.rehearsal_gate_reason_codes == []
+    assert per_request_decision.adapter_call_attempted is True
+    assert per_request_decision.submission_status == "submitted"
+    assert per_request_decision.live_transmission_state_path == Path(
+        session.live_transmission_state_path
+    )
 
 
 def test_limited_live_rehearsal_gate_scope_mismatch_blocks_adapter_call(tmp_path: Path) -> None:
@@ -736,6 +776,11 @@ def test_limited_live_rehearsal_gate_scope_mismatch_blocks_adapter_call(tmp_path
     live_result = LiveTransmissionResultArtifact.model_validate(
         json.loads(Path(session.live_transmission_result_path).read_text(encoding="utf-8"))
     )
+    per_request_decision = LiveTransmissionPerRequestDecisionArtifact.model_validate(
+        json.loads(
+            Path(session.live_transmission_request_decision_path).read_text(encoding="utf-8")
+        )
+    )
     runtime_transmission_result = LiveTransmissionRuntimeResultArtifact.model_validate(
         json.loads(result.live_transmission_result_path.read_text(encoding="utf-8"))
     )
@@ -762,6 +807,13 @@ def test_limited_live_rehearsal_gate_scope_mismatch_blocks_adapter_call(tmp_path
         in runtime_transmission_result.rehearsal_gate_reason_codes
     )
     assert runtime_transmission_result.rehearsal_gate_passed is False
+    assert per_request_decision.bounded_decision == "denied"
+    assert per_request_decision.bounded_seam_allowed is False
+    assert "operator_rehearsal_gate_scope_mismatch" in per_request_decision.reason_codes
+    assert (
+        "operator_rehearsal_gate_request_mismatch"
+        in per_request_decision.rehearsal_gate_reason_codes
+    )
 
 
 def test_limited_live_rehearsal_gate_multi_field_mismatch_reasons_are_recorded(
