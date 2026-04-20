@@ -340,6 +340,7 @@ def test_limited_live_boundary_authorizes_without_affecting_shadow_path(tmp_path
     assert runtime_transmission_result.transmission_eligible is True
     assert runtime_transmission_result.transmission_attempted is False
     assert runtime_transmission_result.adapter_submission_attempted is False
+    assert runtime_transmission_result.final_state == "not_submitted_terminal_blocked"
     assert session.execution_mode == "shadow"
     assert all(result.status == "would_send" for result in results.results)
     assert live_request.request_count == results.result_count
@@ -447,6 +448,7 @@ def test_limited_live_boundary_authorizes_without_affecting_sandbox_path(tmp_pat
     assert runtime_transmission_result.transmission_eligible is True
     assert runtime_transmission_result.transmission_attempted is False
     assert runtime_transmission_result.adapter_submission_attempted is False
+    assert runtime_transmission_result.final_state == "not_submitted_terminal_blocked"
     assert session.execution_mode == "sandbox"
     assert statuses.statuses[0].state == "filled"
     assert live_request.request_count >= 1
@@ -600,6 +602,9 @@ def test_limited_live_boundary_authorized_invokes_live_adapter_once(tmp_path: Pa
     live_state = LiveTransmissionStateArtifact.model_validate(
         json.loads(Path(session.live_transmission_state_path).read_text(encoding="utf-8"))
     )
+    runtime_transmission_result = LiveTransmissionRuntimeResultArtifact.model_validate(
+        json.loads(result.live_transmission_result_path.read_text(encoding="utf-8"))
+    )
 
     assert call_counts == {"submit": 1, "fetch": 1, "cancel": 0}
     assert live_result.adapter_call_attempted is True
@@ -610,6 +615,10 @@ def test_limited_live_boundary_authorized_invokes_live_adapter_once(tmp_path: Pa
     assert live_state.state == "filled"
     assert live_state.order_state is not None
     assert live_state.order_state.state == "filled"
+    assert runtime_transmission_result.transmission_eligible is True
+    assert runtime_transmission_result.transmission_attempted is True
+    assert runtime_transmission_result.adapter_submission_attempted is True
+    assert runtime_transmission_result.final_state == "filled"
 
 
 def test_forward_runtime_replay_sandbox_requires_fixture_rehearsal_flag(

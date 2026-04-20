@@ -557,7 +557,17 @@ class LiveTransmissionRuntimeResultArtifact(BaseModel):
     adapter_submission_attempted: bool = False
     transmission_eligible: bool = False
     eligibility_state: Literal["eligible", "ineligible"] = "ineligible"
-    final_state: Literal["not_attempted"] = "not_attempted"
+    final_state: Literal[
+        "not_attempted",
+        "not_submitted_terminal_blocked",
+        "accepted",
+        "open",
+        "partially_filled",
+        "filled",
+        "canceled",
+        "rejected",
+        "error_terminal_blocked",
+    ] = "not_attempted"
     summary: str
     reason_codes: list[str] = Field(default_factory=list)
     transmission_decision_path: Path
