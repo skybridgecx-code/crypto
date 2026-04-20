@@ -539,6 +539,14 @@ def _build_live_transmission_per_request_result_artifact(
     )
 
 
+def _single_request_request_id(
+    request_artifact: LiveTransmissionRequestArtifact,
+) -> str | None:
+    if request_artifact.request_count != 1:
+        return None
+    return request_artifact.requests[0].request_id
+
+
 def _sync_runtime_live_transmission_result_from_session(
     *,
     status: ForwardPaperRuntimeStatus,
@@ -602,11 +610,7 @@ def _sync_runtime_live_transmission_result_from_session(
             final_state=session_state.state,
             summary=session_result.summary,
             reason_codes=session_result.reason_codes,
-            per_request_request_id=(
-                session_request.requests[0].request_id
-                if session_request.request_count == 1
-                else None
-            ),
+            per_request_request_id=_single_request_request_id(session_request),
             per_request_decision_path=session_summary.live_transmission_request_decision_path,
             per_request_result_path=session_summary.live_transmission_request_result_path,
             transmission_decision_path=status.live_transmission_decision_path,
@@ -1936,8 +1940,7 @@ def _session_summary_with_live_transmission_artifacts(
         request_model = LiveTransmissionRequestArtifact.model_validate(
             json.loads(request_path.read_text(encoding="utf-8"))
         )
-        if request_model.request_count == 1:
-            update_payload["per_request_request_id"] = request_model.requests[0].request_id
+        update_payload["per_request_request_id"] = _single_request_request_id(request_model)
     return session_summary.model_copy(update=update_payload)
 
 
