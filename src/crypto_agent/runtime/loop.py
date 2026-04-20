@@ -79,6 +79,7 @@ from crypto_agent.runtime.models import (
     LiveRehearsalGateScope,
     LiveTransmissionDecisionArtifact,
     LiveTransmissionPerRequestDecisionArtifact,
+    LiveTransmissionPerRequestResultArtifact,
     LiveTransmissionRuntimeResultArtifact,
 )
 from crypto_agent.runtime.reconciliation import (
@@ -172,6 +173,10 @@ def _session_live_transmission_state_path(sessions_dir: Path, session_id: str) -
 
 def _session_live_transmission_request_decision_path(sessions_dir: Path, session_id: str) -> Path:
     return sessions_dir / f"{session_id}.live_transmission_request_decision.json"
+
+
+def _session_live_transmission_request_result_path(sessions_dir: Path, session_id: str) -> Path:
+    return sessions_dir / f"{session_id}.live_transmission_request_result.json"
 
 
 def _session_control_decision_path(sessions_dir: Path, session_id: str) -> Path:
@@ -482,6 +487,55 @@ def _build_live_transmission_per_request_decision_artifact(
         submission_status=result_model.submission_status,
         live_transmission_result_path=result_path,
         live_transmission_state_path=state_path,
+    )
+
+
+def _build_live_transmission_per_request_result_artifact(
+    *,
+    runtime_id: str,
+    session_id: str,
+    run_id: str,
+    generated_at: datetime,
+    live_request: LiveTransmissionRequest,
+    gate_evaluation: _RehearsalGateEvaluation,
+    decision_path: Path,
+    bounded_result_state: Literal[
+        "not_submitted_terminal_blocked",
+        "accepted",
+        "open",
+        "partially_filled",
+        "filled",
+        "canceled",
+        "rejected",
+        "error_terminal_blocked",
+    ],
+    result_model: LiveTransmissionResultArtifact,
+    state_model: LiveTransmissionStateArtifact,
+    result_path: Path,
+    state_path: Path,
+    runtime_transmission_result_path: Path | None,
+) -> LiveTransmissionPerRequestResultArtifact:
+    return LiveTransmissionPerRequestResultArtifact(
+        runtime_id=runtime_id,
+        session_id=session_id,
+        run_id=run_id,
+        generated_at=generated_at,
+        request_id=live_request.request_id,
+        client_order_id=live_request.client_order_id,
+        intent_id=live_request.intent_id,
+        symbol=live_request.symbol,
+        side=live_request.side,
+        bounded_result_state=bounded_result_state,
+        adapter_call_attempted=result_model.adapter_call_attempted,
+        submission_status=result_model.submission_status,
+        ack_status=result_model.ack.status if result_model.ack is not None else None,
+        order_state=state_model.order_state.state if state_model.order_state is not None else None,
+        reason_codes=list(result_model.reason_codes),
+        rehearsal_gate_reason_codes=list(gate_evaluation.reason_codes),
+        per_request_decision_path=decision_path,
+        live_transmission_result_path=result_path,
+        live_transmission_state_path=state_path,
+        runtime_live_transmission_result_path=runtime_transmission_result_path,
     )
 
 
@@ -1843,6 +1897,7 @@ def _session_summary_with_live_transmission_artifacts(
     result_path: Path,
     state_path: Path,
     request_decision_path: Path | None = None,
+    request_result_path: Path | None = None,
 ) -> ForwardPaperSessionSummary:
     artifact_paths_exist = dict(session_summary.artifact_paths_exist)
     artifact_paths_exist.update(
@@ -1856,6 +1911,8 @@ def _session_summary_with_live_transmission_artifacts(
         artifact_paths_exist["live_transmission_request_decision_path"] = (
             request_decision_path.exists()
         )
+    if request_result_path is not None:
+        artifact_paths_exist["live_transmission_request_result_path"] = request_result_path.exists()
     update_payload: dict[str, object] = {
         "live_transmission_request_path": request_path,
         "live_transmission_result_path": result_path,
@@ -1865,6 +1922,8 @@ def _session_summary_with_live_transmission_artifacts(
     }
     if request_decision_path is not None:
         update_payload["live_transmission_request_decision_path"] = request_decision_path
+    if request_result_path is not None:
+        update_payload["live_transmission_request_result_path"] = request_result_path
     return session_summary.model_copy(update=update_payload)
 
 
@@ -2169,6 +2228,7 @@ def _materialize_limited_live_transmission_artifacts(
     expected_symbol: str | None,
     live_execution_adapter: LiveExecutionAdapter | None,
     rehearsal_gate_scope: LiveRehearsalGateScope | None,
+    runtime_transmission_result_path: Path | None,
 ) -> ForwardPaperSessionSummary:
     if session_summary.run_id is None:
         raise ValueError("Limited-live transmission artifacts require session run_id.")
@@ -2176,6 +2236,9 @@ def _materialize_limited_live_transmission_artifacts(
     result_path = _session_live_transmission_result_path(sessions_dir, session_summary.session_id)
     state_path = _session_live_transmission_state_path(sessions_dir, session_summary.session_id)
     request_decision_path = _session_live_transmission_request_decision_path(
+        sessions_dir, session_summary.session_id
+    )
+    request_result_path = _session_live_transmission_request_result_path(
         sessions_dir, session_summary.session_id
     )
 
@@ -2284,12 +2347,31 @@ def _materialize_limited_live_transmission_artifacts(
                 state_path=state_path,
             ),
         )
+        _write_json_artifact(
+            request_result_path,
+            _build_live_transmission_per_request_result_artifact(
+                runtime_id=runtime_id,
+                session_id=session_summary.session_id,
+                run_id=session_summary.run_id,
+                generated_at=observed_at,
+                live_request=live_request,
+                gate_evaluation=gate_evaluation,
+                decision_path=request_decision_path,
+                bounded_result_state=state_model.state,
+                result_model=result_model,
+                state_model=state_model,
+                result_path=result_path,
+                state_path=state_path,
+                runtime_transmission_result_path=runtime_transmission_result_path,
+            ),
+        )
         return _session_summary_with_live_transmission_artifacts(
             session_summary=session_summary,
             request_path=request_path,
             result_path=result_path,
             state_path=state_path,
             request_decision_path=request_decision_path,
+            request_result_path=request_result_path,
         )
 
     adapter = live_execution_adapter
@@ -2394,12 +2476,31 @@ def _materialize_limited_live_transmission_artifacts(
             state_path=state_path,
         ),
     )
+    _write_json_artifact(
+        request_result_path,
+        _build_live_transmission_per_request_result_artifact(
+            runtime_id=runtime_id,
+            session_id=session_summary.session_id,
+            run_id=session_summary.run_id,
+            generated_at=observed_at,
+            live_request=live_request,
+            gate_evaluation=gate_evaluation,
+            decision_path=request_decision_path,
+            bounded_result_state=state_model.state,
+            result_model=result_model,
+            state_model=state_model,
+            result_path=result_path,
+            state_path=state_path,
+            runtime_transmission_result_path=runtime_transmission_result_path,
+        ),
+    )
     return _session_summary_with_live_transmission_artifacts(
         session_summary=session_summary,
         request_path=request_path,
         result_path=result_path,
         state_path=state_path,
         request_decision_path=request_decision_path,
+        request_result_path=request_result_path,
     )
 
 
@@ -2870,6 +2971,7 @@ def run_forward_paper_runtime(
                         expected_symbol=status.live_symbol,
                         live_execution_adapter=live_execution_adapter,
                         rehearsal_gate_scope=live_rehearsal_gate_scope,
+                        runtime_transmission_result_path=status.live_transmission_result_path,
                     )
                     _sync_runtime_live_transmission_result_from_session(
                         status=status,
