@@ -206,6 +206,7 @@ class ForwardPaperSessionSummary(BaseModel):
     live_transmission_request_path: Path | None = None
     live_transmission_result_path: Path | None = None
     live_transmission_state_path: Path | None = None
+    per_request_request_id: str | None = None
     live_transmission_request_decision_path: Path | None = None
     live_transmission_request_result_path: Path | None = None
     skip_evidence_path: Path | None = None

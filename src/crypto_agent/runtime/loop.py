@@ -1924,6 +1924,7 @@ def _session_summary_with_live_transmission_artifacts(
         "live_transmission_request_path": request_path,
         "live_transmission_result_path": result_path,
         "live_transmission_state_path": state_path,
+        "per_request_request_id": None,
         "artifact_paths_exist": artifact_paths_exist,
         "all_artifact_paths_exist": all(artifact_paths_exist.values()),
     }
@@ -1931,6 +1932,12 @@ def _session_summary_with_live_transmission_artifacts(
         update_payload["live_transmission_request_decision_path"] = request_decision_path
     if request_result_path is not None:
         update_payload["live_transmission_request_result_path"] = request_result_path
+    if request_decision_path is not None and request_result_path is not None:
+        request_model = LiveTransmissionRequestArtifact.model_validate(
+            json.loads(request_path.read_text(encoding="utf-8"))
+        )
+        if request_model.request_count == 1:
+            update_payload["per_request_request_id"] = request_model.requests[0].request_id
     return session_summary.model_copy(update=update_payload)
 
 
