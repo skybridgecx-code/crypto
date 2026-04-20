@@ -76,6 +76,7 @@ from crypto_agent.runtime.models import (
     LiveLaunchWindowArtifact,
     LiveMarketPreflightArtifact,
     LiveMarketPreflightResult,
+    LiveRehearsalGateScope,
     LiveTransmissionDecisionArtifact,
     LiveTransmissionRuntimeResultArtifact,
 )
@@ -100,6 +101,14 @@ class RuntimeAlreadyActiveError(RuntimeError):
 class _LivePollResult:
     market_state: LiveMarketState
     attempt_count_used: int
+
+
+@dataclass(frozen=True)
+class _RehearsalGateEvaluation:
+    state: Literal["inactive", "active"]
+    scope_state: Literal["absent", "mismatched", "matched"]
+    matched: bool
+    reason_codes: tuple[str, ...]
 
 
 def _utc_now() -> datetime:
@@ -389,13 +398,59 @@ def _build_live_transmission_result_artifact(
     )
 
 
+def _evaluate_rehearsal_gate_scope(
+    *,
+    runtime_id: str,
+    session_id: str,
+    request_id: str,
+    rehearsal_gate_scope: LiveRehearsalGateScope | None,
+) -> _RehearsalGateEvaluation:
+    if rehearsal_gate_scope is None:
+        return _RehearsalGateEvaluation(
+            state="inactive",
+            scope_state="absent",
+            matched=False,
+            reason_codes=(
+                "operator_rehearsal_gate_inactive",
+                "operator_rehearsal_gate_scope_absent",
+            ),
+        )
+
+    request_scope_matches = (
+        rehearsal_gate_scope.request_id == request_id
+        or rehearsal_gate_scope.request_id == "single_request"
+    )
+    scope_matches = (
+        rehearsal_gate_scope.runtime_id == runtime_id
+        and rehearsal_gate_scope.session_id == session_id
+        and request_scope_matches
+    )
+    if scope_matches:
+        return _RehearsalGateEvaluation(
+            state="active",
+            scope_state="matched",
+            matched=True,
+            reason_codes=(),
+        )
+
+    return _RehearsalGateEvaluation(
+        state="inactive",
+        scope_state="mismatched",
+        matched=False,
+        reason_codes=(
+            "operator_rehearsal_gate_inactive",
+            "operator_rehearsal_gate_scope_mismatch",
+        ),
+    )
+
+
 def _sync_runtime_live_transmission_result_from_session(
     *,
     status: ForwardPaperRuntimeStatus,
     session_summary: ForwardPaperSessionSummary,
     observed_at: datetime,
     decision: LiveTransmissionDecisionArtifact,
-    rehearsal_gate_open: bool,
+    rehearsal_gate_scope: LiveRehearsalGateScope | None,
 ) -> None:
     if (
         status.live_transmission_result_path is None
@@ -411,6 +466,29 @@ def _sync_runtime_live_transmission_result_from_session(
     session_state = LiveTransmissionStateArtifact.model_validate(
         json.loads(Path(session_summary.live_transmission_state_path).read_text(encoding="utf-8"))
     )
+    if session_summary.live_transmission_request_path is None:
+        return
+    session_request = LiveTransmissionRequestArtifact.model_validate(
+        json.loads(Path(session_summary.live_transmission_request_path).read_text(encoding="utf-8"))
+    )
+    gate_evaluation: _RehearsalGateEvaluation
+    if session_request.request_count == 1:
+        gate_evaluation = _evaluate_rehearsal_gate_scope(
+            runtime_id=status.runtime_id,
+            session_id=session_summary.session_id,
+            request_id=session_request.requests[0].request_id,
+            rehearsal_gate_scope=rehearsal_gate_scope,
+        )
+    else:
+        gate_evaluation = _RehearsalGateEvaluation(
+            state="inactive",
+            scope_state="mismatched",
+            matched=False,
+            reason_codes=(
+                "operator_rehearsal_gate_inactive",
+                "operator_rehearsal_gate_scope_mismatch",
+            ),
+        )
     adapter_submission_attempted = session_result.adapter_call_attempted
     _write_json_artifact(
         status.live_transmission_result_path,
@@ -421,8 +499,10 @@ def _sync_runtime_live_transmission_result_from_session(
             adapter_submission_attempted=adapter_submission_attempted,
             transmission_eligible=decision.transmission_authorized,
             eligibility_state="eligible" if decision.transmission_authorized else "ineligible",
-            rehearsal_gate_state="active" if rehearsal_gate_open else "inactive",
-            rehearsal_gate_passed=decision.transmission_authorized and rehearsal_gate_open,
+            rehearsal_gate_state=gate_evaluation.state,
+            rehearsal_gate_scope_state=gate_evaluation.scope_state,
+            rehearsal_gate_match=gate_evaluation.matched,
+            rehearsal_gate_passed=decision.transmission_authorized and gate_evaluation.matched,
             final_state=session_state.state,
             summary=session_result.summary,
             reason_codes=session_result.reason_codes,
@@ -2040,7 +2120,7 @@ def _materialize_limited_live_transmission_artifacts(
     request_artifact: ExecutionRequestArtifact | None,
     expected_symbol: str | None,
     live_execution_adapter: LiveExecutionAdapter | None,
-    rehearsal_gate_open: bool,
+    rehearsal_gate_scope: LiveRehearsalGateScope | None,
 ) -> ForwardPaperSessionSummary:
     if session_summary.run_id is None:
         raise ValueError("Limited-live transmission artifacts require session run_id.")
@@ -2096,8 +2176,14 @@ def _materialize_limited_live_transmission_artifacts(
         )
 
     live_request = request_model.requests[0]
-    if not rehearsal_gate_open:
-        reason_codes.add("operator_rehearsal_gate_inactive")
+    gate_evaluation = _evaluate_rehearsal_gate_scope(
+        runtime_id=runtime_id,
+        session_id=session_summary.session_id,
+        request_id=live_request.request_id,
+        rehearsal_gate_scope=rehearsal_gate_scope,
+    )
+    for reason_code in gate_evaluation.reason_codes:
+        reason_codes.add(reason_code)
     if expected_symbol is None:
         reason_codes.add("bounded_live_symbol_not_configured")
     elif live_request.symbol != expected_symbol:
@@ -2260,7 +2346,7 @@ def run_forward_paper_runtime(
     live_launch_window_starts_at: datetime | None = None,
     live_launch_window_ends_at: datetime | None = None,
     limited_live_authority_enabled: bool = False,
-    live_rehearsal_gate_open: bool = False,
+    live_rehearsal_gate_scope: LiveRehearsalGateScope | None = None,
     live_control_config: LiveControlConfig | None = None,
     readiness_status: LiveReadinessStatus | None = None,
     manual_control_state: ManualControlState | None = None,
@@ -2698,14 +2784,14 @@ def run_forward_paper_runtime(
                         request_artifact=request_artifact,
                         expected_symbol=status.live_symbol,
                         live_execution_adapter=live_execution_adapter,
-                        rehearsal_gate_open=live_rehearsal_gate_open,
+                        rehearsal_gate_scope=live_rehearsal_gate_scope,
                     )
                     _sync_runtime_live_transmission_result_from_session(
                         status=status,
                         session_summary=completed_session,
                         observed_at=completed_session.completed_at or scheduled_at,
                         decision=transmission_decision,
-                        rehearsal_gate_open=live_rehearsal_gate_open,
+                        rehearsal_gate_scope=live_rehearsal_gate_scope,
                     )
 
                 if execution_mode != "paper" and post_run_decision.action == "go":
