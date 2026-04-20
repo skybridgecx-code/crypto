@@ -17,6 +17,7 @@ dependencies = [
 crypto-agent-paper-run = "crypto_agent.cli.main:main"
 crypto-agent-paper-matrix-run = "crypto_agent.cli.matrix:main"
 crypto-agent-forward-paper-run = "crypto_agent.cli.forward_paper:main"
+crypto-agent-transport-pickup = "crypto_agent.cli.transport_pickup:main"
 
 [project.optional-dependencies]
 dev = [
