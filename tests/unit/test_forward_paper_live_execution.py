@@ -32,6 +32,7 @@ from crypto_agent.runtime.models import (
     LiveApprovalStateArtifact,
     LiveRehearsalGateScope,
     LiveTransmissionDecisionArtifact,
+    LiveTransmissionPerRequestArtifactSummary,
     LiveTransmissionPerRequestDecisionArtifact,
     LiveTransmissionPerRequestResultArtifact,
     LiveTransmissionRuntimeResultArtifact,
@@ -383,6 +384,19 @@ def test_limited_live_boundary_authorizes_without_affecting_shadow_path(tmp_path
     assert runtime_transmission_result.per_request_result_path == Path(
         session.live_transmission_request_result_path
     )
+    assert (
+        runtime_transmission_result.per_request_artifact_summary
+        == LiveTransmissionPerRequestArtifactSummary(
+            request_id=per_request_decision.request_id,
+            decision_path=Path(session.live_transmission_request_decision_path),
+            result_path=Path(session.live_transmission_request_result_path),
+        )
+    )
+    assert session.per_request_artifact_summary == LiveTransmissionPerRequestArtifactSummary(
+        request_id=per_request_decision.request_id,
+        decision_path=Path(session.live_transmission_request_decision_path),
+        result_path=Path(session.live_transmission_request_result_path),
+    )
     assert session.per_request_request_id == per_request_decision.request_id
     assert per_request_result.request_id == per_request_decision.request_id
     assert per_request_result.bounded_result_state == "not_submitted_terminal_blocked"
@@ -713,6 +727,19 @@ def test_limited_live_boundary_authorized_invokes_live_adapter_once(tmp_path: Pa
     )
     assert runtime_transmission_result.per_request_result_path == Path(
         session.live_transmission_request_result_path
+    )
+    assert (
+        runtime_transmission_result.per_request_artifact_summary
+        == LiveTransmissionPerRequestArtifactSummary(
+            request_id=live_result.ack.request_id,
+            decision_path=Path(session.live_transmission_request_decision_path),
+            result_path=Path(session.live_transmission_request_result_path),
+        )
+    )
+    assert session.per_request_artifact_summary == LiveTransmissionPerRequestArtifactSummary(
+        request_id=live_result.ack.request_id,
+        decision_path=Path(session.live_transmission_request_decision_path),
+        result_path=Path(session.live_transmission_request_result_path),
     )
     assert session.per_request_request_id == live_result.ack.request_id
     assert per_request_decision.request_id == live_result.ack.request_id
@@ -1209,7 +1236,9 @@ def test_bounded_live_zero_request_emits_explicit_reason(
     assert runtime_transmission_result.per_request_request_id is None
     assert runtime_transmission_result.per_request_decision_path is None
     assert runtime_transmission_result.per_request_result_path is None
+    assert runtime_transmission_result.per_request_artifact_summary is None
     assert session.per_request_request_id is None
+    assert session.per_request_artifact_summary is None
     assert session.live_transmission_request_decision_path is None
     assert session.live_transmission_request_result_path is None
 
@@ -1292,6 +1321,8 @@ def test_bounded_live_multi_request_emits_explicit_reason(
     assert runtime_transmission_result.per_request_request_id is None
     assert runtime_transmission_result.per_request_decision_path is None
     assert runtime_transmission_result.per_request_result_path is None
+    assert runtime_transmission_result.per_request_artifact_summary is None
     assert session.per_request_request_id is None
+    assert session.per_request_artifact_summary is None
     assert session.live_transmission_request_decision_path is None
     assert session.live_transmission_request_result_path is None
