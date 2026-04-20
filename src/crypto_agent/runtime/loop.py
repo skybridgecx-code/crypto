@@ -389,6 +389,45 @@ def _build_live_transmission_result_artifact(
     )
 
 
+def _sync_runtime_live_transmission_result_from_session(
+    *,
+    status: ForwardPaperRuntimeStatus,
+    session_summary: ForwardPaperSessionSummary,
+    observed_at: datetime,
+    decision: LiveTransmissionDecisionArtifact,
+) -> None:
+    if (
+        status.live_transmission_result_path is None
+        or status.live_transmission_decision_path is None
+        or session_summary.live_transmission_result_path is None
+        or session_summary.live_transmission_state_path is None
+    ):
+        return
+
+    session_result = LiveTransmissionResultArtifact.model_validate(
+        json.loads(Path(session_summary.live_transmission_result_path).read_text(encoding="utf-8"))
+    )
+    session_state = LiveTransmissionStateArtifact.model_validate(
+        json.loads(Path(session_summary.live_transmission_state_path).read_text(encoding="utf-8"))
+    )
+    adapter_submission_attempted = session_result.adapter_call_attempted
+    _write_json_artifact(
+        status.live_transmission_result_path,
+        LiveTransmissionRuntimeResultArtifact(
+            runtime_id=status.runtime_id,
+            generated_at=observed_at,
+            transmission_attempted=adapter_submission_attempted,
+            adapter_submission_attempted=adapter_submission_attempted,
+            transmission_eligible=decision.transmission_authorized,
+            eligibility_state="eligible" if decision.transmission_authorized else "ineligible",
+            final_state=session_state.state,
+            summary=session_result.summary,
+            reason_codes=session_result.reason_codes,
+            transmission_decision_path=status.live_transmission_decision_path,
+        ),
+    )
+
+
 def _load_live_control_config(path: Path) -> LiveControlConfig:
     return LiveControlConfig.model_validate(json.loads(path.read_text(encoding="utf-8")))
 
@@ -2652,6 +2691,12 @@ def run_forward_paper_runtime(
                         request_artifact=request_artifact,
                         expected_symbol=status.live_symbol,
                         live_execution_adapter=live_execution_adapter,
+                    )
+                    _sync_runtime_live_transmission_result_from_session(
+                        status=status,
+                        session_summary=completed_session,
+                        observed_at=completed_session.completed_at or scheduled_at,
+                        decision=transmission_decision,
                     )
 
                 if execution_mode != "paper" and post_run_decision.action == "go":
