@@ -713,6 +713,7 @@ def test_limited_live_boundary_authorized_invokes_live_adapter_once(tmp_path: Pa
     assert runtime_transmission_result.per_request_result_path == Path(
         session.live_transmission_request_result_path
     )
+    assert session.per_request_request_id == live_result.ack.request_id
     assert per_request_decision.request_id == live_result.ack.request_id
     assert per_request_decision.bounded_decision == "allowed"
     assert per_request_decision.bounded_seam_allowed is True
@@ -1207,6 +1208,8 @@ def test_bounded_live_zero_request_emits_explicit_reason(
     assert runtime_transmission_result.per_request_request_id is None
     assert runtime_transmission_result.per_request_decision_path is None
     assert runtime_transmission_result.per_request_result_path is None
+    assert session.per_request_request_id is None
+    assert session.per_request_request_id is None
     assert session.live_transmission_request_decision_path is None
     assert session.live_transmission_request_result_path is None
 
