@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import crypto_agent.runtime.loop as runtime_loop_module
 import pytest
 from crypto_agent.config import load_settings
 from crypto_agent.execution.live_adapter import (
@@ -1113,3 +1114,160 @@ def test_forward_runtime_replay_sandbox_fixture_rehearsal_writes_nonzero_adapter
     assert all(request.sandbox is True for request in requests.requests)
     assert all(result.sandbox is True for result in results.results)
     assert all(status.sandbox is True for status in statuses.statuses)
+
+
+def test_bounded_live_zero_request_emits_explicit_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    runtime_id = "forward-live-zero-request"
+    tick_time = _ts(2026, 4, 3, 16, 4)
+    _write_active_live_approval(tmp_path=tmp_path, runtime_id=runtime_id, generated_at=tick_time)
+    readiness = default_live_readiness_status(
+        runtime_id=runtime_id,
+        updated_at=tick_time,
+    ).model_copy(update={"limited_live_gate_status": "ready_for_review"})
+    controls = _permissive_live_controls(runtime_id=runtime_id, updated_at=tick_time)
+
+    original = runtime_loop_module._build_live_transmission_request_artifact
+
+    def _zero_request_artifact(*args, **kwargs):
+        artifact = original(*args, **kwargs)
+        return artifact.model_copy(
+            update={
+                "requests": [],
+                "request_count": 0,
+                "rejected_request_count": 0,
+            }
+        )
+
+    monkeypatch.setattr(
+        runtime_loop_module,
+        "_build_live_transmission_request_artifact",
+        _zero_request_artifact,
+    )
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id=runtime_id,
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=1,
+        tick_times=[tick_time],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_live_adapter(),
+        limited_live_authority_enabled=True,
+        live_launch_window_starts_at=_ts(2026, 4, 3, 16, 0),
+        live_launch_window_ends_at=_ts(2026, 4, 3, 16, 10),
+        live_control_config=controls,
+        readiness_status=readiness,
+    )
+
+    session = result.session_summaries[0]
+    live_request = LiveTransmissionRequestArtifact.model_validate(
+        json.loads(Path(session.live_transmission_request_path).read_text(encoding="utf-8"))
+    )
+    live_result = LiveTransmissionResultArtifact.model_validate(
+        json.loads(Path(session.live_transmission_result_path).read_text(encoding="utf-8"))
+    )
+    live_state = LiveTransmissionStateArtifact.model_validate(
+        json.loads(Path(session.live_transmission_state_path).read_text(encoding="utf-8"))
+    )
+    runtime_transmission_result = LiveTransmissionRuntimeResultArtifact.model_validate(
+        json.loads(result.live_transmission_result_path.read_text(encoding="utf-8"))
+    )
+
+    assert live_request.request_count == 0
+    assert "bounded_live_requires_single_request" in live_result.reason_codes
+    assert "bounded_live_request_count_zero" in live_result.reason_codes
+    assert "bounded_live_request_count_zero" in live_state.reason_codes
+    assert "bounded_live_request_count_zero" in runtime_transmission_result.reason_codes
+    assert live_result.adapter_call_attempted is False
+    assert live_state.state == "not_submitted_terminal_blocked"
+    assert runtime_transmission_result.transmission_attempted is False
+    assert session.live_transmission_request_decision_path is None
+    assert session.live_transmission_request_result_path is None
+
+
+def test_bounded_live_multi_request_emits_explicit_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    runtime_id = "forward-live-multi-request"
+    tick_time = _ts(2026, 4, 3, 16, 4)
+    _write_active_live_approval(tmp_path=tmp_path, runtime_id=runtime_id, generated_at=tick_time)
+    readiness = default_live_readiness_status(
+        runtime_id=runtime_id,
+        updated_at=tick_time,
+    ).model_copy(update={"limited_live_gate_status": "ready_for_review"})
+    controls = _permissive_live_controls(runtime_id=runtime_id, updated_at=tick_time)
+
+    original = runtime_loop_module._build_live_transmission_request_artifact
+
+    def _multi_request_artifact(*args, **kwargs):
+        artifact = original(*args, **kwargs)
+        if not artifact.requests:
+            raise AssertionError("expected at least one live transmission request")
+        return artifact.model_copy(
+            update={
+                "requests": [artifact.requests[0], artifact.requests[0]],
+                "request_count": 2,
+            }
+        )
+
+    monkeypatch.setattr(
+        runtime_loop_module,
+        "_build_live_transmission_request_artifact",
+        _multi_request_artifact,
+    )
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id=runtime_id,
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=1,
+        tick_times=[tick_time],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_live_adapter(),
+        limited_live_authority_enabled=True,
+        live_launch_window_starts_at=_ts(2026, 4, 3, 16, 0),
+        live_launch_window_ends_at=_ts(2026, 4, 3, 16, 10),
+        live_control_config=controls,
+        readiness_status=readiness,
+    )
+
+    session = result.session_summaries[0]
+    live_request = LiveTransmissionRequestArtifact.model_validate(
+        json.loads(Path(session.live_transmission_request_path).read_text(encoding="utf-8"))
+    )
+    live_result = LiveTransmissionResultArtifact.model_validate(
+        json.loads(Path(session.live_transmission_result_path).read_text(encoding="utf-8"))
+    )
+    live_state = LiveTransmissionStateArtifact.model_validate(
+        json.loads(Path(session.live_transmission_state_path).read_text(encoding="utf-8"))
+    )
+    runtime_transmission_result = LiveTransmissionRuntimeResultArtifact.model_validate(
+        json.loads(result.live_transmission_result_path.read_text(encoding="utf-8"))
+    )
+
+    assert live_request.request_count == 2
+    assert "bounded_live_requires_single_request" in live_result.reason_codes
+    assert "bounded_live_request_count_multiple" in live_result.reason_codes
+    assert "bounded_live_request_count_multiple" in live_state.reason_codes
+    assert "bounded_live_request_count_multiple" in runtime_transmission_result.reason_codes
+    assert live_result.adapter_call_attempted is False
+    assert live_state.state == "not_submitted_terminal_blocked"
+    assert runtime_transmission_result.transmission_attempted is False
+    assert session.live_transmission_request_decision_path is None
+    assert session.live_transmission_request_result_path is None
