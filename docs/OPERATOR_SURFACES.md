@@ -192,6 +192,93 @@ Operator note:
 
 - if you want the verdict to reflect launch-review readiness rather than an intentional operator hold, the runtime readiness surface must already be `status == "ready"` and `limited_live_gate_status == "ready_for_review"`
 
+## Local Transport Consumer Path
+
+Command path:
+
+- pickup receipt:
+  - console entrypoint: `crypto-agent-transport-pickup`
+  - module entrypoint: `crypto_agent.cli.transport_pickup:main`
+- boundary response:
+  - console entrypoint: `crypto-agent-transport-boundary-response`
+  - module entrypoint: `crypto_agent.cli.transport_boundary_response:main`
+- archive helper:
+  - console entrypoint: `crypto-agent-transport-archive`
+  - module entrypoint: `crypto_agent.cli.transport_archive:main`
+
+Canonical local workflow:
+
+1. read canonical inbound handoff request:
+   - `<TRANSPORT_ROOT>/inbound/<correlation_id>/<attempt_id>/handoff_request.json`
+2. write pickup receipt:
+   - `<TRANSPORT_ROOT>/pickup/<correlation_id>/<attempt_id>/cryp_pickup_receipt.json`
+3. write exactly one boundary response artifact:
+   - ack:
+     - `<TRANSPORT_ROOT>/responses/<correlation_id>/<attempt_id>/<correlation_id>.execution_boundary_ack.json`
+   - reject:
+     - `<TRANSPORT_ROOT>/responses/<correlation_id>/<attempt_id>/<correlation_id>.execution_boundary_reject.json`
+4. archive the full attempt bundle:
+   - `<TRANSPORT_ROOT>/archive/<correlation_id>/<attempt_id>/`
+
+Pickup example:
+
+```bash
+crypto-agent-transport-pickup \
+  <TRANSPORT_ROOT>/inbound/<correlation_id>/<attempt_id>/handoff_request.json \
+  --pickup-operator operator@example.com \
+  --picked-up-at-epoch-ns 1700000000000000000
+
+  crypto-agent-transport-boundary-response \
+  <TRANSPORT_ROOT>/inbound/<correlation_id>/<attempt_id>/handoff_request.json \
+  --response-kind ack \
+  --responded-at-epoch-ns 1700000000000000100
+
+  crypto-agent-transport-boundary-response \
+  <TRANSPORT_ROOT>/inbound/<correlation_id>/<attempt_id>/handoff_request.json \
+  --response-kind reject \
+  --responded-at-epoch-ns 1700000000000000100 \
+  --reason-codes contract_validation_failed,path_mismatch \
+  --validation-error "canonical transport validation failed"
+
+  crypto-agent-transport-archive \
+  <TRANSPORT_ROOT>/inbound/<correlation_id>/<attempt_id>/handoff_request.json
+
+  Expected behavior:
+
+  - pickup fails closed if the inbound handoff path is non-canonical or required transport fields are missing
+  - boundary response fails closed if the matching pickup receipt is missing or invalid
+  - reject responses require non-empty reason_codes and a validation_error
+  - boundary response refuses to write the opposite response kind once one canonical response already exists
+  - archive fails closed unless the handoff request, pickup receipt, and exactly one boundary response artifact all exist and match
+
+Local transport artifacts:
+
+inbound request:
+
+ - handoff_request.json
+
+pickup artifact:
+ 
+ - cryp_pickup_receipt.json
+
+boundary artifacts:
+
+ - <correlation_id>.execution_boundary_ack.json
+ - <correlation_id>.execution_boundary_reject.json
+ - archive copies:
+ - handoff_request.json
+ - cryp_pickup_receipt.json
+ - exactly one boundary response artifact
+
+Explicit non-goals:
+
+ -no live execution expansion
+ -no network transport
+ -no auth
+ -no database, queue, or background worker
+ -no automatic polling or watching
+ -no producer-side mutation from cryp
+
 ## Snapshot-Locked Validation Surfaces
 
 Single-run:
