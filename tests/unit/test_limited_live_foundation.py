@@ -113,6 +113,7 @@ def test_forward_runtime_writes_limited_live_foundation_artifacts_for_replay_run
     assert transmission_result.rehearsal_gate_state == "inactive"
     assert transmission_result.rehearsal_gate_scope_state == "absent"
     assert transmission_result.rehearsal_gate_match is False
+    assert transmission_result.rehearsal_gate_reason_codes == []
     assert transmission_result.rehearsal_gate_passed is False
     assert transmission_result.final_state == "not_attempted"
     assert transmission_result.reason_codes == decision.reason_codes
@@ -224,5 +225,6 @@ def test_forward_runtime_marks_positive_path_transmission_eligibility_without_tr
     assert transmission_result.adapter_submission_attempted is False
     assert transmission_result.rehearsal_gate_scope_state == "absent"
     assert transmission_result.rehearsal_gate_match is False
+    assert transmission_result.rehearsal_gate_reason_codes == []
     assert transmission_result.final_state == "not_attempted"
     assert transmission_result.reason_codes == []

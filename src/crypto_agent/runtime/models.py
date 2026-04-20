@@ -561,6 +561,7 @@ class LiveTransmissionRuntimeResultArtifact(BaseModel):
     rehearsal_gate_state: Literal["inactive", "active"] = "inactive"
     rehearsal_gate_scope_state: Literal["absent", "mismatched", "matched"] = "absent"
     rehearsal_gate_match: bool = False
+    rehearsal_gate_reason_codes: list[str] = Field(default_factory=list)
     rehearsal_gate_passed: bool = False
     final_state: Literal[
         "not_attempted",

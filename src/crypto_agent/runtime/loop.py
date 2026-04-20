@@ -416,15 +416,15 @@ def _evaluate_rehearsal_gate_scope(
             ),
         )
 
-    request_scope_matches = (
-        rehearsal_gate_scope.request_id == request_id
-        or rehearsal_gate_scope.request_id == "single_request"
-    )
-    scope_matches = (
-        rehearsal_gate_scope.runtime_id == runtime_id
-        and rehearsal_gate_scope.session_id == session_id
-        and request_scope_matches
-    )
+    mismatch_reason_codes: list[str] = []
+    if rehearsal_gate_scope.runtime_id != runtime_id:
+        mismatch_reason_codes.append("operator_rehearsal_gate_runtime_mismatch")
+    if rehearsal_gate_scope.session_id != session_id:
+        mismatch_reason_codes.append("operator_rehearsal_gate_session_mismatch")
+    request_scope_matches = rehearsal_gate_scope.request_id in {request_id, "single_request"}
+    if not request_scope_matches:
+        mismatch_reason_codes.append("operator_rehearsal_gate_request_mismatch")
+    scope_matches = len(mismatch_reason_codes) == 0
     if scope_matches:
         return _RehearsalGateEvaluation(
             state="active",
@@ -440,6 +440,7 @@ def _evaluate_rehearsal_gate_scope(
         reason_codes=(
             "operator_rehearsal_gate_inactive",
             "operator_rehearsal_gate_scope_mismatch",
+            *tuple(mismatch_reason_codes),
         ),
     )
 
@@ -502,6 +503,7 @@ def _sync_runtime_live_transmission_result_from_session(
             rehearsal_gate_state=gate_evaluation.state,
             rehearsal_gate_scope_state=gate_evaluation.scope_state,
             rehearsal_gate_match=gate_evaluation.matched,
+            rehearsal_gate_reason_codes=list(gate_evaluation.reason_codes),
             rehearsal_gate_passed=decision.transmission_authorized and gate_evaluation.matched,
             final_state=session_state.state,
             summary=session_result.summary,
