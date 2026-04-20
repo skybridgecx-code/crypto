@@ -557,6 +557,9 @@ class LiveTransmissionRuntimeResultArtifact(BaseModel):
     adapter_submission_attempted: bool = False
     transmission_eligible: bool = False
     eligibility_state: Literal["eligible", "ineligible"] = "ineligible"
+    rehearsal_gate_required: bool = True
+    rehearsal_gate_state: Literal["inactive", "active"] = "inactive"
+    rehearsal_gate_passed: bool = False
     final_state: Literal[
         "not_attempted",
         "not_submitted_terminal_blocked",

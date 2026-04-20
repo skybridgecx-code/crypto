@@ -340,12 +340,15 @@ def test_limited_live_boundary_authorizes_without_affecting_shadow_path(tmp_path
     assert runtime_transmission_result.transmission_eligible is True
     assert runtime_transmission_result.transmission_attempted is False
     assert runtime_transmission_result.adapter_submission_attempted is False
+    assert runtime_transmission_result.rehearsal_gate_state == "inactive"
+    assert runtime_transmission_result.rehearsal_gate_passed is False
     assert runtime_transmission_result.final_state == "not_submitted_terminal_blocked"
     assert session.execution_mode == "shadow"
     assert all(result.status == "would_send" for result in results.results)
     assert live_request.request_count == results.result_count
     assert live_result.adapter_call_attempted is False
     assert live_result.submission_status == "not_submitted"
+    assert "operator_rehearsal_gate_inactive" in live_result.reason_codes
     assert live_state.state == "not_submitted_terminal_blocked"
     assert live_state.terminal is True
     assert live_result.generated_at <= live_state.generated_at
@@ -448,12 +451,15 @@ def test_limited_live_boundary_authorizes_without_affecting_sandbox_path(tmp_pat
     assert runtime_transmission_result.transmission_eligible is True
     assert runtime_transmission_result.transmission_attempted is False
     assert runtime_transmission_result.adapter_submission_attempted is False
+    assert runtime_transmission_result.rehearsal_gate_state == "inactive"
+    assert runtime_transmission_result.rehearsal_gate_passed is False
     assert runtime_transmission_result.final_state == "not_submitted_terminal_blocked"
     assert session.execution_mode == "sandbox"
     assert statuses.statuses[0].state == "filled"
     assert live_request.request_count >= 1
     assert live_result.adapter_call_attempted is False
     assert live_result.submission_status == "not_submitted"
+    assert "operator_rehearsal_gate_inactive" in live_result.reason_codes
     assert live_state.submission_present is False
 
 
@@ -593,6 +599,7 @@ def test_limited_live_boundary_authorized_invokes_live_adapter_once(tmp_path: Pa
         live_control_config=controls,
         readiness_status=readiness,
         live_execution_adapter=live_adapter,
+        live_rehearsal_gate_open=True,
     )
 
     session = result.session_summaries[0]
@@ -618,6 +625,8 @@ def test_limited_live_boundary_authorized_invokes_live_adapter_once(tmp_path: Pa
     assert runtime_transmission_result.transmission_eligible is True
     assert runtime_transmission_result.transmission_attempted is True
     assert runtime_transmission_result.adapter_submission_attempted is True
+    assert runtime_transmission_result.rehearsal_gate_state == "active"
+    assert runtime_transmission_result.rehearsal_gate_passed is True
     assert runtime_transmission_result.final_state == "filled"
 
 
