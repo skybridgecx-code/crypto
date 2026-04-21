@@ -3,10 +3,30 @@
     "aggregate_return_fraction": -6.188562359298264e-05,
     "baseline_robustness_verdict": "fail",
     "failed_run_count": 2,
+    "failure_order_run_ids": [
+      "paper-run-matrix-demo-breakout-paper-run",
+      "paper-run-matrix-demo-mean-reversion-paper-run"
+    ],
+    "first_fail_additional_cost_slippage_bps": 0.0,
     "first_fail_scenario_id": "baseline",
+    "first_failure_run_ids": [
+      "paper-run-matrix-demo-breakout-paper-run",
+      "paper-run-matrix-demo-mean-reversion-paper-run"
+    ],
+    "max_stress_additional_cost_slippage_bps": 10.0,
+    "max_stress_scenario_id": "cost_slippage_plus_10bps",
+    "max_stress_total_net_pnl_drag_usd": 80.00469774366707,
     "passed_run_count": 3,
     "robustness_verdict": "fail",
     "run_count": 5,
+    "stress_delta_aggregate_return_fraction_by_scenario": {
+      "cost_slippage_plus_10bps": -0.0002000112443311063,
+      "cost_slippage_plus_5bps": -0.00010000562216555314
+    },
+    "stress_delta_total_net_realized_pnl_usd_by_scenario": {
+      "cost_slippage_plus_10bps": -80.00469774366707,
+      "cost_slippage_plus_5bps": -40.00234887183353
+    },
     "stress_outcomes": [
       {
         "additional_cost_slippage_bps": 5.0,
@@ -50,8 +70,24 @@
     "best_return_run_id": "paper-run-matrix-demo-high-vol-no-signal-paper-run",
     "first_robustness_failure_run_id": "paper-run-matrix-demo-breakout-paper-run",
     "first_robustness_failure_scenario_id": "baseline",
+    "fragility_order_run_ids": [
+      "paper-run-matrix-demo-breakout-paper-run",
+      "paper-run-matrix-demo-mean-reversion-paper-run",
+      "paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run",
+      "paper-run-matrix-demo-breakout-reject-low-equity-paper-run",
+      "paper-run-matrix-demo-high-vol-no-signal-paper-run"
+    ],
     "highest_ending_equity_run_id": "paper-run-matrix-demo-high-vol-no-signal-paper-run",
     "lowest_ending_equity_run_id": "paper-run-matrix-demo-breakout-reject-low-equity-paper-run",
+    "most_fragile_run_id": "paper-run-matrix-demo-breakout-paper-run",
+    "most_resilient_run_id": "paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run",
+    "resilience_order_run_ids": [
+      "paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run",
+      "paper-run-matrix-demo-breakout-reject-low-equity-paper-run",
+      "paper-run-matrix-demo-high-vol-no-signal-paper-run",
+      "paper-run-matrix-demo-mean-reversion-paper-run",
+      "paper-run-matrix-demo-breakout-paper-run"
+    ],
     "worst_return_run_id": "paper-run-matrix-demo-breakout-paper-run"
   },
   "row_count": 5,
@@ -62,18 +98,32 @@
       "ending_equity_usd": 99985.24528394488,
       "ending_unrealized_pnl_usd": -6.753372720571861,
       "fill_event_count": 2,
+      "first_fail_additional_cost_slippage_bps": 0.0,
       "first_fail_scenario_id": "baseline",
       "fixture": "paper_candles_breakout_long.jsonl",
+      "fragility_rank": 1,
       "halt_count": 0,
       "ledger_row_count": 1,
+      "max_stress_additional_cost_slippage_bps": 10.0,
+      "max_stress_net_pnl_drag_usd": 40.00671667272057,
+      "max_stress_scenario_id": "cost_slippage_plus_10bps",
       "net_realized_pnl_usd": -8.001343334544114,
       "order_reject_count": 0,
       "partial_fill_intent_count": 1,
       "proposal_count": 1,
+      "resilience_rank": 5,
       "return_fraction": -0.00014754716055118478,
       "robustness_verdict": "fail",
       "run_id": "paper-run-matrix-demo-breakout-paper-run",
       "starting_equity_usd": 100000.0,
+      "stress_delta_net_realized_pnl_usd_by_scenario": {
+        "cost_slippage_plus_10bps": -40.00671667272057,
+        "cost_slippage_plus_5bps": -20.003358336360286
+      },
+      "stress_delta_return_fraction_by_scenario": {
+        "cost_slippage_plus_10bps": -0.0004000671667272399,
+        "cost_slippage_plus_5bps": -0.00020003358336354723
+      },
       "stress_outcomes": [
         {
           "additional_cost_slippage_bps": 5.0,
@@ -105,18 +155,32 @@
       "ending_equity_usd": 99990.00040473232,
       "ending_unrealized_pnl_usd": -1.999999053499521,
       "fill_event_count": 2,
+      "first_fail_additional_cost_slippage_bps": 0.0,
       "first_fail_scenario_id": "baseline",
       "fixture": "paper_candles_mean_reversion_short.jsonl",
+      "fragility_rank": 2,
       "halt_count": 0,
       "ledger_row_count": 1,
+      "max_stress_additional_cost_slippage_bps": 10.0,
+      "max_stress_net_pnl_drag_usd": 39.9979810709465,
+      "max_stress_scenario_id": "cost_slippage_plus_10bps",
       "net_realized_pnl_usd": -7.9995962141893,
       "order_reject_count": 0,
       "partial_fill_intent_count": 1,
       "proposal_count": 1,
+      "resilience_rank": 4,
       "return_fraction": -9.999595267683616e-05,
       "robustness_verdict": "fail",
       "run_id": "paper-run-matrix-demo-mean-reversion-paper-run",
       "starting_equity_usd": 100000.0,
+      "stress_delta_net_realized_pnl_usd_by_scenario": {
+        "cost_slippage_plus_10bps": -39.9979810709465,
+        "cost_slippage_plus_5bps": -19.99899053547325
+      },
+      "stress_delta_return_fraction_by_scenario": {
+        "cost_slippage_plus_10bps": -0.000399979810709483,
+        "cost_slippage_plus_5bps": -0.0001999899053547415
+      },
       "stress_outcomes": [
         {
           "additional_cost_slippage_bps": 5.0,
@@ -148,18 +212,32 @@
       "ending_equity_usd": 100000.0,
       "ending_unrealized_pnl_usd": 0.0,
       "fill_event_count": 0,
+      "first_fail_additional_cost_slippage_bps": null,
       "first_fail_scenario_id": null,
       "fixture": "paper_candles_high_volatility.jsonl",
+      "fragility_rank": 5,
       "halt_count": 0,
       "ledger_row_count": 0,
+      "max_stress_additional_cost_slippage_bps": 10.0,
+      "max_stress_net_pnl_drag_usd": 0.0,
+      "max_stress_scenario_id": "cost_slippage_plus_10bps",
       "net_realized_pnl_usd": 0.0,
       "order_reject_count": 0,
       "partial_fill_intent_count": 0,
       "proposal_count": 0,
+      "resilience_rank": 3,
       "return_fraction": 0.0,
       "robustness_verdict": "pass",
       "run_id": "paper-run-matrix-demo-high-vol-no-signal-paper-run",
       "starting_equity_usd": 100000.0,
+      "stress_delta_net_realized_pnl_usd_by_scenario": {
+        "cost_slippage_plus_10bps": -0.0,
+        "cost_slippage_plus_5bps": -0.0
+      },
+      "stress_delta_return_fraction_by_scenario": {
+        "cost_slippage_plus_10bps": 0.0,
+        "cost_slippage_plus_5bps": 0.0
+      },
       "stress_outcomes": [
         {
           "additional_cost_slippage_bps": 5.0,
@@ -191,18 +269,32 @@
       "ending_equity_usd": 1.0,
       "ending_unrealized_pnl_usd": 0.0,
       "fill_event_count": 0,
+      "first_fail_additional_cost_slippage_bps": null,
       "first_fail_scenario_id": null,
       "fixture": "paper_candles_breakout_long.jsonl",
+      "fragility_rank": 4,
       "halt_count": 0,
       "ledger_row_count": 1,
+      "max_stress_additional_cost_slippage_bps": 10.0,
+      "max_stress_net_pnl_drag_usd": 0.0,
+      "max_stress_scenario_id": "cost_slippage_plus_10bps",
       "net_realized_pnl_usd": 0.0,
       "order_reject_count": 1,
       "partial_fill_intent_count": 0,
       "proposal_count": 1,
+      "resilience_rank": 2,
       "return_fraction": 0.0,
       "robustness_verdict": "pass",
       "run_id": "paper-run-matrix-demo-breakout-reject-low-equity-paper-run",
       "starting_equity_usd": 1.0,
+      "stress_delta_net_realized_pnl_usd_by_scenario": {
+        "cost_slippage_plus_10bps": -0.0,
+        "cost_slippage_plus_5bps": -0.0
+      },
+      "stress_delta_return_fraction_by_scenario": {
+        "cost_slippage_plus_10bps": 0.0,
+        "cost_slippage_plus_5bps": 0.0
+      },
       "stress_outcomes": [
         {
           "additional_cost_slippage_bps": 5.0,
@@ -234,18 +326,32 @@
       "ending_equity_usd": 100000.0,
       "ending_unrealized_pnl_usd": 0.0,
       "fill_event_count": 0,
+      "first_fail_additional_cost_slippage_bps": null,
       "first_fail_scenario_id": null,
       "fixture": "paper_candles_breakout_long.jsonl",
+      "fragility_rank": 3,
       "halt_count": 1,
       "ledger_row_count": 1,
+      "max_stress_additional_cost_slippage_bps": 10.0,
+      "max_stress_net_pnl_drag_usd": 0.0,
+      "max_stress_scenario_id": "cost_slippage_plus_10bps",
       "net_realized_pnl_usd": 0.0,
       "order_reject_count": 0,
       "partial_fill_intent_count": 0,
       "proposal_count": 1,
+      "resilience_rank": 1,
       "return_fraction": 0.0,
       "robustness_verdict": "pass",
       "run_id": "paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run",
       "starting_equity_usd": 100000.0,
+      "stress_delta_net_realized_pnl_usd_by_scenario": {
+        "cost_slippage_plus_10bps": -0.0,
+        "cost_slippage_plus_5bps": -0.0
+      },
+      "stress_delta_return_fraction_by_scenario": {
+        "cost_slippage_plus_10bps": 0.0,
+        "cost_slippage_plus_5bps": 0.0
+      },
       "stress_outcomes": [
         {
           "additional_cost_slippage_bps": 5.0,

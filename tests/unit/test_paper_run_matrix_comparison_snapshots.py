@@ -67,6 +67,12 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
     worst_return_row: dict[str, object] | None = None
     highest_equity_row: dict[str, object] | None = None
     lowest_equity_row: dict[str, object] | None = None
+    scenario_bps = {
+        "baseline": 0.0,
+        "cost_slippage_plus_5bps": 5.0,
+        "cost_slippage_plus_10bps": 10.0,
+        None: float("inf"),
+    }
 
     for row, raw_entry in zip(rows, manifest_payload["entries"], strict=True):
         entry = dict(raw_entry)
@@ -109,6 +115,12 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
             "cost_slippage_plus_10bps",
             None,
         }
+        assert row["first_fail_additional_cost_slippage_bps"] in {0.0, 5.0, 10.0, None}
+        assert row["max_stress_scenario_id"] == "cost_slippage_plus_10bps"
+        assert float(row["max_stress_additional_cost_slippage_bps"]) == pytest.approx(10.0)
+        assert float(row["max_stress_net_pnl_drag_usd"]) >= 0.0
+        assert int(row["fragility_rank"]) >= 1
+        assert int(row["resilience_rank"]) >= 1
         stress_outcomes = row["stress_outcomes"]
         assert [outcome["scenario_id"] for outcome in stress_outcomes] == [
             "cost_slippage_plus_5bps",
@@ -130,6 +142,16 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
                 -expected_incremental_cost_usd
             )
             assert outcome["verdict"] in {"pass", "fail"}
+            assert float(
+                row["stress_delta_net_realized_pnl_usd_by_scenario"][outcome["scenario_id"]]
+            ) == pytest.approx(  # noqa: E501
+                float(outcome["delta_net_realized_pnl_usd_vs_baseline"])
+            )
+            assert float(
+                row["stress_delta_return_fraction_by_scenario"][outcome["scenario_id"]]
+            ) == pytest.approx(  # noqa: E501
+                float(outcome["delta_return_fraction_vs_baseline"])
+            )
 
         total_proposal_count += int(row["proposal_count"])
         total_halt_count += int(row["halt_count"])
@@ -214,8 +236,14 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
         "cost_slippage_plus_10bps",
         None,
     }
+    assert aggregate["first_fail_additional_cost_slippage_bps"] in {0.0, 5.0, 10.0, None}
     assert aggregate["passed_run_count"] == passed_run_count
     assert aggregate["failed_run_count"] == failed_run_count
+    assert aggregate["max_stress_scenario_id"] == "cost_slippage_plus_10bps"
+    assert float(aggregate["max_stress_additional_cost_slippage_bps"]) == pytest.approx(10.0)
+    assert float(aggregate["max_stress_total_net_pnl_drag_usd"]) == pytest.approx(
+        sum(float(row["max_stress_net_pnl_drag_usd"]) for row in rows)
+    )
     aggregate_stress_outcomes = aggregate["stress_outcomes"]
     assert [outcome["scenario_id"] for outcome in aggregate_stress_outcomes] == [
         "cost_slippage_plus_5bps",
@@ -224,6 +252,39 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
     for outcome in aggregate_stress_outcomes:
         assert outcome["verdict"] in {"pass", "fail"}
         assert int(outcome["failing_run_count"]) >= 0
+        scenario_id = outcome["scenario_id"]
+        assert float(
+            aggregate["stress_delta_total_net_realized_pnl_usd_by_scenario"][scenario_id]
+        ) == pytest.approx(float(outcome["delta_total_net_realized_pnl_usd_vs_baseline"]))
+        assert float(
+            aggregate["stress_delta_aggregate_return_fraction_by_scenario"][scenario_id]
+        ) == pytest.approx(float(outcome["delta_aggregate_return_fraction_vs_baseline"]))
+
+    expected_failure_order = [
+        str(row["run_id"])
+        for row in sorted(
+            (row for row in rows if row["first_fail_scenario_id"] is not None),
+            key=lambda row: (scenario_bps[row["first_fail_scenario_id"]], str(row["run_id"])),
+        )
+    ]
+    assert aggregate["failure_order_run_ids"] == expected_failure_order
+    if expected_failure_order:
+        earliest_failure_bps = scenario_bps[
+            next(
+                row["first_fail_scenario_id"]
+                for row in rows
+                if str(row["run_id"]) == expected_failure_order[0]
+            )
+        ]
+        expected_first_failure_run_ids = [
+            str(row["run_id"])
+            for row in rows
+            if row["first_fail_scenario_id"] is not None
+            and scenario_bps[row["first_fail_scenario_id"]] == earliest_failure_bps
+        ]
+    else:
+        expected_first_failure_run_ids = []
+    assert aggregate["first_failure_run_ids"] == sorted(expected_first_failure_run_ids)
 
     assert rankings["best_return_run_id"] == best_return_row["run_id"]
     assert rankings["worst_return_run_id"] == worst_return_row["run_id"]
@@ -236,3 +297,7 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
         "cost_slippage_plus_10bps",
         None,
     }
+    assert rankings["most_fragile_run_id"] in expected_run_ids + [None]
+    assert rankings["most_resilient_run_id"] in expected_run_ids + [None]
+    assert sorted(rankings["fragility_order_run_ids"]) == sorted(expected_run_ids)
+    assert sorted(rankings["resilience_order_run_ids"]) == sorted(expected_run_ids)

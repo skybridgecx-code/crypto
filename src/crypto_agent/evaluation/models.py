@@ -114,6 +114,14 @@ class MatrixComparisonRow(BaseModel):
     stress_outcomes: list[MatrixComparisonStressOutcome] = Field(default_factory=list)
     robustness_verdict: Literal["pass", "fail"] = "pass"
     first_fail_scenario_id: str | None = None
+    first_fail_additional_cost_slippage_bps: float | None = Field(default=None, ge=0)
+    max_stress_scenario_id: str | None = None
+    max_stress_additional_cost_slippage_bps: float = Field(default=0.0, ge=0)
+    max_stress_net_pnl_drag_usd: float = Field(default=0.0, ge=0)
+    stress_delta_net_realized_pnl_usd_by_scenario: dict[str, float] = Field(default_factory=dict)
+    stress_delta_return_fraction_by_scenario: dict[str, float] = Field(default_factory=dict)
+    fragility_rank: int = Field(default=0, ge=0)
+    resilience_rank: int = Field(default=0, ge=0)
 
 
 class MatrixComparisonStressOutcome(BaseModel):
@@ -150,6 +158,18 @@ class MatrixComparisonAggregate(BaseModel):
     stress_outcomes: list[MatrixComparisonAggregateStressOutcome] = Field(default_factory=list)
     robustness_verdict: Literal["pass", "fail"] = "pass"
     first_fail_scenario_id: str | None = None
+    first_fail_additional_cost_slippage_bps: float | None = Field(default=None, ge=0)
+    first_failure_run_ids: list[str] = Field(default_factory=list)
+    failure_order_run_ids: list[str] = Field(default_factory=list)
+    max_stress_scenario_id: str | None = None
+    max_stress_additional_cost_slippage_bps: float = Field(default=0.0, ge=0)
+    max_stress_total_net_pnl_drag_usd: float = Field(default=0.0, ge=0)
+    stress_delta_total_net_realized_pnl_usd_by_scenario: dict[str, float] = Field(
+        default_factory=dict
+    )
+    stress_delta_aggregate_return_fraction_by_scenario: dict[str, float] = Field(
+        default_factory=dict
+    )
     passed_run_count: int = Field(default=0, ge=0)
     failed_run_count: int = Field(default=0, ge=0)
 
@@ -178,6 +198,10 @@ class MatrixComparisonRanking(BaseModel):
     lowest_ending_equity_run_id: str | None = None
     first_robustness_failure_run_id: str | None = None
     first_robustness_failure_scenario_id: str | None = None
+    most_fragile_run_id: str | None = None
+    most_resilient_run_id: str | None = None
+    fragility_order_run_ids: list[str] = Field(default_factory=list)
+    resilience_order_run_ids: list[str] = Field(default_factory=list)
 
 
 class MatrixComparison(BaseModel):
