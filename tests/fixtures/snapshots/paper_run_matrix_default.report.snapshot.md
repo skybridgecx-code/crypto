@@ -48,6 +48,27 @@ ending_unrealized_pnl_usd: -8.7533717741
 ending_equity_usd: 399976.2456886772
 return_fraction: -0.0000618856
 
+## Matrix Cost/Slippage Robustness Gate
+baseline_robustness_verdict: fail
+robustness_verdict: fail
+first_fail_scenario_id: baseline
+passed_run_count: 3
+failed_run_count: 2
+first_robustness_failure_run_id: paper-run-matrix-demo-breakout-paper-run
+first_robustness_failure_scenario_id: baseline
+aggregate_stress_cost_slippage_plus_5bps_additional_cost_slippage_bps: 5
+aggregate_stress_cost_slippage_plus_5bps_incremental_cost_usd: 40.0023488718
+aggregate_stress_cost_slippage_plus_5bps_stressed_total_net_realized_pnl_usd: -56.0032884206
+aggregate_stress_cost_slippage_plus_5bps_stressed_aggregate_return_fraction: -0.0001618912
+aggregate_stress_cost_slippage_plus_5bps_failing_run_count: 2
+aggregate_stress_cost_slippage_plus_5bps_verdict: fail
+aggregate_stress_cost_slippage_plus_10bps_additional_cost_slippage_bps: 10
+aggregate_stress_cost_slippage_plus_10bps_incremental_cost_usd: 80.0046977437
+aggregate_stress_cost_slippage_plus_10bps_stressed_total_net_realized_pnl_usd: -96.0056372924
+aggregate_stress_cost_slippage_plus_10bps_stressed_aggregate_return_fraction: -0.0002618969
+aggregate_stress_cost_slippage_plus_10bps_failing_run_count: 2
+aggregate_stress_cost_slippage_plus_10bps_verdict: fail
+
 ## Per-Run Details
 ### run_id: paper-run-matrix-demo-breakout-paper-run
 fixture: paper_candles_breakout_long.jsonl
@@ -89,6 +110,25 @@ replay_net_realized_pnl_usd: -8.0013433345
 replay_ending_unrealized_pnl_usd: -6.7533727206
 replay_ending_equity_usd: 99985.2452839449
 replay_return_fraction: -0.0001475472
+baseline_robustness_verdict: fail
+robustness_verdict: fail
+first_fail_scenario_id: baseline
+
+stress_cost_slippage_plus_5bps_additional_cost_slippage_bps: 5
+stress_cost_slippage_plus_5bps_incremental_cost_usd: 20.0033583364
+stress_cost_slippage_plus_5bps_stressed_net_realized_pnl_usd: -28.0047016709
+stress_cost_slippage_plus_5bps_stressed_return_fraction: -0.0003475807
+stress_cost_slippage_plus_5bps_delta_net_realized_pnl_usd_vs_baseline: -20.0033583364
+stress_cost_slippage_plus_5bps_delta_return_fraction_vs_baseline: -0.0002000336
+stress_cost_slippage_plus_5bps_verdict: fail
+
+stress_cost_slippage_plus_10bps_additional_cost_slippage_bps: 10
+stress_cost_slippage_plus_10bps_incremental_cost_usd: 40.0067166727
+stress_cost_slippage_plus_10bps_stressed_net_realized_pnl_usd: -48.0080600073
+stress_cost_slippage_plus_10bps_stressed_return_fraction: -0.0005476143
+stress_cost_slippage_plus_10bps_delta_net_realized_pnl_usd_vs_baseline: -40.0067166727
+stress_cost_slippage_plus_10bps_delta_return_fraction_vs_baseline: -0.0004000672
+stress_cost_slippage_plus_10bps_verdict: fail
 
 ### run_id: paper-run-matrix-demo-mean-reversion-paper-run
 fixture: paper_candles_mean_reversion_short.jsonl
@@ -130,6 +170,25 @@ replay_net_realized_pnl_usd: -7.9995962142
 replay_ending_unrealized_pnl_usd: -1.9999990535
 replay_ending_equity_usd: 99990.0004047323
 replay_return_fraction: -0.000099996
+baseline_robustness_verdict: fail
+robustness_verdict: fail
+first_fail_scenario_id: baseline
+
+stress_cost_slippage_plus_5bps_additional_cost_slippage_bps: 5
+stress_cost_slippage_plus_5bps_incremental_cost_usd: 19.9989905355
+stress_cost_slippage_plus_5bps_stressed_net_realized_pnl_usd: -27.9985867497
+stress_cost_slippage_plus_5bps_stressed_return_fraction: -0.0002999859
+stress_cost_slippage_plus_5bps_delta_net_realized_pnl_usd_vs_baseline: -19.9989905355
+stress_cost_slippage_plus_5bps_delta_return_fraction_vs_baseline: -0.0001999899
+stress_cost_slippage_plus_5bps_verdict: fail
+
+stress_cost_slippage_plus_10bps_additional_cost_slippage_bps: 10
+stress_cost_slippage_plus_10bps_incremental_cost_usd: 39.9979810709
+stress_cost_slippage_plus_10bps_stressed_net_realized_pnl_usd: -47.9975772851
+stress_cost_slippage_plus_10bps_stressed_return_fraction: -0.0004999758
+stress_cost_slippage_plus_10bps_delta_net_realized_pnl_usd_vs_baseline: -39.9979810709
+stress_cost_slippage_plus_10bps_delta_return_fraction_vs_baseline: -0.0003999798
+stress_cost_slippage_plus_10bps_verdict: fail
 
 ### run_id: paper-run-matrix-demo-high-vol-no-signal-paper-run
 fixture: paper_candles_high_volatility.jsonl
@@ -171,6 +230,25 @@ replay_net_realized_pnl_usd: 0
 replay_ending_unrealized_pnl_usd: 0
 replay_ending_equity_usd: 100000
 replay_return_fraction: 0
+baseline_robustness_verdict: pass
+robustness_verdict: pass
+first_fail_scenario_id: None
+
+stress_cost_slippage_plus_5bps_additional_cost_slippage_bps: 5
+stress_cost_slippage_plus_5bps_incremental_cost_usd: 0
+stress_cost_slippage_plus_5bps_stressed_net_realized_pnl_usd: 0
+stress_cost_slippage_plus_5bps_stressed_return_fraction: 0
+stress_cost_slippage_plus_5bps_delta_net_realized_pnl_usd_vs_baseline: -0
+stress_cost_slippage_plus_5bps_delta_return_fraction_vs_baseline: 0
+stress_cost_slippage_plus_5bps_verdict: pass
+
+stress_cost_slippage_plus_10bps_additional_cost_slippage_bps: 10
+stress_cost_slippage_plus_10bps_incremental_cost_usd: 0
+stress_cost_slippage_plus_10bps_stressed_net_realized_pnl_usd: 0
+stress_cost_slippage_plus_10bps_stressed_return_fraction: 0
+stress_cost_slippage_plus_10bps_delta_net_realized_pnl_usd_vs_baseline: -0
+stress_cost_slippage_plus_10bps_delta_return_fraction_vs_baseline: 0
+stress_cost_slippage_plus_10bps_verdict: pass
 
 ### run_id: paper-run-matrix-demo-breakout-reject-low-equity-paper-run
 fixture: paper_candles_breakout_long.jsonl
@@ -212,6 +290,25 @@ replay_net_realized_pnl_usd: 0
 replay_ending_unrealized_pnl_usd: 0
 replay_ending_equity_usd: 1
 replay_return_fraction: 0
+baseline_robustness_verdict: pass
+robustness_verdict: pass
+first_fail_scenario_id: None
+
+stress_cost_slippage_plus_5bps_additional_cost_slippage_bps: 5
+stress_cost_slippage_plus_5bps_incremental_cost_usd: 0
+stress_cost_slippage_plus_5bps_stressed_net_realized_pnl_usd: 0
+stress_cost_slippage_plus_5bps_stressed_return_fraction: 0
+stress_cost_slippage_plus_5bps_delta_net_realized_pnl_usd_vs_baseline: -0
+stress_cost_slippage_plus_5bps_delta_return_fraction_vs_baseline: 0
+stress_cost_slippage_plus_5bps_verdict: pass
+
+stress_cost_slippage_plus_10bps_additional_cost_slippage_bps: 10
+stress_cost_slippage_plus_10bps_incremental_cost_usd: 0
+stress_cost_slippage_plus_10bps_stressed_net_realized_pnl_usd: 0
+stress_cost_slippage_plus_10bps_stressed_return_fraction: 0
+stress_cost_slippage_plus_10bps_delta_net_realized_pnl_usd_vs_baseline: -0
+stress_cost_slippage_plus_10bps_delta_return_fraction_vs_baseline: 0
+stress_cost_slippage_plus_10bps_verdict: pass
 
 ### run_id: paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run
 fixture: paper_candles_breakout_long.jsonl
@@ -253,3 +350,22 @@ replay_net_realized_pnl_usd: 0
 replay_ending_unrealized_pnl_usd: 0
 replay_ending_equity_usd: 100000
 replay_return_fraction: 0
+baseline_robustness_verdict: pass
+robustness_verdict: pass
+first_fail_scenario_id: None
+
+stress_cost_slippage_plus_5bps_additional_cost_slippage_bps: 5
+stress_cost_slippage_plus_5bps_incremental_cost_usd: 0
+stress_cost_slippage_plus_5bps_stressed_net_realized_pnl_usd: 0
+stress_cost_slippage_plus_5bps_stressed_return_fraction: 0
+stress_cost_slippage_plus_5bps_delta_net_realized_pnl_usd_vs_baseline: -0
+stress_cost_slippage_plus_5bps_delta_return_fraction_vs_baseline: 0
+stress_cost_slippage_plus_5bps_verdict: pass
+
+stress_cost_slippage_plus_10bps_additional_cost_slippage_bps: 10
+stress_cost_slippage_plus_10bps_incremental_cost_usd: 0
+stress_cost_slippage_plus_10bps_stressed_net_realized_pnl_usd: 0
+stress_cost_slippage_plus_10bps_stressed_return_fraction: 0
+stress_cost_slippage_plus_10bps_delta_net_realized_pnl_usd_vs_baseline: -0
+stress_cost_slippage_plus_10bps_delta_return_fraction_vs_baseline: 0
+stress_cost_slippage_plus_10bps_verdict: pass

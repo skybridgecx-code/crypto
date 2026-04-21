@@ -124,6 +124,31 @@ Matrix replay-derived surfaces:
   - aggregate totals across the fixed matrix
   - best and worst return run ids
   - highest and lowest ending-equity run ids
+- matrix cost/slippage robustness gate fields in `matrix_comparison.json`:
+  - per-run baseline/stress outcomes:
+    - `baseline_robustness_verdict`
+    - `stress_outcomes[]` with:
+      - `scenario_id`
+      - `additional_cost_slippage_bps`
+      - `incremental_cost_usd`
+      - `stressed_net_realized_pnl_usd`
+      - `stressed_ending_equity_usd`
+      - `stressed_return_fraction`
+      - `delta_net_realized_pnl_usd_vs_baseline`
+      - `delta_return_fraction_vs_baseline`
+      - `verdict`
+    - `robustness_verdict`
+    - `first_fail_scenario_id`
+  - matrix-level baseline/stress outcomes:
+    - `aggregate.baseline_robustness_verdict`
+    - `aggregate.stress_outcomes[]`
+    - `aggregate.robustness_verdict`
+    - `aggregate.first_fail_scenario_id`
+    - `aggregate.passed_run_count`
+    - `aggregate.failed_run_count`
+  - first-collapse pointer:
+    - `rankings.first_robustness_failure_run_id`
+    - `rankings.first_robustness_failure_scenario_id`
 - matrix trade-ledger rows rebuilt from manifest-referenced per-run ledgers:
   - `matrix_run_id`
   - `run_id`

@@ -110,6 +110,24 @@ class MatrixComparisonRow(BaseModel):
     ending_unrealized_pnl_usd: float = 0.0
     ending_equity_usd: float = Field(ge=0)
     return_fraction: float = 0.0
+    baseline_robustness_verdict: Literal["pass", "fail"] = "pass"
+    stress_outcomes: list[MatrixComparisonStressOutcome] = Field(default_factory=list)
+    robustness_verdict: Literal["pass", "fail"] = "pass"
+    first_fail_scenario_id: str | None = None
+
+
+class MatrixComparisonStressOutcome(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str
+    additional_cost_slippage_bps: float = Field(ge=0)
+    incremental_cost_usd: float = Field(default=0.0, ge=0)
+    stressed_net_realized_pnl_usd: float = 0.0
+    stressed_ending_equity_usd: float = Field(ge=0)
+    stressed_return_fraction: float = 0.0
+    delta_net_realized_pnl_usd_vs_baseline: float = 0.0
+    delta_return_fraction_vs_baseline: float = 0.0
+    verdict: Literal["pass", "fail"] = "pass"
 
 
 class MatrixComparisonAggregate(BaseModel):
@@ -128,6 +146,27 @@ class MatrixComparisonAggregate(BaseModel):
     total_ending_unrealized_pnl_usd: float = 0.0
     total_ending_equity_usd: float = Field(default=0.0, ge=0)
     aggregate_return_fraction: float = 0.0
+    baseline_robustness_verdict: Literal["pass", "fail"] = "pass"
+    stress_outcomes: list[MatrixComparisonAggregateStressOutcome] = Field(default_factory=list)
+    robustness_verdict: Literal["pass", "fail"] = "pass"
+    first_fail_scenario_id: str | None = None
+    passed_run_count: int = Field(default=0, ge=0)
+    failed_run_count: int = Field(default=0, ge=0)
+
+
+class MatrixComparisonAggregateStressOutcome(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str
+    additional_cost_slippage_bps: float = Field(ge=0)
+    incremental_cost_usd: float = Field(default=0.0, ge=0)
+    stressed_total_net_realized_pnl_usd: float = 0.0
+    stressed_total_ending_equity_usd: float = Field(ge=0)
+    stressed_aggregate_return_fraction: float = 0.0
+    delta_total_net_realized_pnl_usd_vs_baseline: float = 0.0
+    delta_aggregate_return_fraction_vs_baseline: float = 0.0
+    failing_run_count: int = Field(default=0, ge=0)
+    verdict: Literal["pass", "fail"] = "pass"
 
 
 class MatrixComparisonRanking(BaseModel):
@@ -137,6 +176,8 @@ class MatrixComparisonRanking(BaseModel):
     worst_return_run_id: str | None = None
     highest_ending_equity_run_id: str | None = None
     lowest_ending_equity_run_id: str | None = None
+    first_robustness_failure_run_id: str | None = None
+    first_robustness_failure_scenario_id: str | None = None
 
 
 class MatrixComparison(BaseModel):

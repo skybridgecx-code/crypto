@@ -88,6 +88,15 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
         assert aggregate_manifest[key] == str(value)
     aggregate_pnl = _section_key_values(report, "## Aggregate Replay PnL")
     assert float(aggregate_pnl["starting_equity_usd"]) > 0
+    robustness = _section_key_values(report, "## Matrix Cost/Slippage Robustness Gate")
+    assert robustness["baseline_robustness_verdict"] in {"pass", "fail"}
+    assert robustness["robustness_verdict"] in {"pass", "fail"}
+    assert robustness["first_fail_scenario_id"] in {
+        "baseline",
+        "cost_slippage_plus_5bps",
+        "cost_slippage_plus_10bps",
+        "None",
+    }
 
     run_sections = _run_sections(report)
     expected_run_ids = [str(entry["run_id"]) for entry in manifest_payload["entries"]]
@@ -136,3 +145,13 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
         )
         assert section["replay_ending_equity_usd"] == _format_float(pnl.ending_equity_usd)
         assert section["replay_return_fraction"] == _format_float(pnl.return_fraction)
+        assert section["baseline_robustness_verdict"] in {"pass", "fail"}
+        assert section["robustness_verdict"] in {"pass", "fail"}
+        assert section["first_fail_scenario_id"] in {
+            "baseline",
+            "cost_slippage_plus_5bps",
+            "cost_slippage_plus_10bps",
+            "None",
+        }
+        assert "stress_cost_slippage_plus_5bps_verdict" in section
+        assert "stress_cost_slippage_plus_10bps_verdict" in section

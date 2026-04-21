@@ -1,7 +1,38 @@
 {
   "aggregate": {
     "aggregate_return_fraction": -6.188562359298264e-05,
+    "baseline_robustness_verdict": "fail",
+    "failed_run_count": 2,
+    "first_fail_scenario_id": "baseline",
+    "passed_run_count": 3,
+    "robustness_verdict": "fail",
     "run_count": 5,
+    "stress_outcomes": [
+      {
+        "additional_cost_slippage_bps": 5.0,
+        "delta_aggregate_return_fraction_vs_baseline": -0.00010000562216555314,
+        "delta_total_net_realized_pnl_usd_vs_baseline": -40.00234887183353,
+        "failing_run_count": 2,
+        "incremental_cost_usd": 40.00234887183353,
+        "scenario_id": "cost_slippage_plus_5bps",
+        "stressed_aggregate_return_fraction": -0.00016189124575853578,
+        "stressed_total_ending_equity_usd": 399936.24333980534,
+        "stressed_total_net_realized_pnl_usd": -56.003288420566946,
+        "verdict": "fail"
+      },
+      {
+        "additional_cost_slippage_bps": 10.0,
+        "delta_aggregate_return_fraction_vs_baseline": -0.0002000112443311063,
+        "delta_total_net_realized_pnl_usd_vs_baseline": -80.00469774366707,
+        "failing_run_count": 2,
+        "incremental_cost_usd": 80.00469774366707,
+        "scenario_id": "cost_slippage_plus_10bps",
+        "stressed_aggregate_return_fraction": -0.00026189686792408895,
+        "stressed_total_ending_equity_usd": 399896.2409909335,
+        "stressed_total_net_realized_pnl_usd": -96.00563729240048,
+        "verdict": "fail"
+      }
+    ],
     "total_alert_count": 4,
     "total_ending_equity_usd": 399976.2456886772,
     "total_ending_unrealized_pnl_usd": -8.753371774071383,
@@ -17,6 +48,8 @@
   "matrix_run_id": "paper-run-matrix-demo",
   "rankings": {
     "best_return_run_id": "paper-run-matrix-demo-high-vol-no-signal-paper-run",
+    "first_robustness_failure_run_id": "paper-run-matrix-demo-breakout-paper-run",
+    "first_robustness_failure_scenario_id": "baseline",
     "highest_ending_equity_run_id": "paper-run-matrix-demo-high-vol-no-signal-paper-run",
     "lowest_ending_equity_run_id": "paper-run-matrix-demo-breakout-reject-low-equity-paper-run",
     "worst_return_run_id": "paper-run-matrix-demo-breakout-paper-run"
@@ -25,9 +58,11 @@
   "rows": [
     {
       "alert_count": 1,
+      "baseline_robustness_verdict": "fail",
       "ending_equity_usd": 99985.24528394488,
       "ending_unrealized_pnl_usd": -6.753372720571861,
       "fill_event_count": 2,
+      "first_fail_scenario_id": "baseline",
       "fixture": "paper_candles_breakout_long.jsonl",
       "halt_count": 0,
       "ledger_row_count": 1,
@@ -36,14 +71,41 @@
       "partial_fill_intent_count": 1,
       "proposal_count": 1,
       "return_fraction": -0.00014754716055118478,
+      "robustness_verdict": "fail",
       "run_id": "paper-run-matrix-demo-breakout-paper-run",
-      "starting_equity_usd": 100000.0
+      "starting_equity_usd": 100000.0,
+      "stress_outcomes": [
+        {
+          "additional_cost_slippage_bps": 5.0,
+          "delta_net_realized_pnl_usd_vs_baseline": -20.003358336360286,
+          "delta_return_fraction_vs_baseline": -0.00020003358336354723,
+          "incremental_cost_usd": 20.003358336360286,
+          "scenario_id": "cost_slippage_plus_5bps",
+          "stressed_ending_equity_usd": 99965.24192560853,
+          "stressed_net_realized_pnl_usd": -28.0047016709044,
+          "stressed_return_fraction": -0.000347580743914732,
+          "verdict": "fail"
+        },
+        {
+          "additional_cost_slippage_bps": 10.0,
+          "delta_net_realized_pnl_usd_vs_baseline": -40.00671667272057,
+          "delta_return_fraction_vs_baseline": -0.0004000671667272399,
+          "incremental_cost_usd": 40.00671667272057,
+          "scenario_id": "cost_slippage_plus_10bps",
+          "stressed_ending_equity_usd": 99945.23856727216,
+          "stressed_net_realized_pnl_usd": -48.00806000726469,
+          "stressed_return_fraction": -0.0005476143272784247,
+          "verdict": "fail"
+        }
+      ]
     },
     {
       "alert_count": 1,
+      "baseline_robustness_verdict": "fail",
       "ending_equity_usd": 99990.00040473232,
       "ending_unrealized_pnl_usd": -1.999999053499521,
       "fill_event_count": 2,
+      "first_fail_scenario_id": "baseline",
       "fixture": "paper_candles_mean_reversion_short.jsonl",
       "halt_count": 0,
       "ledger_row_count": 1,
@@ -52,14 +114,41 @@
       "partial_fill_intent_count": 1,
       "proposal_count": 1,
       "return_fraction": -9.999595267683616e-05,
+      "robustness_verdict": "fail",
       "run_id": "paper-run-matrix-demo-mean-reversion-paper-run",
-      "starting_equity_usd": 100000.0
+      "starting_equity_usd": 100000.0,
+      "stress_outcomes": [
+        {
+          "additional_cost_slippage_bps": 5.0,
+          "delta_net_realized_pnl_usd_vs_baseline": -19.99899053547325,
+          "delta_return_fraction_vs_baseline": -0.0001999899053547415,
+          "incremental_cost_usd": 19.99899053547325,
+          "scenario_id": "cost_slippage_plus_5bps",
+          "stressed_ending_equity_usd": 99970.00141419684,
+          "stressed_net_realized_pnl_usd": -27.99858674966255,
+          "stressed_return_fraction": -0.00029998585803157765,
+          "verdict": "fail"
+        },
+        {
+          "additional_cost_slippage_bps": 10.0,
+          "delta_net_realized_pnl_usd_vs_baseline": -39.9979810709465,
+          "delta_return_fraction_vs_baseline": -0.000399979810709483,
+          "incremental_cost_usd": 39.9979810709465,
+          "scenario_id": "cost_slippage_plus_10bps",
+          "stressed_ending_equity_usd": 99950.00242366137,
+          "stressed_net_realized_pnl_usd": -47.997577285135804,
+          "stressed_return_fraction": -0.0004999757633863192,
+          "verdict": "fail"
+        }
+      ]
     },
     {
       "alert_count": 0,
+      "baseline_robustness_verdict": "pass",
       "ending_equity_usd": 100000.0,
       "ending_unrealized_pnl_usd": 0.0,
       "fill_event_count": 0,
+      "first_fail_scenario_id": null,
       "fixture": "paper_candles_high_volatility.jsonl",
       "halt_count": 0,
       "ledger_row_count": 0,
@@ -68,14 +157,41 @@
       "partial_fill_intent_count": 0,
       "proposal_count": 0,
       "return_fraction": 0.0,
+      "robustness_verdict": "pass",
       "run_id": "paper-run-matrix-demo-high-vol-no-signal-paper-run",
-      "starting_equity_usd": 100000.0
+      "starting_equity_usd": 100000.0,
+      "stress_outcomes": [
+        {
+          "additional_cost_slippage_bps": 5.0,
+          "delta_net_realized_pnl_usd_vs_baseline": -0.0,
+          "delta_return_fraction_vs_baseline": 0.0,
+          "incremental_cost_usd": 0.0,
+          "scenario_id": "cost_slippage_plus_5bps",
+          "stressed_ending_equity_usd": 100000.0,
+          "stressed_net_realized_pnl_usd": 0.0,
+          "stressed_return_fraction": 0.0,
+          "verdict": "pass"
+        },
+        {
+          "additional_cost_slippage_bps": 10.0,
+          "delta_net_realized_pnl_usd_vs_baseline": -0.0,
+          "delta_return_fraction_vs_baseline": 0.0,
+          "incremental_cost_usd": 0.0,
+          "scenario_id": "cost_slippage_plus_10bps",
+          "stressed_ending_equity_usd": 100000.0,
+          "stressed_net_realized_pnl_usd": 0.0,
+          "stressed_return_fraction": 0.0,
+          "verdict": "pass"
+        }
+      ]
     },
     {
       "alert_count": 1,
+      "baseline_robustness_verdict": "pass",
       "ending_equity_usd": 1.0,
       "ending_unrealized_pnl_usd": 0.0,
       "fill_event_count": 0,
+      "first_fail_scenario_id": null,
       "fixture": "paper_candles_breakout_long.jsonl",
       "halt_count": 0,
       "ledger_row_count": 1,
@@ -84,14 +200,41 @@
       "partial_fill_intent_count": 0,
       "proposal_count": 1,
       "return_fraction": 0.0,
+      "robustness_verdict": "pass",
       "run_id": "paper-run-matrix-demo-breakout-reject-low-equity-paper-run",
-      "starting_equity_usd": 1.0
+      "starting_equity_usd": 1.0,
+      "stress_outcomes": [
+        {
+          "additional_cost_slippage_bps": 5.0,
+          "delta_net_realized_pnl_usd_vs_baseline": -0.0,
+          "delta_return_fraction_vs_baseline": 0.0,
+          "incremental_cost_usd": 0.0,
+          "scenario_id": "cost_slippage_plus_5bps",
+          "stressed_ending_equity_usd": 1.0,
+          "stressed_net_realized_pnl_usd": 0.0,
+          "stressed_return_fraction": 0.0,
+          "verdict": "pass"
+        },
+        {
+          "additional_cost_slippage_bps": 10.0,
+          "delta_net_realized_pnl_usd_vs_baseline": -0.0,
+          "delta_return_fraction_vs_baseline": 0.0,
+          "incremental_cost_usd": 0.0,
+          "scenario_id": "cost_slippage_plus_10bps",
+          "stressed_ending_equity_usd": 1.0,
+          "stressed_net_realized_pnl_usd": 0.0,
+          "stressed_return_fraction": 0.0,
+          "verdict": "pass"
+        }
+      ]
     },
     {
       "alert_count": 1,
+      "baseline_robustness_verdict": "pass",
       "ending_equity_usd": 100000.0,
       "ending_unrealized_pnl_usd": 0.0,
       "fill_event_count": 0,
+      "first_fail_scenario_id": null,
       "fixture": "paper_candles_breakout_long.jsonl",
       "halt_count": 1,
       "ledger_row_count": 1,
@@ -100,8 +243,33 @@
       "partial_fill_intent_count": 0,
       "proposal_count": 1,
       "return_fraction": 0.0,
+      "robustness_verdict": "pass",
       "run_id": "paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run",
-      "starting_equity_usd": 100000.0
+      "starting_equity_usd": 100000.0,
+      "stress_outcomes": [
+        {
+          "additional_cost_slippage_bps": 5.0,
+          "delta_net_realized_pnl_usd_vs_baseline": -0.0,
+          "delta_return_fraction_vs_baseline": 0.0,
+          "incremental_cost_usd": 0.0,
+          "scenario_id": "cost_slippage_plus_5bps",
+          "stressed_ending_equity_usd": 100000.0,
+          "stressed_net_realized_pnl_usd": 0.0,
+          "stressed_return_fraction": 0.0,
+          "verdict": "pass"
+        },
+        {
+          "additional_cost_slippage_bps": 10.0,
+          "delta_net_realized_pnl_usd_vs_baseline": -0.0,
+          "delta_return_fraction_vs_baseline": 0.0,
+          "incremental_cost_usd": 0.0,
+          "scenario_id": "cost_slippage_plus_10bps",
+          "stressed_ending_equity_usd": 100000.0,
+          "stressed_net_realized_pnl_usd": 0.0,
+          "stressed_return_fraction": 0.0,
+          "verdict": "pass"
+        }
+      ]
     }
   ]
 }
