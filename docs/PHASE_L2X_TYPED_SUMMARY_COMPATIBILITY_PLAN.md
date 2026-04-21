@@ -14,13 +14,12 @@ This phase is docs-only.
 
 ## Current repo truth
 
-The runtime and session surfaces currently expose both:
-- the loose trio
-- the typed summary object
+This document is historical context for pre-removal compatibility posture.
 
-Tests already prove:
-- valid single-request paths populate both surfaces consistently
-- blocked zero-request and multi-request paths leave both surfaces unset
+Current repo truth after L3D/L3E:
+- the runtime loose trio (`per_request_request_id`, `per_request_decision_path`, `per_request_result_path`) is removed from `LiveTransmissionRuntimeResultArtifact`
+- the session-side loose mirror is removed
+- typed `per_request_artifact_summary` is the source-of-truth per-request summary surface on runtime/session artifacts
 
 ## Decision
 

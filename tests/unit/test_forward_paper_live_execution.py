@@ -1225,7 +1225,7 @@ def test_bounded_live_zero_request_emits_explicit_reason(
     assert session.live_transmission_request_result_path is None
 
 
-def test_runtime_result_typed_summary_validates_without_loose_mirrors() -> None:
+def test_runtime_result_typed_summary_surface_is_supported() -> None:
     runtime_result = LiveTransmissionRuntimeResultArtifact.model_validate(
         {
             "runtime_id": "rt-1",
@@ -1267,29 +1267,7 @@ def test_session_summary_validator_rejects_mismatched_typed_summary() -> None:
         )
 
 
-def test_runtime_result_legacy_mirror_fields_are_isolated_compatibility_surface() -> None:
-    runtime_result = LiveTransmissionRuntimeResultArtifact.model_validate(
-        {
-            "runtime_id": "rt-1",
-            "generated_at": "2026-04-20T12:00:00Z",
-            "summary": "ok",
-            "transmission_decision_path": "runs/rt-1/transmission_decision.json",
-            "per_request_artifact_summary": {
-                "request_id": "req-a",
-                "decision_path": "runs/rt-1/decision-a.json",
-                "result_path": "runs/rt-1/result-a.json",
-            },
-        }
-    )
-
-    assert runtime_result.per_request_artifact_summary == LiveTransmissionPerRequestArtifactSummary(
-        request_id="req-a",
-        decision_path=Path("runs/rt-1/decision-a.json"),
-        result_path=Path("runs/rt-1/result-a.json"),
-    )
-
-
-def test_session_summary_legacy_mirror_fields_are_isolated_compatibility_surface() -> None:
+def test_session_summary_typed_summary_surface_is_supported() -> None:
     session = ForwardPaperSessionSummary.model_validate(
         {
             "runtime_id": "rt-1",
@@ -1317,7 +1295,7 @@ def test_session_summary_legacy_mirror_fields_are_isolated_compatibility_surface
     assert session.live_transmission_request_result_path == Path("runs/rt-1/result-a.json")
 
 
-def test_runtime_result_legacy_mirror_fields_can_be_absent() -> None:
+def test_runtime_result_typed_summary_can_be_absent() -> None:
     runtime_result = LiveTransmissionRuntimeResultArtifact.model_validate(
         {
             "runtime_id": "rt-1",
@@ -1330,7 +1308,7 @@ def test_runtime_result_legacy_mirror_fields_can_be_absent() -> None:
     assert runtime_result.per_request_artifact_summary is None
 
 
-def test_session_summary_legacy_mirror_fields_can_be_absent() -> None:
+def test_session_summary_typed_summary_can_be_absent() -> None:
     session = ForwardPaperSessionSummary.model_validate(
         {
             "runtime_id": "rt-1",

@@ -11,11 +11,12 @@ This phase is docs-only.
 
 ## Current posture
 
-Repo truth after L3B:
-- typed `per_request_artifact_summary` is the preferred asserted surface
-- loose mirror coverage is isolated into dedicated compatibility-focused tests
-- model validators still enforce typed-summary/mirror consistency
-- runtime/model code still carries loose mirror fields for compatibility
+This document captures a pre-removal candidate map.
+
+Current repo truth after L3D/L3E:
+- runtime/result mirror candidates in this doc are removed from `LiveTransmissionRuntimeResultArtifact`
+- session-side `per_request_request_id` mirror is removed
+- typed `per_request_artifact_summary` remains the only per-request summary surface on runtime/session artifacts
 
 ## Candidate removal order
 
@@ -87,6 +88,4 @@ Recommended removal order:
 Only proceed through explicit bounded removal phases.
 
 Status update after L3D/L3E:
-- runtime/result mirror candidates above are removed from `LiveTransmissionRuntimeResultArtifact`
-- session-side `per_request_request_id` mirror is removed
-- typed `per_request_artifact_summary` remains the only per-request summary surface on runtime/session artifacts
+- candidate sections above are retained as historical-only references
