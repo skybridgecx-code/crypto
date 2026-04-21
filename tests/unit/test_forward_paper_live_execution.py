@@ -1255,7 +1255,6 @@ def test_session_summary_validator_rejects_mismatched_typed_summary() -> None:
                 "status": "completed",
                 "scheduled_at": "2026-04-20T12:00:00Z",
                 "started_at": "2026-04-20T12:00:01Z",
-                "per_request_request_id": "req-a",
                 "live_transmission_request_decision_path": "runs/rt-1/decision-a.json",
                 "live_transmission_request_result_path": "runs/rt-1/result-a.json",
                 "per_request_artifact_summary": {
@@ -1304,7 +1303,6 @@ def test_session_summary_legacy_mirror_fields_are_isolated_compatibility_surface
             "status": "completed",
             "scheduled_at": "2026-04-20T12:00:00Z",
             "started_at": "2026-04-20T12:00:01Z",
-            "per_request_request_id": "req-a",
             "live_transmission_request_decision_path": "runs/rt-1/decision-a.json",
             "live_transmission_request_result_path": "runs/rt-1/result-a.json",
             "per_request_artifact_summary": {
@@ -1320,7 +1318,6 @@ def test_session_summary_legacy_mirror_fields_are_isolated_compatibility_surface
         decision_path=Path("runs/rt-1/decision-a.json"),
         result_path=Path("runs/rt-1/result-a.json"),
     )
-    assert session.per_request_request_id == "req-a"
     assert session.live_transmission_request_decision_path == Path("runs/rt-1/decision-a.json")
     assert session.live_transmission_request_result_path == Path("runs/rt-1/result-a.json")
 
@@ -1354,7 +1351,6 @@ def test_session_summary_legacy_mirror_fields_can_be_absent() -> None:
     )
 
     assert session.per_request_artifact_summary is None
-    assert session.per_request_request_id is None
     assert session.live_transmission_request_decision_path is None
     assert session.live_transmission_request_result_path is None
 
