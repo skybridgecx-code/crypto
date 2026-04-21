@@ -106,6 +106,21 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
     assert "resilience_order_run_ids" in robustness
     assert robustness["max_stress_scenario_id"] == "cost_slippage_plus_10bps"
     assert robustness["max_stress_additional_cost_slippage_bps"] == "10"
+    risk_policy = _section_key_values(report, "## Matrix Risk Policy Sweep Robustness")
+    assert risk_policy["risk_policy_robustness_verdict"] in {"pass", "fail"}
+    assert int(risk_policy["risk_policy_pass_run_count"]) >= 0
+    assert int(risk_policy["risk_policy_fail_run_count"]) >= 0
+    assert risk_policy["risk_policy_first_fail_scenario_id"] in {
+        "policy_tighter_75pct",
+        "policy_baseline_100pct",
+        "policy_looser_125pct",
+        "None",
+    }
+    assert "risk_policy_first_fail_run_id" in risk_policy
+    assert "risk_policy_most_sensitive_run_id" in risk_policy
+    assert "risk_policy_winner_run_id" in risk_policy
+    assert risk_policy["risk_policy_winner_robustness_verdict"] in {"pass", "fail"}
+    assert risk_policy["winner_policy_robustness_verdict"] in {"pass", "fail"}
     walk_forward = _section_key_values(report, "## Matrix Walk-Forward Regime Robustness")
     assert walk_forward["walk_forward_aggregate_robustness_verdict"] in {"pass", "fail"}
     assert int(walk_forward["walk_forward_pass_run_count"]) >= 0
@@ -177,6 +192,27 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
             "None",
         }
         assert section["first_fail_additional_cost_slippage_bps"] in {"0.0", "5.0", "10.0", "None"}
+        assert section["risk_policy_robustness_verdict"] in {"pass", "fail"}
+        assert section["risk_policy_first_fail_scenario_id"] in {
+            "policy_tighter_75pct",
+            "policy_baseline_100pct",
+            "policy_looser_125pct",
+            "None",
+        }
+        assert section["risk_policy_first_fail_scale_multiplier"] in {"0.75", "1.0", "1.25", "None"}
+        assert int(section["risk_policy_pass_scenario_count"]) >= 0
+        assert int(section["risk_policy_fail_scenario_count"]) >= 0
+        assert float(section["risk_policy_sensitivity_span_net_pnl_usd"]) >= 0.0
+        assert float(section["risk_policy_sensitivity_span_return_fraction"]) >= 0.0
+        assert section["risk_policy_most_adverse_scenario_id"] in {
+            "policy_tighter_75pct",
+            "policy_baseline_100pct",
+            "policy_looser_125pct",
+            "None",
+        }
+        assert section["risk_policy_is_narrow_dependence"] in {"True", "False"}
+        assert "risk_policy_is_narrow_dependence" in section
+        assert "risk_policy_most_adverse_delta_net_pnl_usd" in section
         assert int(section["fragility_rank"]) >= 1
         assert int(section["resilience_rank"]) >= 1
         assert section["max_stress_scenario_id"] == "cost_slippage_plus_10bps"
@@ -202,5 +238,8 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
         assert "walk_forward_slice_window_1_of_3_verdict" in section
         assert "walk_forward_slice_window_2_of_3_verdict" in section
         assert "walk_forward_slice_window_3_of_3_verdict" in section
+        assert "risk_policy_tighter_75pct_verdict" in section
+        assert "risk_policy_baseline_100pct_verdict" in section
+        assert "risk_policy_looser_125pct_verdict" in section
         assert "stress_cost_slippage_plus_5bps_verdict" in section
         assert "stress_cost_slippage_plus_10bps_verdict" in section
