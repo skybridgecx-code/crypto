@@ -48,6 +48,27 @@ ending_unrealized_pnl_usd: -8.7533717741
 ending_equity_usd: 399976.2456886772
 return_fraction: -0.0000618856
 
+## Matrix Candidate Promotion Gate
+promotion_eligible_run_count: 3
+promotion_held_run_count: 2
+promotion_eligible_run_ids: paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run,paper-run-matrix-demo-breakout-reject-low-equity-paper-run,paper-run-matrix-demo-high-vol-no-signal-paper-run
+promotion_held_run_ids: paper-run-matrix-demo-breakout-paper-run,paper-run-matrix-demo-mean-reversion-paper-run
+promotion_recommended_run_id: paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run
+promotion_first_blocking_run_id: paper-run-matrix-demo-breakout-paper-run
+promotion_first_blocking_reason_code: baseline_negative_return
+promotion_winner_run_id: paper-run-matrix-demo-high-vol-no-signal-paper-run
+promotion_winner_recommendation: promote_to_shadow_evidence_collection
+top_promotable_run_id: paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run
+promotable_order_run_ids: paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run,paper-run-matrix-demo-breakout-reject-low-equity-paper-run,paper-run-matrix-demo-high-vol-no-signal-paper-run
+first_held_run_id: paper-run-matrix-demo-breakout-paper-run
+first_held_reason_code: baseline_negative_return
+promotion_blocking_reason_baseline_negative_return_count: 2
+promotion_blocking_reason_cost_slippage_robustness_fail_count: 2
+promotion_blocking_reason_risk_policy_robustness_fail_count: 2
+promotion_blocking_reason_failure_mode_robustness_fail_count: 2
+promotion_blocking_reason_walk_forward_robustness_fail_count: 2
+promotion_blocking_reason_walk_forward_profit_concentration_count: 2
+
 ## Matrix Cost/Slippage Robustness Gate
 baseline_robustness_verdict: fail
 robustness_verdict: fail
@@ -240,6 +261,10 @@ replay_net_realized_pnl_usd: -8.0013433345
 replay_ending_unrealized_pnl_usd: -6.7533727206
 replay_ending_equity_usd: 99985.2452839449
 replay_return_fraction: -0.0001475472
+promotion_recommendation: hold
+promotion_is_eligible: False
+promotion_first_blocking_reason_code: baseline_negative_return
+promotion_blocking_reason_codes: baseline_negative_return,cost_slippage_robustness_fail,risk_policy_robustness_fail,failure_mode_robustness_fail,walk_forward_robustness_fail,walk_forward_profit_concentration
 baseline_robustness_verdict: fail
 robustness_verdict: fail
 first_fail_scenario_id: baseline
@@ -413,6 +438,10 @@ replay_net_realized_pnl_usd: -7.9995962142
 replay_ending_unrealized_pnl_usd: -1.9999990535
 replay_ending_equity_usd: 99990.0004047323
 replay_return_fraction: -0.000099996
+promotion_recommendation: hold
+promotion_is_eligible: False
+promotion_first_blocking_reason_code: baseline_negative_return
+promotion_blocking_reason_codes: baseline_negative_return,cost_slippage_robustness_fail,risk_policy_robustness_fail,failure_mode_robustness_fail,walk_forward_robustness_fail,walk_forward_profit_concentration
 baseline_robustness_verdict: fail
 robustness_verdict: fail
 first_fail_scenario_id: baseline
@@ -586,6 +615,10 @@ replay_net_realized_pnl_usd: 0
 replay_ending_unrealized_pnl_usd: 0
 replay_ending_equity_usd: 100000
 replay_return_fraction: 0
+promotion_recommendation: promote_to_shadow_evidence_collection
+promotion_is_eligible: True
+promotion_first_blocking_reason_code: None
+promotion_blocking_reason_codes: 
 baseline_robustness_verdict: pass
 robustness_verdict: pass
 first_fail_scenario_id: None
@@ -759,6 +792,10 @@ replay_net_realized_pnl_usd: 0
 replay_ending_unrealized_pnl_usd: 0
 replay_ending_equity_usd: 1
 replay_return_fraction: 0
+promotion_recommendation: promote_to_shadow_evidence_collection
+promotion_is_eligible: True
+promotion_first_blocking_reason_code: None
+promotion_blocking_reason_codes: 
 baseline_robustness_verdict: pass
 robustness_verdict: pass
 first_fail_scenario_id: None
@@ -932,6 +969,10 @@ replay_net_realized_pnl_usd: 0
 replay_ending_unrealized_pnl_usd: 0
 replay_ending_equity_usd: 100000
 replay_return_fraction: 0
+promotion_recommendation: promote_to_shadow_evidence_collection
+promotion_is_eligible: True
+promotion_first_blocking_reason_code: None
+promotion_blocking_reason_codes: 
 baseline_robustness_verdict: pass
 robustness_verdict: pass
 first_fail_scenario_id: None
