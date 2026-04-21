@@ -122,6 +122,19 @@ class MatrixComparisonRow(BaseModel):
     stress_delta_return_fraction_by_scenario: dict[str, float] = Field(default_factory=dict)
     fragility_rank: int = Field(default=0, ge=0)
     resilience_rank: int = Field(default=0, ge=0)
+    walk_forward_slices: list[MatrixComparisonWalkForwardSliceOutcome] = Field(default_factory=list)
+    walk_forward_slice_count: int = Field(default=0, ge=0)
+    walk_forward_pass_slice_count: int = Field(default=0, ge=0)
+    walk_forward_fail_slice_count: int = Field(default=0, ge=0)
+    walk_forward_consistency_stddev_net_pnl_usd: float = Field(default=0.0, ge=0)
+    walk_forward_consistency_range_net_pnl_usd: float = Field(default=0.0, ge=0)
+    walk_forward_best_slice_id: str | None = None
+    walk_forward_worst_slice_id: str | None = None
+    walk_forward_best_slice_net_pnl_delta_usd: float = 0.0
+    walk_forward_worst_slice_net_pnl_delta_usd: float = 0.0
+    walk_forward_profit_concentration_fraction: float = Field(default=0.0, ge=0)
+    walk_forward_is_profit_concentrated: bool = False
+    walk_forward_robustness_verdict: Literal["pass", "fail"] = "pass"
 
 
 class MatrixComparisonStressOutcome(BaseModel):
@@ -135,6 +148,21 @@ class MatrixComparisonStressOutcome(BaseModel):
     stressed_return_fraction: float = 0.0
     delta_net_realized_pnl_usd_vs_baseline: float = 0.0
     delta_return_fraction_vs_baseline: float = 0.0
+    verdict: Literal["pass", "fail"] = "pass"
+
+
+class MatrixComparisonWalkForwardSliceOutcome(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slice_id: str
+    slice_index: int = Field(ge=1)
+    start_candle_index: int = Field(ge=1)
+    end_candle_index: int = Field(ge=1)
+    candle_count: int = Field(ge=1)
+    cumulative_ending_equity_usd: float = Field(ge=0)
+    cumulative_return_fraction: float = 0.0
+    slice_net_pnl_delta_usd: float = 0.0
+    slice_return_fraction_delta: float = 0.0
     verdict: Literal["pass", "fail"] = "pass"
 
 
@@ -170,6 +198,17 @@ class MatrixComparisonAggregate(BaseModel):
     stress_delta_aggregate_return_fraction_by_scenario: dict[str, float] = Field(
         default_factory=dict
     )
+    walk_forward_slice_outcomes: list[MatrixComparisonAggregateWalkForwardSliceOutcome] = Field(
+        default_factory=list
+    )
+    walk_forward_pass_run_count: int = Field(default=0, ge=0)
+    walk_forward_fail_run_count: int = Field(default=0, ge=0)
+    walk_forward_most_consistent_run_id: str | None = None
+    walk_forward_worst_slice_run_id: str | None = None
+    walk_forward_worst_slice_id: str | None = None
+    walk_forward_winner_run_id: str | None = None
+    walk_forward_winner_robustness_verdict: Literal["pass", "fail"] = "fail"
+    walk_forward_aggregate_robustness_verdict: Literal["pass", "fail"] = "fail"
     passed_run_count: int = Field(default=0, ge=0)
     failed_run_count: int = Field(default=0, ge=0)
 
@@ -189,6 +228,18 @@ class MatrixComparisonAggregateStressOutcome(BaseModel):
     verdict: Literal["pass", "fail"] = "pass"
 
 
+class MatrixComparisonAggregateWalkForwardSliceOutcome(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slice_id: str
+    slice_index: int = Field(ge=1)
+    total_slice_net_pnl_delta_usd: float = 0.0
+    average_slice_net_pnl_delta_usd: float = 0.0
+    failing_run_count: int = Field(default=0, ge=0)
+    passing_run_count: int = Field(default=0, ge=0)
+    verdict: Literal["pass", "fail"] = "pass"
+
+
 class MatrixComparisonRanking(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -202,6 +253,10 @@ class MatrixComparisonRanking(BaseModel):
     most_resilient_run_id: str | None = None
     fragility_order_run_ids: list[str] = Field(default_factory=list)
     resilience_order_run_ids: list[str] = Field(default_factory=list)
+    most_consistent_walk_forward_run_id: str | None = None
+    worst_walk_forward_slice_run_id: str | None = None
+    worst_walk_forward_slice_id: str | None = None
+    winner_walk_forward_robustness_verdict: Literal["pass", "fail"] = "fail"
 
 
 class MatrixComparison(BaseModel):

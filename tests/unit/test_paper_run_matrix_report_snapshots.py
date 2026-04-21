@@ -106,6 +106,20 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
     assert "resilience_order_run_ids" in robustness
     assert robustness["max_stress_scenario_id"] == "cost_slippage_plus_10bps"
     assert robustness["max_stress_additional_cost_slippage_bps"] == "10"
+    walk_forward = _section_key_values(report, "## Matrix Walk-Forward Regime Robustness")
+    assert walk_forward["walk_forward_aggregate_robustness_verdict"] in {"pass", "fail"}
+    assert int(walk_forward["walk_forward_pass_run_count"]) >= 0
+    assert int(walk_forward["walk_forward_fail_run_count"]) >= 0
+    assert "walk_forward_winner_run_id" in walk_forward
+    assert walk_forward["walk_forward_winner_robustness_verdict"] in {"pass", "fail"}
+    assert "most_consistent_walk_forward_run_id" in walk_forward
+    assert "worst_walk_forward_slice_run_id" in walk_forward
+    assert walk_forward["worst_walk_forward_slice_id"] in {
+        "window_1_of_3",
+        "window_2_of_3",
+        "window_3_of_3",
+        "None",
+    }
 
     run_sections = _run_sections(report)
     expected_run_ids = [str(entry["run_id"]) for entry in manifest_payload["entries"]]
@@ -168,5 +182,25 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
         assert section["max_stress_scenario_id"] == "cost_slippage_plus_10bps"
         assert section["max_stress_additional_cost_slippage_bps"] == "10"
         assert float(section["max_stress_net_pnl_drag_usd"]) >= 0.0
+        assert section["walk_forward_robustness_verdict"] in {"pass", "fail"}
+        assert int(section["walk_forward_slice_count"]) >= 1
+        assert int(section["walk_forward_pass_slice_count"]) >= 0
+        assert int(section["walk_forward_fail_slice_count"]) >= 0
+        assert float(section["walk_forward_consistency_stddev_net_pnl_usd"]) >= 0.0
+        assert float(section["walk_forward_consistency_range_net_pnl_usd"]) >= 0.0
+        assert section["walk_forward_best_slice_id"] in {
+            "window_1_of_3",
+            "window_2_of_3",
+            "window_3_of_3",
+        }
+        assert section["walk_forward_worst_slice_id"] in {
+            "window_1_of_3",
+            "window_2_of_3",
+            "window_3_of_3",
+        }
+        assert section["walk_forward_is_profit_concentrated"] in {"True", "False"}
+        assert "walk_forward_slice_window_1_of_3_verdict" in section
+        assert "walk_forward_slice_window_2_of_3_verdict" in section
+        assert "walk_forward_slice_window_3_of_3_verdict" in section
         assert "stress_cost_slippage_plus_5bps_verdict" in section
         assert "stress_cost_slippage_plus_10bps_verdict" in section

@@ -6,6 +6,7 @@ from collections import Counter
 from collections.abc import Sequence
 from math import fsum
 from pathlib import Path
+from statistics import pstdev
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -17,16 +18,21 @@ from crypto_agent.evaluation.models import (
     MatrixComparison,
     MatrixComparisonAggregate,
     MatrixComparisonAggregateStressOutcome,
+    MatrixComparisonAggregateWalkForwardSliceOutcome,
     MatrixComparisonRanking,
     MatrixComparisonRow,
     MatrixComparisonStressOutcome,
+    MatrixComparisonWalkForwardSliceOutcome,
     MatrixTradeLedger,
     MatrixTradeLedgerEntry,
     ReplayPnLSummary,
     TradeLedger,
 )
 from crypto_agent.evaluation.replay import replay_journal
+from crypto_agent.evaluation.scorecard import build_replay_pnl
+from crypto_agent.events.envelope import EventEnvelope
 from crypto_agent.ids import new_id
+from crypto_agent.market_data.replay import load_candle_replay
 
 
 class PaperRunMatrixCase(BaseModel):
@@ -106,6 +112,7 @@ MATRIX_STRESS_SCENARIOS: tuple[tuple[str, float], ...] = (
     ("cost_slippage_plus_5bps", 5.0),
     ("cost_slippage_plus_10bps", 10.0),
 )
+MATRIX_WALK_FORWARD_SLICE_COUNT = 3
 
 
 def _default_matrix_cases() -> list[PaperRunMatrixCase]:
@@ -198,6 +205,66 @@ def _relative_matrix_trade_ledger_path(matrix_run_id: str) -> str:
 
 def _relative_matrix_comparison_path(matrix_run_id: str) -> str:
     return f"runs/{matrix_run_id}/matrix_comparison.json"
+
+
+def _walk_forward_slice_boundaries(candle_count: int) -> list[tuple[int, int]]:
+    if candle_count <= 0:
+        return []
+    slice_count = min(MATRIX_WALK_FORWARD_SLICE_COUNT, candle_count)
+    base, remainder = divmod(candle_count, slice_count)
+    boundaries: list[tuple[int, int]] = []
+    start = 0
+    for index in range(slice_count):
+        width = base + (1 if index < remainder else 0)
+        end = start + width - 1
+        boundaries.append((start, end))
+        start = end + 1
+    return boundaries
+
+
+def _build_walk_forward_slices(
+    *,
+    events: list[EventEnvelope],
+    replay_path: str,
+    starting_equity_usd: float,
+) -> list[MatrixComparisonWalkForwardSliceOutcome]:
+    candles = load_candle_replay(Path(replay_path))
+    boundaries = _walk_forward_slice_boundaries(len(candles))
+    if not boundaries:
+        return []
+
+    slices: list[MatrixComparisonWalkForwardSliceOutcome] = []
+    previous_equity = starting_equity_usd
+    for slice_index, (start_idx, end_idx) in enumerate(boundaries, start=1):
+        slice_id = f"window_{slice_index}_of_{len(boundaries)}"
+        end_close_time = candles[end_idx].close_time
+        cumulative_events = [event for event in events if event.timestamp <= end_close_time]
+        final_close_by_symbol = {candle.symbol: candle.close for candle in candles[: end_idx + 1]}
+        cumulative_pnl = build_replay_pnl(
+            cumulative_events,
+            final_close_by_symbol=final_close_by_symbol,
+            starting_equity_usd=starting_equity_usd,
+        )
+        slice_net_pnl_delta_usd = cumulative_pnl.ending_equity_usd - previous_equity
+        slice_return_fraction_delta = (
+            slice_net_pnl_delta_usd / previous_equity if previous_equity > 0 else 0.0
+        )
+        slices.append(
+            MatrixComparisonWalkForwardSliceOutcome(
+                slice_id=slice_id,
+                slice_index=slice_index,
+                start_candle_index=start_idx + 1,
+                end_candle_index=end_idx + 1,
+                candle_count=(end_idx - start_idx + 1),
+                cumulative_ending_equity_usd=cumulative_pnl.ending_equity_usd,
+                cumulative_return_fraction=cumulative_pnl.return_fraction,
+                slice_net_pnl_delta_usd=slice_net_pnl_delta_usd,
+                slice_return_fraction_delta=slice_return_fraction_delta,
+                verdict="pass" if slice_net_pnl_delta_usd >= 0 else "fail",
+            )
+        )
+        previous_equity = cumulative_pnl.ending_equity_usd
+    return slices
 
 
 def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparison:
@@ -295,6 +362,34 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
             if max_stress_outcome is not None
             else 0.0
         )
+        walk_forward_slices = _build_walk_forward_slices(
+            events=replay_result.events,
+            replay_path=str(summary["replay_path"]),
+            starting_equity_usd=pnl.starting_equity_usd,
+        )
+        walk_forward_net_deltas = [slice_.slice_net_pnl_delta_usd for slice_ in walk_forward_slices]
+        walk_forward_pass_slice_count = sum(
+            1 for slice_ in walk_forward_slices if slice_.verdict == "pass"
+        )
+        walk_forward_fail_slice_count = len(walk_forward_slices) - walk_forward_pass_slice_count
+        walk_forward_best_slice = max(
+            walk_forward_slices,
+            key=lambda slice_: (slice_.slice_net_pnl_delta_usd, -slice_.slice_index),
+            default=None,
+        )
+        walk_forward_worst_slice = min(
+            walk_forward_slices,
+            key=lambda slice_: (slice_.slice_net_pnl_delta_usd, slice_.slice_index),
+            default=None,
+        )
+        total_positive_slice_net_pnl = fsum(
+            max(slice_.slice_net_pnl_delta_usd, 0.0) for slice_ in walk_forward_slices
+        )
+        walk_forward_profit_concentration_fraction = (
+            max(walk_forward_best_slice.slice_net_pnl_delta_usd, 0.0) / total_positive_slice_net_pnl
+            if walk_forward_best_slice is not None and total_positive_slice_net_pnl > 0
+            else 0.0
+        )
         rows.append(
             MatrixComparisonRow(
                 run_id=entry.run_id,
@@ -332,6 +427,45 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
                     outcome.scenario_id: outcome.delta_return_fraction_vs_baseline
                     for outcome in stress_outcomes
                 },
+                walk_forward_slices=walk_forward_slices,
+                walk_forward_slice_count=len(walk_forward_slices),
+                walk_forward_pass_slice_count=walk_forward_pass_slice_count,
+                walk_forward_fail_slice_count=walk_forward_fail_slice_count,
+                walk_forward_consistency_stddev_net_pnl_usd=(
+                    pstdev(walk_forward_net_deltas) if len(walk_forward_net_deltas) > 1 else 0.0
+                ),
+                walk_forward_consistency_range_net_pnl_usd=(
+                    (max(walk_forward_net_deltas) - min(walk_forward_net_deltas))
+                    if walk_forward_net_deltas
+                    else 0.0
+                ),
+                walk_forward_best_slice_id=(
+                    walk_forward_best_slice.slice_id
+                    if walk_forward_best_slice is not None
+                    else None
+                ),
+                walk_forward_worst_slice_id=(
+                    walk_forward_worst_slice.slice_id
+                    if walk_forward_worst_slice is not None
+                    else None
+                ),
+                walk_forward_best_slice_net_pnl_delta_usd=(
+                    walk_forward_best_slice.slice_net_pnl_delta_usd
+                    if walk_forward_best_slice is not None
+                    else 0.0
+                ),
+                walk_forward_worst_slice_net_pnl_delta_usd=(
+                    walk_forward_worst_slice.slice_net_pnl_delta_usd
+                    if walk_forward_worst_slice is not None
+                    else 0.0
+                ),
+                walk_forward_profit_concentration_fraction=walk_forward_profit_concentration_fraction,
+                walk_forward_is_profit_concentrated=(
+                    walk_forward_profit_concentration_fraction >= 0.8
+                ),
+                walk_forward_robustness_verdict=(
+                    "pass" if walk_forward_fail_slice_count == 0 else "fail"
+                ),
             )
         )
 
@@ -449,6 +583,65 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
         else []
     )
     max_stress_total_net_pnl_drag_usd = fsum(row.max_stress_net_pnl_drag_usd for row in rows)
+    walk_forward_slice_ids = sorted(
+        {slice_.slice_id for row in rows for slice_ in row.walk_forward_slices},
+        key=lambda slice_id: (
+            int(slice_id.split("_")[1]) if slice_id.startswith("window_") else float("inf"),
+            slice_id,
+        ),
+    )
+    aggregate_walk_forward_slice_outcomes: list[
+        MatrixComparisonAggregateWalkForwardSliceOutcome
+    ] = []
+    for slice_id in walk_forward_slice_ids:
+        slice_samples = [
+            slice_
+            for row in rows
+            for slice_ in row.walk_forward_slices
+            if slice_.slice_id == slice_id
+        ]
+        failing_run_count = sum(1 for sample in slice_samples if sample.verdict == "fail")
+        passing_run_count = sum(1 for sample in slice_samples if sample.verdict == "pass")
+        total_slice_net_pnl_delta_usd = fsum(
+            sample.slice_net_pnl_delta_usd for sample in slice_samples
+        )
+        aggregate_walk_forward_slice_outcomes.append(
+            MatrixComparisonAggregateWalkForwardSliceOutcome(
+                slice_id=slice_id,
+                slice_index=(
+                    slice_samples[0].slice_index if slice_samples else int(slice_id.split("_")[1])
+                ),
+                total_slice_net_pnl_delta_usd=total_slice_net_pnl_delta_usd,
+                average_slice_net_pnl_delta_usd=(
+                    total_slice_net_pnl_delta_usd / len(slice_samples) if slice_samples else 0.0
+                ),
+                failing_run_count=failing_run_count,
+                passing_run_count=passing_run_count,
+                verdict="pass" if failing_run_count == 0 else "fail",
+            )
+        )
+    walk_forward_pass_run_count = sum(
+        1 for row in rows if row.walk_forward_robustness_verdict == "pass"
+    )
+    walk_forward_fail_run_count = len(rows) - walk_forward_pass_run_count
+    walk_forward_most_consistent_row = min(
+        rows,
+        key=lambda row: (
+            row.walk_forward_consistency_stddev_net_pnl_usd,
+            row.walk_forward_consistency_range_net_pnl_usd,
+            row.run_id,
+        ),
+        default=None,
+    )
+    walk_forward_worst_slice_row = min(
+        rows,
+        key=lambda row: (row.walk_forward_worst_slice_net_pnl_delta_usd, row.run_id),
+        default=None,
+    )
+    walk_forward_aggregate_robustness_verdict: Literal["pass", "fail"] = (
+        "pass" if walk_forward_fail_run_count == 0 else "fail"
+    )
+    winner_row = max(rows, key=lambda row: (row.return_fraction, row.run_id), default=None)
     aggregate = MatrixComparisonAggregate(
         run_count=len(rows),
         total_proposal_count=sum(row.proposal_count for row in rows),
@@ -486,6 +679,29 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
             outcome.scenario_id: outcome.delta_aggregate_return_fraction_vs_baseline
             for outcome in aggregate_stress_outcomes
         },
+        walk_forward_slice_outcomes=aggregate_walk_forward_slice_outcomes,
+        walk_forward_pass_run_count=walk_forward_pass_run_count,
+        walk_forward_fail_run_count=walk_forward_fail_run_count,
+        walk_forward_most_consistent_run_id=(
+            walk_forward_most_consistent_row.run_id
+            if walk_forward_most_consistent_row is not None
+            else None
+        ),
+        walk_forward_worst_slice_run_id=(
+            walk_forward_worst_slice_row.run_id
+            if walk_forward_worst_slice_row is not None
+            else None
+        ),
+        walk_forward_worst_slice_id=(
+            walk_forward_worst_slice_row.walk_forward_worst_slice_id
+            if walk_forward_worst_slice_row is not None
+            else None
+        ),
+        walk_forward_winner_run_id=(winner_row.run_id if winner_row is not None else None),
+        walk_forward_winner_robustness_verdict=(
+            winner_row.walk_forward_robustness_verdict if winner_row is not None else "fail"
+        ),
+        walk_forward_aggregate_robustness_verdict=walk_forward_aggregate_robustness_verdict,
         passed_run_count=sum(1 for row in rows if row.robustness_verdict == "pass"),
         failed_run_count=sum(1 for row in rows if row.robustness_verdict == "fail"),
     )
@@ -533,6 +749,24 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
             most_resilient_run_id=resilience_order[0].run_id if resilience_order else None,
             fragility_order_run_ids=[row.run_id for row in fragility_order],
             resilience_order_run_ids=[row.run_id for row in resilience_order],
+            most_consistent_walk_forward_run_id=(
+                walk_forward_most_consistent_row.run_id
+                if walk_forward_most_consistent_row is not None
+                else None
+            ),
+            worst_walk_forward_slice_run_id=(
+                walk_forward_worst_slice_row.run_id
+                if walk_forward_worst_slice_row is not None
+                else None
+            ),
+            worst_walk_forward_slice_id=(
+                walk_forward_worst_slice_row.walk_forward_worst_slice_id
+                if walk_forward_worst_slice_row is not None
+                else None
+            ),
+            winner_walk_forward_robustness_verdict=(
+                winner_row.walk_forward_robustness_verdict if winner_row is not None else "fail"
+            ),
         ),
     )
 
@@ -776,6 +1010,58 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
     lines.extend(
         [
             "",
+            "## Matrix Walk-Forward Regime Robustness",
+            "walk_forward_aggregate_robustness_verdict: "
+            f"{comparison.aggregate.walk_forward_aggregate_robustness_verdict}",
+            f"walk_forward_pass_run_count: {comparison.aggregate.walk_forward_pass_run_count}",
+            f"walk_forward_fail_run_count: {comparison.aggregate.walk_forward_fail_run_count}",
+            "walk_forward_most_consistent_run_id: "
+            f"{comparison.aggregate.walk_forward_most_consistent_run_id}",
+            "walk_forward_worst_slice_run_id: "
+            f"{comparison.aggregate.walk_forward_worst_slice_run_id}",
+            f"walk_forward_worst_slice_id: {comparison.aggregate.walk_forward_worst_slice_id}",
+            f"walk_forward_winner_run_id: {comparison.aggregate.walk_forward_winner_run_id}",
+            "walk_forward_winner_robustness_verdict: "
+            f"{comparison.aggregate.walk_forward_winner_robustness_verdict}",
+            "winner_walk_forward_robustness_verdict: "
+            f"{comparison.rankings.winner_walk_forward_robustness_verdict}",
+            "most_consistent_walk_forward_run_id: "
+            f"{comparison.rankings.most_consistent_walk_forward_run_id}",
+            "worst_walk_forward_slice_run_id: "
+            f"{comparison.rankings.worst_walk_forward_slice_run_id}",
+            f"worst_walk_forward_slice_id: {comparison.rankings.worst_walk_forward_slice_id}",
+        ]
+    )
+    for slice_outcome in comparison.aggregate.walk_forward_slice_outcomes:
+        lines.extend(
+            [
+                (
+                    f"walk_forward_slice_{slice_outcome.slice_id}_"
+                    "total_slice_net_pnl_delta_usd: "
+                    f"{_format_float(slice_outcome.total_slice_net_pnl_delta_usd)}"
+                ),
+                (
+                    f"walk_forward_slice_{slice_outcome.slice_id}_"
+                    "average_slice_net_pnl_delta_usd: "
+                    f"{_format_float(slice_outcome.average_slice_net_pnl_delta_usd)}"
+                ),
+                (
+                    f"walk_forward_slice_{slice_outcome.slice_id}_"
+                    f"failing_run_count: {slice_outcome.failing_run_count}"
+                ),
+                (
+                    f"walk_forward_slice_{slice_outcome.slice_id}_"
+                    f"passing_run_count: {slice_outcome.passing_run_count}"
+                ),
+                (
+                    f"walk_forward_slice_{slice_outcome.slice_id}_"
+                    f"verdict: {slice_outcome.verdict}"
+                ),
+            ]
+        )
+    lines.extend(
+        [
+            "",
             "## Per-Run Details",
         ]
     )
@@ -838,6 +1124,25 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
                 f"{_format_float(comparison_row.max_stress_additional_cost_slippage_bps)}",
                 "max_stress_net_pnl_drag_usd: "
                 f"{_format_float(comparison_row.max_stress_net_pnl_drag_usd)}",
+                "walk_forward_robustness_verdict: "
+                f"{comparison_row.walk_forward_robustness_verdict}",
+                f"walk_forward_slice_count: {comparison_row.walk_forward_slice_count}",
+                f"walk_forward_pass_slice_count: {comparison_row.walk_forward_pass_slice_count}",
+                f"walk_forward_fail_slice_count: {comparison_row.walk_forward_fail_slice_count}",
+                "walk_forward_consistency_stddev_net_pnl_usd: "
+                f"{_format_float(comparison_row.walk_forward_consistency_stddev_net_pnl_usd)}",
+                "walk_forward_consistency_range_net_pnl_usd: "
+                f"{_format_float(comparison_row.walk_forward_consistency_range_net_pnl_usd)}",
+                f"walk_forward_best_slice_id: {comparison_row.walk_forward_best_slice_id}",
+                f"walk_forward_worst_slice_id: {comparison_row.walk_forward_worst_slice_id}",
+                "walk_forward_best_slice_net_pnl_delta_usd: "
+                f"{_format_float(comparison_row.walk_forward_best_slice_net_pnl_delta_usd)}",
+                "walk_forward_worst_slice_net_pnl_delta_usd: "
+                f"{_format_float(comparison_row.walk_forward_worst_slice_net_pnl_delta_usd)}",
+                "walk_forward_profit_concentration_fraction: "
+                f"{_format_float(comparison_row.walk_forward_profit_concentration_fraction)}",
+                "walk_forward_is_profit_concentrated: "
+                f"{comparison_row.walk_forward_is_profit_concentrated}",
                 "",
             ]
         )
@@ -869,6 +1174,41 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
                         f"{_format_float(outcome.delta_return_fraction_vs_baseline)}"
                     ),
                     f"stress_{outcome.scenario_id}_verdict: {outcome.verdict}",
+                    "",
+                ]
+            )
+        for run_slice in comparison_row.walk_forward_slices:
+            lines.extend(
+                [
+                    (
+                        f"walk_forward_slice_{run_slice.slice_id}_"
+                        f"slice_index: {run_slice.slice_index}"
+                    ),
+                    (
+                        f"walk_forward_slice_{run_slice.slice_id}_candle_range: "
+                        f"{run_slice.start_candle_index}-{run_slice.end_candle_index}"
+                    ),
+                    (
+                        f"walk_forward_slice_{run_slice.slice_id}_"
+                        f"cumulative_ending_equity_usd: "
+                        f"{_format_float(run_slice.cumulative_ending_equity_usd)}"
+                    ),
+                    (
+                        f"walk_forward_slice_{run_slice.slice_id}_"
+                        f"cumulative_return_fraction: "
+                        f"{_format_float(run_slice.cumulative_return_fraction)}"
+                    ),
+                    (
+                        f"walk_forward_slice_{run_slice.slice_id}_"
+                        f"slice_net_pnl_delta_usd: "
+                        f"{_format_float(run_slice.slice_net_pnl_delta_usd)}"
+                    ),
+                    (
+                        f"walk_forward_slice_{run_slice.slice_id}_"
+                        f"slice_return_fraction_delta: "
+                        f"{_format_float(run_slice.slice_return_fraction_delta)}"
+                    ),
+                    (f"walk_forward_slice_{run_slice.slice_id}_verdict: " f"{run_slice.verdict}"),
                     "",
                 ]
             )
