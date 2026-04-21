@@ -85,3 +85,11 @@ Default recommendation:
 - avoid adding any new direct dependency on the loose trio
 - prefer `per_request_artifact_summary` for all new work
 - plan a later bounded removal phase only after test and model consumers are fully reduced
+
+## Status update after L3D/L3E
+
+Current repo truth:
+- session-side `per_request_request_id` mirror is removed
+- runtime-side loose trio (`per_request_request_id`, `per_request_decision_path`, `per_request_result_path`) is removed from `LiveTransmissionRuntimeResultArtifact`
+- runtime loop no longer writes those runtime loose mirrors
+- typed `per_request_artifact_summary` remains the asserted source-of-truth summary surface
