@@ -608,13 +608,6 @@ class LiveTransmissionRuntimeResultArtifact(BaseModel):
     per_request_artifact_summary: LiveTransmissionPerRequestArtifactSummary | None = None
     transmission_decision_path: Path
 
-    @model_validator(mode="after")
-    def validate_per_request_artifact_summary_consistency(
-        self,
-    ) -> LiveTransmissionRuntimeResultArtifact:
-        _ = self.per_request_artifact_summary
-        return self
-
     @field_validator("generated_at")
     @classmethod
     def normalize_generated_at(cls, value: datetime) -> datetime:

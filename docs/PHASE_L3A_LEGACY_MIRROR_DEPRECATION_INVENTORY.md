@@ -11,10 +11,13 @@ This phase is docs-only.
 
 ## Current posture
 
-Repo truth after L2V-L2Z:
-- typed `per_request_artifact_summary` exists on the relevant runtime/session surfaces
-- the loose trio still exists as compatibility mirrors
-- typed summary consistency is now validated at the model boundary
+This document captures a pre-removal inventory snapshot.
+
+Current repo truth after L3D/L3E:
+- session-side `per_request_request_id` mirror is removed
+- runtime-side loose trio (`per_request_request_id`, `per_request_decision_path`, `per_request_result_path`) is removed from `LiveTransmissionRuntimeResultArtifact`
+- runtime loop no longer writes runtime loose mirrors
+- typed `per_request_artifact_summary` remains the asserted source-of-truth summary surface
 
 ## Inventory
 
@@ -88,8 +91,4 @@ Default recommendation:
 
 ## Status update after L3D/L3E
 
-Current repo truth:
-- session-side `per_request_request_id` mirror is removed
-- runtime-side loose trio (`per_request_request_id`, `per_request_decision_path`, `per_request_result_path`) is removed from `LiveTransmissionRuntimeResultArtifact`
-- runtime loop no longer writes those runtime loose mirrors
-- typed `per_request_artifact_summary` remains the asserted source-of-truth summary surface
+The inventory sections above are retained as historical-only references.
