@@ -64,4 +64,8 @@ This phase does not:
 ## Result
 
 The typed summary object is the preferred forward surface.
-The loose trio remains in place as a compatibility mirror until a later bounded removal phase.
+Historical note: this phase established compatibility posture before removal work.
+Current repo truth after L3D/L3E:
+- the runtime loose trio (`per_request_request_id`, `per_request_decision_path`, `per_request_result_path`) is removed from `LiveTransmissionRuntimeResultArtifact`
+- the session-side loose mirror is already removed
+- typed `per_request_artifact_summary` is the source-of-truth per-request summary surface

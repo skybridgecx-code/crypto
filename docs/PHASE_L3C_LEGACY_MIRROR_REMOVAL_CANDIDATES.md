@@ -85,3 +85,8 @@ Recommended removal order:
 3. `per_request_result_path`
 
 Only proceed through explicit bounded removal phases.
+
+Status update after L3D/L3E:
+- runtime/result mirror candidates above are removed from `LiveTransmissionRuntimeResultArtifact`
+- session-side `per_request_request_id` mirror is removed
+- typed `per_request_artifact_summary` remains the only per-request summary surface on runtime/session artifacts
