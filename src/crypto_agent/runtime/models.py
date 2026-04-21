@@ -214,7 +214,6 @@ class ForwardPaperSessionSummary(BaseModel):
     live_transmission_request_path: Path | None = None
     live_transmission_result_path: Path | None = None
     live_transmission_state_path: Path | None = None
-    per_request_request_id: str | None = None
     per_request_artifact_summary: LiveTransmissionPerRequestArtifactSummary | None = None
     live_transmission_request_decision_path: Path | None = None
     live_transmission_request_result_path: Path | None = None
@@ -238,17 +237,8 @@ class ForwardPaperSessionSummary(BaseModel):
     def validate_per_request_artifact_summary_consistency(self) -> ForwardPaperSessionSummary:
         summary = self.per_request_artifact_summary
         if summary is None:
-            if self.per_request_request_id is not None:
-                raise ValueError(
-                    "per_request_request_id must be None when "
-                    "per_request_artifact_summary is absent"
-                )
             return self
 
-        if self.per_request_request_id != summary.request_id:
-            raise ValueError(
-                "per_request_request_id must match " "per_request_artifact_summary.request_id"
-            )
         if self.live_transmission_request_decision_path != summary.decision_path:
             raise ValueError(
                 "live_transmission_request_decision_path must match "

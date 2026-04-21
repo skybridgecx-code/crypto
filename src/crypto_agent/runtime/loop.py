@@ -1956,7 +1956,6 @@ def _session_summary_with_live_transmission_artifacts(
         "live_transmission_request_path": request_path,
         "live_transmission_result_path": result_path,
         "live_transmission_state_path": state_path,
-        "per_request_request_id": None,
         "per_request_artifact_summary": None,
         "artifact_paths_exist": artifact_paths_exist,
         "all_artifact_paths_exist": all(artifact_paths_exist.values()),
@@ -1975,9 +1974,6 @@ def _session_summary_with_live_transmission_artifacts(
             request_result_path,
         )
         update_payload["per_request_artifact_summary"] = per_request_summary
-        update_payload["per_request_request_id"] = (
-            None if per_request_summary is None else per_request_summary.request_id
-        )
     return session_summary.model_copy(update=update_payload)
 
 
