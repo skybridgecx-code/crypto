@@ -63,7 +63,44 @@
     "total_order_reject_count": 1,
     "total_partial_fill_intent_count": 2,
     "total_proposal_count": 4,
-    "total_starting_equity_usd": 400001.0
+    "total_starting_equity_usd": 400001.0,
+    "walk_forward_aggregate_robustness_verdict": "fail",
+    "walk_forward_fail_run_count": 2,
+    "walk_forward_most_consistent_run_id": "paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run",
+    "walk_forward_pass_run_count": 3,
+    "walk_forward_slice_outcomes": [
+      {
+        "average_slice_net_pnl_delta_usd": -34.098283064560384,
+        "failing_run_count": 1,
+        "passing_run_count": 4,
+        "slice_id": "window_1_of_3",
+        "slice_index": 1,
+        "total_slice_net_pnl_delta_usd": -170.4914153228019,
+        "verdict": "fail"
+      },
+      {
+        "average_slice_net_pnl_delta_usd": 1.6393837999989045,
+        "failing_run_count": 1,
+        "passing_run_count": 4,
+        "slice_id": "window_2_of_3",
+        "slice_index": 2,
+        "total_slice_net_pnl_delta_usd": 8.196918999994523,
+        "verdict": "fail"
+      },
+      {
+        "average_slice_net_pnl_delta_usd": 27.50803700000106,
+        "failing_run_count": 1,
+        "passing_run_count": 4,
+        "slice_id": "window_3_of_3",
+        "slice_index": 3,
+        "total_slice_net_pnl_delta_usd": 137.5401850000053,
+        "verdict": "fail"
+      }
+    ],
+    "walk_forward_winner_robustness_verdict": "pass",
+    "walk_forward_winner_run_id": "paper-run-matrix-demo-high-vol-no-signal-paper-run",
+    "walk_forward_worst_slice_id": "window_1_of_3",
+    "walk_forward_worst_slice_run_id": "paper-run-matrix-demo-breakout-paper-run"
   },
   "matrix_run_id": "paper-run-matrix-demo",
   "rankings": {
@@ -79,6 +116,7 @@
     ],
     "highest_ending_equity_run_id": "paper-run-matrix-demo-high-vol-no-signal-paper-run",
     "lowest_ending_equity_run_id": "paper-run-matrix-demo-breakout-reject-low-equity-paper-run",
+    "most_consistent_walk_forward_run_id": "paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run",
     "most_fragile_run_id": "paper-run-matrix-demo-breakout-paper-run",
     "most_resilient_run_id": "paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run",
     "resilience_order_run_ids": [
@@ -88,7 +126,10 @@
       "paper-run-matrix-demo-mean-reversion-paper-run",
       "paper-run-matrix-demo-breakout-paper-run"
     ],
-    "worst_return_run_id": "paper-run-matrix-demo-breakout-paper-run"
+    "winner_walk_forward_robustness_verdict": "pass",
+    "worst_return_run_id": "paper-run-matrix-demo-breakout-paper-run",
+    "worst_walk_forward_slice_id": "window_1_of_3",
+    "worst_walk_forward_slice_run_id": "paper-run-matrix-demo-breakout-paper-run"
   },
   "row_count": 5,
   "rows": [
@@ -147,7 +188,57 @@
           "stressed_return_fraction": -0.0005476143272784247,
           "verdict": "fail"
         }
-      ]
+      ],
+      "walk_forward_best_slice_id": "window_3_of_3",
+      "walk_forward_best_slice_net_pnl_delta_usd": 161.0540250000049,
+      "walk_forward_consistency_range_net_pnl_usd": 345.6475310551177,
+      "walk_forward_consistency_stddev_net_pnl_usd": 141.44229250503207,
+      "walk_forward_fail_slice_count": 1,
+      "walk_forward_is_profit_concentrated": true,
+      "walk_forward_pass_slice_count": 2,
+      "walk_forward_profit_concentration_fraction": 0.948275862069026,
+      "walk_forward_robustness_verdict": "fail",
+      "walk_forward_slice_count": 3,
+      "walk_forward_slices": [
+        {
+          "candle_count": 2,
+          "cumulative_ending_equity_usd": 99815.40649394489,
+          "cumulative_return_fraction": -0.001845935060551128,
+          "end_candle_index": 2,
+          "slice_id": "window_1_of_3",
+          "slice_index": 1,
+          "slice_net_pnl_delta_usd": -184.5935060551128,
+          "slice_return_fraction_delta": -0.001845935060551128,
+          "start_candle_index": 1,
+          "verdict": "fail"
+        },
+        {
+          "candle_count": 1,
+          "cumulative_ending_equity_usd": 99824.19125894488,
+          "cumulative_return_fraction": -0.0017580874105512338,
+          "end_candle_index": 3,
+          "slice_id": "window_2_of_3",
+          "slice_index": 2,
+          "slice_net_pnl_delta_usd": 8.78476499998942,
+          "slice_return_fraction_delta": 8.801011094937865e-05,
+          "start_candle_index": 3,
+          "verdict": "pass"
+        },
+        {
+          "candle_count": 1,
+          "cumulative_ending_equity_usd": 99985.24528394488,
+          "cumulative_return_fraction": -0.00014754716055118478,
+          "end_candle_index": 4,
+          "slice_id": "window_3_of_3",
+          "slice_index": 3,
+          "slice_net_pnl_delta_usd": 161.0540250000049,
+          "slice_return_fraction_delta": 0.0016133767072775904,
+          "start_candle_index": 4,
+          "verdict": "pass"
+        }
+      ],
+      "walk_forward_worst_slice_id": "window_1_of_3",
+      "walk_forward_worst_slice_net_pnl_delta_usd": -184.5935060551128
     },
     {
       "alert_count": 1,
@@ -204,7 +295,57 @@
           "stressed_return_fraction": -0.0004999757633863192,
           "verdict": "fail"
         }
-      ]
+      ],
+      "walk_forward_best_slice_id": "window_1_of_3",
+      "walk_forward_best_slice_net_pnl_delta_usd": 14.102090732310899,
+      "walk_forward_consistency_range_net_pnl_usd": 37.61593073231052,
+      "walk_forward_consistency_stddev_net_pnl_usd": 15.478851834197602,
+      "walk_forward_fail_slice_count": 2,
+      "walk_forward_is_profit_concentrated": true,
+      "walk_forward_pass_slice_count": 1,
+      "walk_forward_profit_concentration_fraction": 1.0,
+      "walk_forward_robustness_verdict": "fail",
+      "walk_forward_slice_count": 3,
+      "walk_forward_slices": [
+        {
+          "candle_count": 2,
+          "cumulative_ending_equity_usd": 100014.10209073231,
+          "cumulative_return_fraction": 0.00014102090732310898,
+          "end_candle_index": 2,
+          "slice_id": "window_1_of_3",
+          "slice_index": 1,
+          "slice_net_pnl_delta_usd": 14.102090732310899,
+          "slice_return_fraction_delta": 0.00014102090732310898,
+          "start_candle_index": 1,
+          "verdict": "pass"
+        },
+        {
+          "candle_count": 2,
+          "cumulative_ending_equity_usd": 100013.51424473232,
+          "cumulative_return_fraction": 0.00013514244732316,
+          "end_candle_index": 4,
+          "slice_id": "window_2_of_3",
+          "slice_index": 2,
+          "slice_net_pnl_delta_usd": -0.5878459999948973,
+          "slice_return_fraction_delta": -5.8776311310739585e-06,
+          "start_candle_index": 3,
+          "verdict": "fail"
+        },
+        {
+          "candle_count": 1,
+          "cumulative_ending_equity_usd": 99990.00040473232,
+          "cumulative_return_fraction": -9.999595267683616e-05,
+          "end_candle_index": 5,
+          "slice_id": "window_3_of_3",
+          "slice_index": 3,
+          "slice_net_pnl_delta_usd": -23.513839999999618,
+          "slice_return_fraction_delta": -0.00023510662711502596,
+          "start_candle_index": 5,
+          "verdict": "fail"
+        }
+      ],
+      "walk_forward_worst_slice_id": "window_3_of_3",
+      "walk_forward_worst_slice_net_pnl_delta_usd": -23.513839999999618
     },
     {
       "alert_count": 0,
@@ -261,7 +402,57 @@
           "stressed_return_fraction": 0.0,
           "verdict": "pass"
         }
-      ]
+      ],
+      "walk_forward_best_slice_id": "window_1_of_3",
+      "walk_forward_best_slice_net_pnl_delta_usd": 0.0,
+      "walk_forward_consistency_range_net_pnl_usd": 0.0,
+      "walk_forward_consistency_stddev_net_pnl_usd": 0.0,
+      "walk_forward_fail_slice_count": 0,
+      "walk_forward_is_profit_concentrated": false,
+      "walk_forward_pass_slice_count": 3,
+      "walk_forward_profit_concentration_fraction": 0.0,
+      "walk_forward_robustness_verdict": "pass",
+      "walk_forward_slice_count": 3,
+      "walk_forward_slices": [
+        {
+          "candle_count": 2,
+          "cumulative_ending_equity_usd": 100000.0,
+          "cumulative_return_fraction": 0.0,
+          "end_candle_index": 2,
+          "slice_id": "window_1_of_3",
+          "slice_index": 1,
+          "slice_net_pnl_delta_usd": 0.0,
+          "slice_return_fraction_delta": 0.0,
+          "start_candle_index": 1,
+          "verdict": "pass"
+        },
+        {
+          "candle_count": 1,
+          "cumulative_ending_equity_usd": 100000.0,
+          "cumulative_return_fraction": 0.0,
+          "end_candle_index": 3,
+          "slice_id": "window_2_of_3",
+          "slice_index": 2,
+          "slice_net_pnl_delta_usd": 0.0,
+          "slice_return_fraction_delta": 0.0,
+          "start_candle_index": 3,
+          "verdict": "pass"
+        },
+        {
+          "candle_count": 1,
+          "cumulative_ending_equity_usd": 100000.0,
+          "cumulative_return_fraction": 0.0,
+          "end_candle_index": 4,
+          "slice_id": "window_3_of_3",
+          "slice_index": 3,
+          "slice_net_pnl_delta_usd": 0.0,
+          "slice_return_fraction_delta": 0.0,
+          "start_candle_index": 4,
+          "verdict": "pass"
+        }
+      ],
+      "walk_forward_worst_slice_id": "window_1_of_3",
+      "walk_forward_worst_slice_net_pnl_delta_usd": 0.0
     },
     {
       "alert_count": 1,
@@ -318,7 +509,57 @@
           "stressed_return_fraction": 0.0,
           "verdict": "pass"
         }
-      ]
+      ],
+      "walk_forward_best_slice_id": "window_1_of_3",
+      "walk_forward_best_slice_net_pnl_delta_usd": 0.0,
+      "walk_forward_consistency_range_net_pnl_usd": 0.0,
+      "walk_forward_consistency_stddev_net_pnl_usd": 0.0,
+      "walk_forward_fail_slice_count": 0,
+      "walk_forward_is_profit_concentrated": false,
+      "walk_forward_pass_slice_count": 3,
+      "walk_forward_profit_concentration_fraction": 0.0,
+      "walk_forward_robustness_verdict": "pass",
+      "walk_forward_slice_count": 3,
+      "walk_forward_slices": [
+        {
+          "candle_count": 2,
+          "cumulative_ending_equity_usd": 1.0,
+          "cumulative_return_fraction": 0.0,
+          "end_candle_index": 2,
+          "slice_id": "window_1_of_3",
+          "slice_index": 1,
+          "slice_net_pnl_delta_usd": 0.0,
+          "slice_return_fraction_delta": 0.0,
+          "start_candle_index": 1,
+          "verdict": "pass"
+        },
+        {
+          "candle_count": 1,
+          "cumulative_ending_equity_usd": 1.0,
+          "cumulative_return_fraction": 0.0,
+          "end_candle_index": 3,
+          "slice_id": "window_2_of_3",
+          "slice_index": 2,
+          "slice_net_pnl_delta_usd": 0.0,
+          "slice_return_fraction_delta": 0.0,
+          "start_candle_index": 3,
+          "verdict": "pass"
+        },
+        {
+          "candle_count": 1,
+          "cumulative_ending_equity_usd": 1.0,
+          "cumulative_return_fraction": 0.0,
+          "end_candle_index": 4,
+          "slice_id": "window_3_of_3",
+          "slice_index": 3,
+          "slice_net_pnl_delta_usd": 0.0,
+          "slice_return_fraction_delta": 0.0,
+          "start_candle_index": 4,
+          "verdict": "pass"
+        }
+      ],
+      "walk_forward_worst_slice_id": "window_1_of_3",
+      "walk_forward_worst_slice_net_pnl_delta_usd": 0.0
     },
     {
       "alert_count": 1,
@@ -375,7 +616,57 @@
           "stressed_return_fraction": 0.0,
           "verdict": "pass"
         }
-      ]
+      ],
+      "walk_forward_best_slice_id": "window_1_of_3",
+      "walk_forward_best_slice_net_pnl_delta_usd": 0.0,
+      "walk_forward_consistency_range_net_pnl_usd": 0.0,
+      "walk_forward_consistency_stddev_net_pnl_usd": 0.0,
+      "walk_forward_fail_slice_count": 0,
+      "walk_forward_is_profit_concentrated": false,
+      "walk_forward_pass_slice_count": 3,
+      "walk_forward_profit_concentration_fraction": 0.0,
+      "walk_forward_robustness_verdict": "pass",
+      "walk_forward_slice_count": 3,
+      "walk_forward_slices": [
+        {
+          "candle_count": 2,
+          "cumulative_ending_equity_usd": 100000.0,
+          "cumulative_return_fraction": 0.0,
+          "end_candle_index": 2,
+          "slice_id": "window_1_of_3",
+          "slice_index": 1,
+          "slice_net_pnl_delta_usd": 0.0,
+          "slice_return_fraction_delta": 0.0,
+          "start_candle_index": 1,
+          "verdict": "pass"
+        },
+        {
+          "candle_count": 1,
+          "cumulative_ending_equity_usd": 100000.0,
+          "cumulative_return_fraction": 0.0,
+          "end_candle_index": 3,
+          "slice_id": "window_2_of_3",
+          "slice_index": 2,
+          "slice_net_pnl_delta_usd": 0.0,
+          "slice_return_fraction_delta": 0.0,
+          "start_candle_index": 3,
+          "verdict": "pass"
+        },
+        {
+          "candle_count": 1,
+          "cumulative_ending_equity_usd": 100000.0,
+          "cumulative_return_fraction": 0.0,
+          "end_candle_index": 4,
+          "slice_id": "window_3_of_3",
+          "slice_index": 3,
+          "slice_net_pnl_delta_usd": 0.0,
+          "slice_return_fraction_delta": 0.0,
+          "start_candle_index": 4,
+          "verdict": "pass"
+        }
+      ],
+      "walk_forward_worst_slice_id": "window_1_of_3",
+      "walk_forward_worst_slice_net_pnl_delta_usd": 0.0
     }
   ]
 }

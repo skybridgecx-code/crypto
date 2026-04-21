@@ -121,6 +121,29 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
         assert float(row["max_stress_net_pnl_drag_usd"]) >= 0.0
         assert int(row["fragility_rank"]) >= 1
         assert int(row["resilience_rank"]) >= 1
+        assert row["walk_forward_robustness_verdict"] in {"pass", "fail"}
+        assert int(row["walk_forward_slice_count"]) >= 1
+        assert int(row["walk_forward_pass_slice_count"]) >= 0
+        assert int(row["walk_forward_fail_slice_count"]) >= 0
+        assert int(row["walk_forward_slice_count"]) == (
+            int(row["walk_forward_pass_slice_count"]) + int(row["walk_forward_fail_slice_count"])
+        )
+        assert float(row["walk_forward_consistency_stddev_net_pnl_usd"]) >= 0.0
+        assert float(row["walk_forward_consistency_range_net_pnl_usd"]) >= 0.0
+        assert row["walk_forward_best_slice_id"] is not None
+        assert row["walk_forward_worst_slice_id"] is not None
+        assert float(row["walk_forward_profit_concentration_fraction"]) >= 0.0
+        assert row["walk_forward_is_profit_concentrated"] in {True, False}
+        walk_forward_slices = row["walk_forward_slices"]
+        assert len(walk_forward_slices) == int(row["walk_forward_slice_count"])
+        assert [slice_["slice_index"] for slice_ in walk_forward_slices] == list(
+            range(1, len(walk_forward_slices) + 1)
+        )
+        for slice_ in walk_forward_slices:
+            assert int(slice_["start_candle_index"]) <= int(slice_["end_candle_index"])
+            assert int(slice_["candle_count"]) >= 1
+            assert float(slice_["cumulative_ending_equity_usd"]) >= 0.0
+            assert slice_["verdict"] in {"pass", "fail"}
         stress_outcomes = row["stress_outcomes"]
         assert [outcome["scenario_id"] for outcome in stress_outcomes] == [
             "cost_slippage_plus_5bps",
@@ -244,6 +267,29 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
     assert float(aggregate["max_stress_total_net_pnl_drag_usd"]) == pytest.approx(
         sum(float(row["max_stress_net_pnl_drag_usd"]) for row in rows)
     )
+    assert aggregate["walk_forward_aggregate_robustness_verdict"] in {"pass", "fail"}
+    assert int(aggregate["walk_forward_pass_run_count"]) + int(
+        aggregate["walk_forward_fail_run_count"]
+    ) == len(rows)
+    assert aggregate["walk_forward_winner_run_id"] in expected_run_ids + [None]
+    assert aggregate["walk_forward_winner_robustness_verdict"] in {"pass", "fail"}
+    assert aggregate["walk_forward_most_consistent_run_id"] in expected_run_ids + [None]
+    assert aggregate["walk_forward_worst_slice_run_id"] in expected_run_ids + [None]
+    assert aggregate["walk_forward_worst_slice_id"] in {
+        "window_1_of_3",
+        "window_2_of_3",
+        "window_3_of_3",
+        None,
+    }
+    walk_forward_aggregate_slices = aggregate["walk_forward_slice_outcomes"]
+    assert [slice_["slice_index"] for slice_ in walk_forward_aggregate_slices] == list(
+        range(1, len(walk_forward_aggregate_slices) + 1)
+    )
+    for slice_ in walk_forward_aggregate_slices:
+        assert slice_["verdict"] in {"pass", "fail"}
+        assert int(slice_["failing_run_count"]) >= 0
+        assert int(slice_["passing_run_count"]) >= 0
+        assert int(slice_["failing_run_count"]) + int(slice_["passing_run_count"]) <= len(rows)
     aggregate_stress_outcomes = aggregate["stress_outcomes"]
     assert [outcome["scenario_id"] for outcome in aggregate_stress_outcomes] == [
         "cost_slippage_plus_5bps",
@@ -301,3 +347,12 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
     assert rankings["most_resilient_run_id"] in expected_run_ids + [None]
     assert sorted(rankings["fragility_order_run_ids"]) == sorted(expected_run_ids)
     assert sorted(rankings["resilience_order_run_ids"]) == sorted(expected_run_ids)
+    assert rankings["most_consistent_walk_forward_run_id"] in expected_run_ids + [None]
+    assert rankings["worst_walk_forward_slice_run_id"] in expected_run_ids + [None]
+    assert rankings["worst_walk_forward_slice_id"] in {
+        "window_1_of_3",
+        "window_2_of_3",
+        "window_3_of_3",
+        None,
+    }
+    assert rankings["winner_walk_forward_robustness_verdict"] in {"pass", "fail"}
