@@ -60,6 +60,8 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
     total_partial_fill_intent_count = 0
     total_alert_count = 0
     total_ledger_row_count = 0
+    passed_run_count = 0
+    failed_run_count = 0
 
     best_return_row: dict[str, object] | None = None
     worst_return_row: dict[str, object] | None = None
@@ -98,6 +100,36 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
         )
         assert row["ending_equity_usd"] == pytest.approx(replay_pnl.ending_equity_usd)
         assert row["return_fraction"] == pytest.approx(replay_pnl.return_fraction)
+        expected_baseline_verdict = "pass" if replay_pnl.return_fraction >= 0 else "fail"
+        assert row["baseline_robustness_verdict"] == expected_baseline_verdict
+        assert row["robustness_verdict"] in {"pass", "fail"}
+        assert row["first_fail_scenario_id"] in {
+            "baseline",
+            "cost_slippage_plus_5bps",
+            "cost_slippage_plus_10bps",
+            None,
+        }
+        stress_outcomes = row["stress_outcomes"]
+        assert [outcome["scenario_id"] for outcome in stress_outcomes] == [
+            "cost_slippage_plus_5bps",
+            "cost_slippage_plus_10bps",
+        ]
+        for outcome in stress_outcomes:
+            expected_incremental_cost_usd = (
+                replay_result.scorecard.total_fill_notional_usd
+                * float(outcome["additional_cost_slippage_bps"])
+                / 10_000.0
+            )
+            assert float(outcome["incremental_cost_usd"]) == pytest.approx(
+                expected_incremental_cost_usd
+            )
+            assert float(outcome["stressed_net_realized_pnl_usd"]) == pytest.approx(
+                replay_pnl.net_realized_pnl_usd - expected_incremental_cost_usd
+            )
+            assert float(outcome["delta_net_realized_pnl_usd_vs_baseline"]) == pytest.approx(
+                -expected_incremental_cost_usd
+            )
+            assert outcome["verdict"] in {"pass", "fail"}
 
         total_proposal_count += int(row["proposal_count"])
         total_halt_count += int(row["halt_count"])
@@ -110,6 +142,10 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
         total_net_realized_pnl_usd += float(row["net_realized_pnl_usd"])
         total_ending_unrealized_pnl_usd += float(row["ending_unrealized_pnl_usd"])
         total_ending_equity_usd += float(row["ending_equity_usd"])
+        if row["robustness_verdict"] == "pass":
+            passed_run_count += 1
+        else:
+            failed_run_count += 1
 
         if best_return_row is None or (
             float(row["return_fraction"]),
@@ -167,8 +203,36 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
     assert aggregate["aggregate_return_fraction"] == pytest.approx(
         expected_aggregate_return_fraction
     )
+    expected_aggregate_baseline_verdict = (
+        "pass" if expected_aggregate_return_fraction >= 0 else "fail"
+    )
+    assert aggregate["baseline_robustness_verdict"] == expected_aggregate_baseline_verdict
+    assert aggregate["robustness_verdict"] in {"pass", "fail"}
+    assert aggregate["first_fail_scenario_id"] in {
+        "baseline",
+        "cost_slippage_plus_5bps",
+        "cost_slippage_plus_10bps",
+        None,
+    }
+    assert aggregate["passed_run_count"] == passed_run_count
+    assert aggregate["failed_run_count"] == failed_run_count
+    aggregate_stress_outcomes = aggregate["stress_outcomes"]
+    assert [outcome["scenario_id"] for outcome in aggregate_stress_outcomes] == [
+        "cost_slippage_plus_5bps",
+        "cost_slippage_plus_10bps",
+    ]
+    for outcome in aggregate_stress_outcomes:
+        assert outcome["verdict"] in {"pass", "fail"}
+        assert int(outcome["failing_run_count"]) >= 0
 
     assert rankings["best_return_run_id"] == best_return_row["run_id"]
     assert rankings["worst_return_run_id"] == worst_return_row["run_id"]
     assert rankings["highest_ending_equity_run_id"] == highest_equity_row["run_id"]
     assert rankings["lowest_ending_equity_run_id"] == lowest_equity_row["run_id"]
+    assert rankings["first_robustness_failure_run_id"] in expected_run_ids + [None]
+    assert rankings["first_robustness_failure_scenario_id"] in {
+        "baseline",
+        "cost_slippage_plus_5bps",
+        "cost_slippage_plus_10bps",
+        None,
+    }

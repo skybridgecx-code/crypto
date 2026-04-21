@@ -6,6 +6,7 @@ from collections import Counter
 from collections.abc import Sequence
 from math import fsum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,8 +16,10 @@ from crypto_agent.evaluation.models import (
     EvaluationScorecard,
     MatrixComparison,
     MatrixComparisonAggregate,
+    MatrixComparisonAggregateStressOutcome,
     MatrixComparisonRanking,
     MatrixComparisonRow,
+    MatrixComparisonStressOutcome,
     MatrixTradeLedger,
     MatrixTradeLedgerEntry,
     ReplayPnLSummary,
@@ -96,6 +99,12 @@ REPLAY_PNL_KEYS: tuple[str, ...] = (
     "ending_unrealized_pnl_usd",
     "ending_equity_usd",
     "return_fraction",
+)
+
+
+MATRIX_STRESS_SCENARIOS: tuple[tuple[str, float], ...] = (
+    ("cost_slippage_plus_5bps", 5.0),
+    ("cost_slippage_plus_10bps", 10.0),
 )
 
 
@@ -193,6 +202,39 @@ def _relative_matrix_comparison_path(matrix_run_id: str) -> str:
 
 def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparison:
     rows: list[MatrixComparisonRow] = []
+    scenario_bps = dict(MATRIX_STRESS_SCENARIOS)
+
+    def _row_stress_outcomes(
+        *,
+        baseline_pnl: ReplayPnLSummary,
+        total_fill_notional_usd: float,
+    ) -> list[MatrixComparisonStressOutcome]:
+        outcomes: list[MatrixComparisonStressOutcome] = []
+        for scenario_id, additional_cost_slippage_bps in MATRIX_STRESS_SCENARIOS:
+            incremental_cost_usd = total_fill_notional_usd * additional_cost_slippage_bps / 10_000.0
+            stressed_net_realized_pnl_usd = baseline_pnl.net_realized_pnl_usd - incremental_cost_usd
+            stressed_ending_equity_usd = baseline_pnl.ending_equity_usd - incremental_cost_usd
+            stressed_return_fraction = (
+                (stressed_ending_equity_usd - baseline_pnl.starting_equity_usd)
+                / baseline_pnl.starting_equity_usd
+                if baseline_pnl.starting_equity_usd > 0
+                else 0.0
+            )
+            delta_return_fraction = stressed_return_fraction - baseline_pnl.return_fraction
+            outcomes.append(
+                MatrixComparisonStressOutcome(
+                    scenario_id=scenario_id,
+                    additional_cost_slippage_bps=additional_cost_slippage_bps,
+                    incremental_cost_usd=incremental_cost_usd,
+                    stressed_net_realized_pnl_usd=stressed_net_realized_pnl_usd,
+                    stressed_ending_equity_usd=stressed_ending_equity_usd,
+                    stressed_return_fraction=stressed_return_fraction,
+                    delta_net_realized_pnl_usd_vs_baseline=-incremental_cost_usd,
+                    delta_return_fraction_vs_baseline=delta_return_fraction,
+                    verdict="pass" if stressed_return_fraction >= 0 else "fail",
+                )
+            )
+        return outcomes
 
     for entry in manifest.entries:
         summary = json.loads(Path(entry.summary_path).read_text(encoding="utf-8"))
@@ -207,6 +249,21 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
         )
         trade_ledger = TradeLedger.model_validate(
             json.loads(Path(summary["trade_ledger_path"]).read_text(encoding="utf-8"))
+        )
+        baseline_robustness_verdict: Literal["pass", "fail"] = (
+            "pass" if pnl.return_fraction >= 0 else "fail"
+        )
+        stress_outcomes = _row_stress_outcomes(
+            baseline_pnl=pnl,
+            total_fill_notional_usd=replay_result.scorecard.total_fill_notional_usd,
+        )
+        first_fail_scenario_id = (
+            "baseline"
+            if baseline_robustness_verdict == "fail"
+            else next(
+                (outcome.scenario_id for outcome in stress_outcomes if outcome.verdict == "fail"),
+                None,
+            )
         )
         rows.append(
             MatrixComparisonRow(
@@ -224,11 +281,78 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
                 ending_unrealized_pnl_usd=pnl.ending_unrealized_pnl_usd,
                 ending_equity_usd=pnl.ending_equity_usd,
                 return_fraction=pnl.return_fraction,
+                baseline_robustness_verdict=baseline_robustness_verdict,
+                stress_outcomes=stress_outcomes,
+                robustness_verdict=(
+                    "pass"
+                    if baseline_robustness_verdict == "pass"
+                    and all(outcome.verdict == "pass" for outcome in stress_outcomes)
+                    else "fail"
+                ),
+                first_fail_scenario_id=first_fail_scenario_id,
             )
         )
 
     total_starting_equity_usd = fsum(row.starting_equity_usd for row in rows)
     total_ending_equity_usd = fsum(row.ending_equity_usd for row in rows)
+    aggregate_return_fraction = (
+        (total_ending_equity_usd - total_starting_equity_usd) / total_starting_equity_usd
+        if total_starting_equity_usd > 0
+        else 0.0
+    )
+    aggregate_baseline_robustness_verdict: Literal["pass", "fail"] = (
+        "pass" if aggregate_return_fraction >= 0 else "fail"
+    )
+    aggregate_stress_outcomes: list[MatrixComparisonAggregateStressOutcome] = []
+    for scenario_id, additional_cost_slippage_bps in MATRIX_STRESS_SCENARIOS:
+        incremental_cost_usd = fsum(
+            outcome.incremental_cost_usd
+            for row in rows
+            for outcome in row.stress_outcomes
+            if outcome.scenario_id == scenario_id
+        )
+        stressed_total_ending_equity_usd = total_ending_equity_usd - incremental_cost_usd
+        stressed_aggregate_return_fraction = (
+            (stressed_total_ending_equity_usd - total_starting_equity_usd)
+            / total_starting_equity_usd
+            if total_starting_equity_usd > 0
+            else 0.0
+        )
+        aggregate_stress_outcomes.append(
+            MatrixComparisonAggregateStressOutcome(
+                scenario_id=scenario_id,
+                additional_cost_slippage_bps=additional_cost_slippage_bps,
+                incremental_cost_usd=incremental_cost_usd,
+                stressed_total_net_realized_pnl_usd=(
+                    fsum(row.net_realized_pnl_usd for row in rows) - incremental_cost_usd
+                ),
+                stressed_total_ending_equity_usd=stressed_total_ending_equity_usd,
+                stressed_aggregate_return_fraction=stressed_aggregate_return_fraction,
+                delta_total_net_realized_pnl_usd_vs_baseline=-incremental_cost_usd,
+                delta_aggregate_return_fraction_vs_baseline=(
+                    stressed_aggregate_return_fraction - aggregate_return_fraction
+                ),
+                failing_run_count=sum(
+                    1
+                    for row in rows
+                    for outcome in row.stress_outcomes
+                    if outcome.scenario_id == scenario_id and outcome.verdict == "fail"
+                ),
+                verdict="pass" if stressed_aggregate_return_fraction >= 0 else "fail",
+            )
+        )
+    aggregate_first_fail_scenario_id = (
+        "baseline"
+        if aggregate_baseline_robustness_verdict == "fail"
+        else next(
+            (
+                outcome.scenario_id
+                for outcome in aggregate_stress_outcomes
+                if outcome.verdict == "fail"
+            ),
+            None,
+        )
+    )
     aggregate = MatrixComparisonAggregate(
         run_count=len(rows),
         total_proposal_count=sum(row.proposal_count for row in rows),
@@ -242,11 +366,18 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
         total_net_realized_pnl_usd=fsum(row.net_realized_pnl_usd for row in rows),
         total_ending_unrealized_pnl_usd=fsum(row.ending_unrealized_pnl_usd for row in rows),
         total_ending_equity_usd=total_ending_equity_usd,
-        aggregate_return_fraction=(
-            (total_ending_equity_usd - total_starting_equity_usd) / total_starting_equity_usd
-            if total_starting_equity_usd > 0
-            else 0.0
+        aggregate_return_fraction=aggregate_return_fraction,
+        baseline_robustness_verdict=aggregate_baseline_robustness_verdict,
+        stress_outcomes=aggregate_stress_outcomes,
+        robustness_verdict=(
+            "pass"
+            if aggregate_baseline_robustness_verdict == "pass"
+            and all(outcome.verdict == "pass" for outcome in aggregate_stress_outcomes)
+            else "fail"
         ),
+        first_fail_scenario_id=aggregate_first_fail_scenario_id,
+        passed_run_count=sum(1 for row in rows if row.robustness_verdict == "pass"),
+        failed_run_count=sum(1 for row in rows if row.robustness_verdict == "fail"),
     )
 
     best_return_row = max(rows, key=lambda row: (row.return_fraction, row.run_id), default=None)
@@ -259,6 +390,17 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
     lowest_ending_equity_row = min(
         rows,
         key=lambda row: (row.ending_equity_usd, row.run_id),
+        default=None,
+    )
+    failure_candidates = [row for row in rows if row.first_fail_scenario_id is not None]
+    first_failure_row = min(
+        failure_candidates,
+        key=lambda row: (
+            -1
+            if row.first_fail_scenario_id == "baseline"
+            else scenario_bps.get(str(row.first_fail_scenario_id), float("inf")),
+            row.run_id,
+        ),
         default=None,
     )
 
@@ -275,6 +417,12 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
             ),
             lowest_ending_equity_run_id=(
                 lowest_ending_equity_row.run_id if lowest_ending_equity_row is not None else None
+            ),
+            first_robustness_failure_run_id=(
+                first_failure_row.run_id if first_failure_row is not None else None
+            ),
+            first_robustness_failure_scenario_id=(
+                first_failure_row.first_fail_scenario_id if first_failure_row is not None else None
             ),
         ),
     )
@@ -443,6 +591,56 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
     lines.extend(
         f"{key}: {_format_float(float(replay_pnl_totals[key]))}" for key in REPLAY_PNL_KEYS
     )
+    comparison = _build_matrix_comparison(manifest)
+    comparison_rows_by_run_id = {row.run_id: row for row in comparison.rows}
+    comparison_rows_by_run_id = {row.run_id: row for row in comparison.rows}
+    lines.extend(
+        [
+            "",
+            "## Matrix Cost/Slippage Robustness Gate",
+            f"baseline_robustness_verdict: {comparison.aggregate.baseline_robustness_verdict}",
+            f"robustness_verdict: {comparison.aggregate.robustness_verdict}",
+            f"first_fail_scenario_id: {comparison.aggregate.first_fail_scenario_id}",
+            f"passed_run_count: {comparison.aggregate.passed_run_count}",
+            f"failed_run_count: {comparison.aggregate.failed_run_count}",
+            "first_robustness_failure_run_id: "
+            f"{comparison.rankings.first_robustness_failure_run_id}",
+            "first_robustness_failure_scenario_id: "
+            f"{comparison.rankings.first_robustness_failure_scenario_id}",
+        ]
+    )
+    for aggregate_outcome in comparison.aggregate.stress_outcomes:
+        lines.extend(
+            [
+                (
+                    "aggregate_stress_"
+                    f"{aggregate_outcome.scenario_id}_additional_cost_slippage_bps: "
+                    f"{_format_float(aggregate_outcome.additional_cost_slippage_bps)}"
+                ),
+                (
+                    f"aggregate_stress_{aggregate_outcome.scenario_id}_incremental_cost_usd: "
+                    f"{_format_float(aggregate_outcome.incremental_cost_usd)}"
+                ),
+                (
+                    "aggregate_stress_"
+                    f"{aggregate_outcome.scenario_id}_stressed_total_net_realized_pnl_usd: "
+                    f"{_format_float(aggregate_outcome.stressed_total_net_realized_pnl_usd)}"
+                ),
+                (
+                    f"aggregate_stress_{aggregate_outcome.scenario_id}_"
+                    f"stressed_aggregate_return_fraction: "
+                    f"{_format_float(aggregate_outcome.stressed_aggregate_return_fraction)}"
+                ),
+                (
+                    f"aggregate_stress_{aggregate_outcome.scenario_id}_failing_run_count: "
+                    f"{aggregate_outcome.failing_run_count}"
+                ),
+                (
+                    f"aggregate_stress_{aggregate_outcome.scenario_id}_verdict: "
+                    f"{aggregate_outcome.verdict}"
+                ),
+            ]
+        )
     lines.extend(
         [
             "",
@@ -451,6 +649,7 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
     )
 
     for entry, scorecard, pnl, alert_count, kill_switch_activations in replay_runs:
+        comparison_row = comparison_rows_by_run_id[entry.run_id]
         lines.extend(
             [
                 f"### run_id: {entry.run_id}",
@@ -495,9 +694,43 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
                 f"replay_ending_unrealized_pnl_usd: {_format_float(pnl.ending_unrealized_pnl_usd)}",
                 f"replay_ending_equity_usd: {_format_float(pnl.ending_equity_usd)}",
                 f"replay_return_fraction: {_format_float(pnl.return_fraction)}",
+                f"baseline_robustness_verdict: {comparison_row.baseline_robustness_verdict}",
+                f"robustness_verdict: {comparison_row.robustness_verdict}",
+                f"first_fail_scenario_id: {comparison_row.first_fail_scenario_id}",
                 "",
             ]
         )
+        for outcome in comparison_row.stress_outcomes:
+            lines.extend(
+                [
+                    (
+                        f"stress_{outcome.scenario_id}_additional_cost_slippage_bps: "
+                        f"{_format_float(outcome.additional_cost_slippage_bps)}"
+                    ),
+                    (
+                        f"stress_{outcome.scenario_id}_incremental_cost_usd: "
+                        f"{_format_float(outcome.incremental_cost_usd)}"
+                    ),
+                    (
+                        f"stress_{outcome.scenario_id}_stressed_net_realized_pnl_usd: "
+                        f"{_format_float(outcome.stressed_net_realized_pnl_usd)}"
+                    ),
+                    (
+                        f"stress_{outcome.scenario_id}_stressed_return_fraction: "
+                        f"{_format_float(outcome.stressed_return_fraction)}"
+                    ),
+                    (
+                        f"stress_{outcome.scenario_id}_delta_net_realized_pnl_usd_vs_baseline: "
+                        f"{_format_float(outcome.delta_net_realized_pnl_usd_vs_baseline)}"
+                    ),
+                    (
+                        f"stress_{outcome.scenario_id}_delta_return_fraction_vs_baseline: "
+                        f"{_format_float(outcome.delta_return_fraction_vs_baseline)}"
+                    ),
+                    f"stress_{outcome.scenario_id}_verdict: {outcome.verdict}",
+                    "",
+                ]
+            )
 
     return "\n".join(lines)
 
