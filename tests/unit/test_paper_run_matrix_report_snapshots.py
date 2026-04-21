@@ -122,6 +122,16 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
         "walk_forward_profit_concentration",
         "None",
     }
+    shadow_packet = _section_key_values(report, "## Matrix Shadow Promotion Packet")
+    assert "shadow_promotion_selected_run_id" in shadow_packet
+    assert shadow_packet["shadow_promotion_selected_recommendation"] in {
+        "promote_to_shadow_evidence_collection",
+        "hold",
+        "none",
+    }
+    assert "shadow_promotion_selected_rationale_codes" in shadow_packet
+    assert "shadow_promotion_selected_rationale_summary" in shadow_packet
+    assert "shadow_promotion_held_run_ids" in shadow_packet
     robustness = _section_key_values(report, "## Matrix Cost/Slippage Robustness Gate")
     assert robustness["baseline_robustness_verdict"] in {"pass", "fail"}
     assert robustness["robustness_verdict"] in {"pass", "fail"}
