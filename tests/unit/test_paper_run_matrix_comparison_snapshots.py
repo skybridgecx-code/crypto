@@ -141,6 +141,43 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
             None,
         }
         assert row["risk_policy_is_narrow_dependence"] in {True, False}
+        assert row["failure_mode_robustness_verdict"] in {"pass", "fail"}
+        assert row["failure_mode_first_fail_scenario_id"] in {
+            "baseline",
+            "failure_reduced_capture_70pct",
+            "failure_delayed_opportunity_haircut_20pct",
+            "failure_combined_bad_case",
+            None,
+        }
+        assert int(row["failure_mode_pass_scenario_count"]) >= 0
+        assert int(row["failure_mode_fail_scenario_count"]) >= 0
+        assert int(row["failure_mode_pass_scenario_count"]) + int(
+            row["failure_mode_fail_scenario_count"]
+        ) == len(row["failure_mode_outcomes"])
+        assert float(row["failure_mode_sensitivity_span_net_pnl_usd"]) >= 0.0
+        assert float(row["failure_mode_sensitivity_span_return_fraction"]) >= 0.0
+        assert row["failure_mode_most_adverse_scenario_id"] in {
+            "failure_reduced_capture_70pct",
+            "failure_delayed_opportunity_haircut_20pct",
+            "failure_combined_bad_case",
+            None,
+        }
+        assert float(row["failure_mode_most_adverse_margin_loss_net_pnl_usd"]) >= 0.0
+        assert int(row["failure_mode_fragility_rank"]) >= 1
+        assert int(row["failure_mode_resilience_rank"]) >= 1
+        failure_mode_outcomes = row["failure_mode_outcomes"]
+        assert [outcome["scenario_id"] for outcome in failure_mode_outcomes] == [
+            "failure_reduced_capture_70pct",
+            "failure_delayed_opportunity_haircut_20pct",
+            "failure_combined_bad_case",
+        ]
+        for outcome in failure_mode_outcomes:
+            assert 0.0 < float(outcome["reduced_fill_capture_multiplier"]) <= 1.0
+            assert 0.0 <= float(outcome["delayed_opportunity_haircut_fraction"]) <= 1.0
+            assert float(outcome["stressed_ending_equity_usd"]) >= 0.0
+            assert float(outcome["margin_loss_net_pnl_usd"]) >= 0.0
+            assert float(outcome["margin_loss_return_fraction"]) >= 0.0
+            assert outcome["verdict"] in {"pass", "fail"}
         risk_policy_outcomes = row["risk_policy_outcomes"]
         assert [outcome["scenario_id"] for outcome in risk_policy_outcomes] == [
             "policy_tighter_75pct",
@@ -317,6 +354,39 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
     assert all(
         run_id in expected_run_ids for run_id in aggregate["risk_policy_narrow_dependence_run_ids"]
     )
+    assert aggregate["failure_mode_aggregate_robustness_verdict"] in {"pass", "fail"}
+    assert int(aggregate["failure_mode_pass_run_count"]) + int(
+        aggregate["failure_mode_fail_run_count"]
+    ) == len(rows)
+    assert aggregate["failure_mode_first_fail_scenario_id"] in {
+        "baseline",
+        "failure_reduced_capture_70pct",
+        "failure_delayed_opportunity_haircut_20pct",
+        "failure_combined_bad_case",
+        None,
+    }
+    assert aggregate["failure_mode_first_fail_run_id"] in expected_run_ids + [None]
+    assert all(
+        run_id in expected_run_ids for run_id in aggregate["failure_mode_failure_order_run_ids"]
+    )
+    assert aggregate["failure_mode_safest_run_id"] in expected_run_ids + [None]
+    assert aggregate["failure_mode_most_sensitive_run_id"] in expected_run_ids + [None]
+    assert aggregate["failure_mode_winner_run_id"] in expected_run_ids + [None]
+    assert aggregate["failure_mode_winner_robustness_verdict"] in {"pass", "fail"}
+    failure_mode_aggregate_outcomes = aggregate["failure_mode_outcomes"]
+    assert [outcome["scenario_id"] for outcome in failure_mode_aggregate_outcomes] == [
+        "failure_reduced_capture_70pct",
+        "failure_delayed_opportunity_haircut_20pct",
+        "failure_combined_bad_case",
+    ]
+    for outcome in failure_mode_aggregate_outcomes:
+        assert 0.0 < float(outcome["reduced_fill_capture_multiplier"]) <= 1.0
+        assert 0.0 <= float(outcome["delayed_opportunity_haircut_fraction"]) <= 1.0
+        assert float(outcome["margin_loss_total_net_pnl_usd"]) >= 0.0
+        assert float(outcome["margin_loss_aggregate_return_fraction"]) >= 0.0
+        assert int(outcome["failing_run_count"]) >= 0
+        assert int(outcome["passing_run_count"]) >= 0
+        assert outcome["verdict"] in {"pass", "fail"}
     risk_policy_aggregate_outcomes = aggregate["risk_policy_outcomes"]
     assert [outcome["scenario_id"] for outcome in risk_policy_aggregate_outcomes] == [
         "policy_tighter_75pct",
@@ -426,3 +496,17 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
         None,
     }
     assert rankings["winner_policy_robustness_verdict"] in {"pass", "fail"}
+    assert rankings["first_failure_mode_failure_run_id"] in expected_run_ids + [None]
+    assert rankings["first_failure_mode_failure_scenario_id"] in {
+        "baseline",
+        "failure_reduced_capture_70pct",
+        "failure_delayed_opportunity_haircut_20pct",
+        "failure_combined_bad_case",
+        None,
+    }
+    assert rankings["most_failure_mode_fragile_run_id"] in expected_run_ids + [None]
+    assert rankings["most_failure_mode_resilient_run_id"] in expected_run_ids + [None]
+    assert sorted(rankings["failure_mode_fragility_order_run_ids"]) == sorted(expected_run_ids)
+    assert sorted(rankings["failure_mode_resilience_order_run_ids"]) == sorted(expected_run_ids)
+    assert rankings["most_failure_mode_sensitive_run_id"] in expected_run_ids + [None]
+    assert rankings["winner_failure_mode_robustness_verdict"] in {"pass", "fail"}

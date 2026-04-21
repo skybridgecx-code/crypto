@@ -131,6 +131,17 @@ class MatrixComparisonRow(BaseModel):
     risk_policy_most_adverse_scenario_id: str | None = None
     risk_policy_most_adverse_delta_net_pnl_usd: float = 0.0
     risk_policy_is_narrow_dependence: bool = False
+    failure_mode_outcomes: list[MatrixComparisonFailureModeOutcome] = Field(default_factory=list)
+    failure_mode_robustness_verdict: Literal["pass", "fail"] = "pass"
+    failure_mode_first_fail_scenario_id: str | None = None
+    failure_mode_pass_scenario_count: int = Field(default=0, ge=0)
+    failure_mode_fail_scenario_count: int = Field(default=0, ge=0)
+    failure_mode_sensitivity_span_net_pnl_usd: float = Field(default=0.0, ge=0)
+    failure_mode_sensitivity_span_return_fraction: float = Field(default=0.0, ge=0)
+    failure_mode_most_adverse_scenario_id: str | None = None
+    failure_mode_most_adverse_margin_loss_net_pnl_usd: float = Field(default=0.0, ge=0)
+    failure_mode_fragility_rank: int = Field(default=0, ge=0)
+    failure_mode_resilience_rank: int = Field(default=0, ge=0)
     fragility_rank: int = Field(default=0, ge=0)
     resilience_rank: int = Field(default=0, ge=0)
     walk_forward_slices: list[MatrixComparisonWalkForwardSliceOutcome] = Field(default_factory=list)
@@ -173,6 +184,21 @@ class MatrixComparisonRiskPolicyOutcome(BaseModel):
     stressed_return_fraction: float = 0.0
     delta_net_realized_pnl_usd_vs_baseline: float = 0.0
     delta_return_fraction_vs_baseline: float = 0.0
+    verdict: Literal["pass", "fail"] = "pass"
+
+
+class MatrixComparisonFailureModeOutcome(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str
+    reduced_fill_capture_multiplier: float = Field(gt=0, le=1)
+    delayed_opportunity_haircut_fraction: float = Field(default=0.0, ge=0, le=1)
+    stressed_net_realized_pnl_usd: float = 0.0
+    stressed_ending_unrealized_pnl_usd: float = 0.0
+    stressed_ending_equity_usd: float = Field(ge=0)
+    stressed_return_fraction: float = 0.0
+    margin_loss_net_pnl_usd: float = Field(default=0.0, ge=0)
+    margin_loss_return_fraction: float = Field(default=0.0, ge=0)
     verdict: Literal["pass", "fail"] = "pass"
 
 
@@ -236,6 +262,19 @@ class MatrixComparisonAggregate(BaseModel):
     risk_policy_winner_robustness_verdict: Literal["pass", "fail"] = "fail"
     risk_policy_narrow_dependence_run_ids: list[str] = Field(default_factory=list)
     risk_policy_narrow_dependence_count: int = Field(default=0, ge=0)
+    failure_mode_outcomes: list[MatrixComparisonAggregateFailureModeOutcome] = Field(
+        default_factory=list
+    )
+    failure_mode_aggregate_robustness_verdict: Literal["pass", "fail"] = "pass"
+    failure_mode_pass_run_count: int = Field(default=0, ge=0)
+    failure_mode_fail_run_count: int = Field(default=0, ge=0)
+    failure_mode_first_fail_scenario_id: str | None = None
+    failure_mode_first_fail_run_id: str | None = None
+    failure_mode_failure_order_run_ids: list[str] = Field(default_factory=list)
+    failure_mode_safest_run_id: str | None = None
+    failure_mode_most_sensitive_run_id: str | None = None
+    failure_mode_winner_run_id: str | None = None
+    failure_mode_winner_robustness_verdict: Literal["pass", "fail"] = "fail"
     walk_forward_slice_outcomes: list[MatrixComparisonAggregateWalkForwardSliceOutcome] = Field(
         default_factory=list
     )
@@ -281,6 +320,22 @@ class MatrixComparisonAggregateRiskPolicyOutcome(BaseModel):
     verdict: Literal["pass", "fail"] = "pass"
 
 
+class MatrixComparisonAggregateFailureModeOutcome(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str
+    reduced_fill_capture_multiplier: float = Field(gt=0, le=1)
+    delayed_opportunity_haircut_fraction: float = Field(default=0.0, ge=0, le=1)
+    stressed_total_net_realized_pnl_usd: float = 0.0
+    stressed_total_ending_equity_usd: float = Field(ge=0)
+    stressed_aggregate_return_fraction: float = 0.0
+    margin_loss_total_net_pnl_usd: float = Field(default=0.0, ge=0)
+    margin_loss_aggregate_return_fraction: float = Field(default=0.0, ge=0)
+    failing_run_count: int = Field(default=0, ge=0)
+    passing_run_count: int = Field(default=0, ge=0)
+    verdict: Literal["pass", "fail"] = "pass"
+
+
 class MatrixComparisonAggregateWalkForwardSliceOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -314,6 +369,14 @@ class MatrixComparisonRanking(BaseModel):
     first_policy_failure_run_id: str | None = None
     first_policy_failure_scenario_id: str | None = None
     winner_policy_robustness_verdict: Literal["pass", "fail"] = "fail"
+    first_failure_mode_failure_run_id: str | None = None
+    first_failure_mode_failure_scenario_id: str | None = None
+    most_failure_mode_fragile_run_id: str | None = None
+    most_failure_mode_resilient_run_id: str | None = None
+    failure_mode_fragility_order_run_ids: list[str] = Field(default_factory=list)
+    failure_mode_resilience_order_run_ids: list[str] = Field(default_factory=list)
+    most_failure_mode_sensitive_run_id: str | None = None
+    winner_failure_mode_robustness_verdict: Literal["pass", "fail"] = "fail"
 
 
 class MatrixComparison(BaseModel):

@@ -121,6 +121,31 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
     assert "risk_policy_winner_run_id" in risk_policy
     assert risk_policy["risk_policy_winner_robustness_verdict"] in {"pass", "fail"}
     assert risk_policy["winner_policy_robustness_verdict"] in {"pass", "fail"}
+    failure_mode = _section_key_values(report, "## Matrix Failure-Mode Robustness Sweep")
+    assert failure_mode["failure_mode_aggregate_robustness_verdict"] in {"pass", "fail"}
+    assert int(failure_mode["failure_mode_pass_run_count"]) >= 0
+    assert int(failure_mode["failure_mode_fail_run_count"]) >= 0
+    assert failure_mode["failure_mode_first_fail_scenario_id"] in {
+        "baseline",
+        "failure_reduced_capture_70pct",
+        "failure_delayed_opportunity_haircut_20pct",
+        "failure_combined_bad_case",
+        "None",
+    }
+    assert "failure_mode_first_fail_run_id" in failure_mode
+    assert "failure_mode_failure_order_run_ids" in failure_mode
+    assert "failure_mode_safest_run_id" in failure_mode
+    assert "failure_mode_most_sensitive_run_id" in failure_mode
+    assert "failure_mode_winner_run_id" in failure_mode
+    assert failure_mode["failure_mode_winner_robustness_verdict"] in {"pass", "fail"}
+    assert "first_failure_mode_failure_run_id" in failure_mode
+    assert "first_failure_mode_failure_scenario_id" in failure_mode
+    assert "most_failure_mode_fragile_run_id" in failure_mode
+    assert "most_failure_mode_resilient_run_id" in failure_mode
+    assert "failure_mode_fragility_order_run_ids" in failure_mode
+    assert "failure_mode_resilience_order_run_ids" in failure_mode
+    assert "most_failure_mode_sensitive_run_id" in failure_mode
+    assert failure_mode["winner_failure_mode_robustness_verdict"] in {"pass", "fail"}
     walk_forward = _section_key_values(report, "## Matrix Walk-Forward Regime Robustness")
     assert walk_forward["walk_forward_aggregate_robustness_verdict"] in {"pass", "fail"}
     assert int(walk_forward["walk_forward_pass_run_count"]) >= 0
@@ -213,6 +238,27 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
         assert section["risk_policy_is_narrow_dependence"] in {"True", "False"}
         assert "risk_policy_is_narrow_dependence" in section
         assert "risk_policy_most_adverse_delta_net_pnl_usd" in section
+        assert section["failure_mode_robustness_verdict"] in {"pass", "fail"}
+        assert section["failure_mode_first_fail_scenario_id"] in {
+            "baseline",
+            "failure_reduced_capture_70pct",
+            "failure_delayed_opportunity_haircut_20pct",
+            "failure_combined_bad_case",
+            "None",
+        }
+        assert int(section["failure_mode_pass_scenario_count"]) >= 0
+        assert int(section["failure_mode_fail_scenario_count"]) >= 0
+        assert float(section["failure_mode_sensitivity_span_net_pnl_usd"]) >= 0.0
+        assert float(section["failure_mode_sensitivity_span_return_fraction"]) >= 0.0
+        assert section["failure_mode_most_adverse_scenario_id"] in {
+            "failure_reduced_capture_70pct",
+            "failure_delayed_opportunity_haircut_20pct",
+            "failure_combined_bad_case",
+            "None",
+        }
+        assert float(section["failure_mode_most_adverse_margin_loss_net_pnl_usd"]) >= 0.0
+        assert int(section["failure_mode_fragility_rank"]) >= 1
+        assert int(section["failure_mode_resilience_rank"]) >= 1
         assert int(section["fragility_rank"]) >= 1
         assert int(section["resilience_rank"]) >= 1
         assert section["max_stress_scenario_id"] == "cost_slippage_plus_10bps"
@@ -241,5 +287,8 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
         assert "risk_policy_tighter_75pct_verdict" in section
         assert "risk_policy_baseline_100pct_verdict" in section
         assert "risk_policy_looser_125pct_verdict" in section
+        assert "failure_failure_reduced_capture_70pct_verdict" in section
+        assert "failure_failure_delayed_opportunity_haircut_20pct_verdict" in section
+        assert "failure_failure_combined_bad_case_verdict" in section
         assert "stress_cost_slippage_plus_5bps_verdict" in section
         assert "stress_cost_slippage_plus_10bps_verdict" in section

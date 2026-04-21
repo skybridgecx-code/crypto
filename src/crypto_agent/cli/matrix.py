@@ -17,9 +17,11 @@ from crypto_agent.evaluation.models import (
     EvaluationScorecard,
     MatrixComparison,
     MatrixComparisonAggregate,
+    MatrixComparisonAggregateFailureModeOutcome,
     MatrixComparisonAggregateRiskPolicyOutcome,
     MatrixComparisonAggregateStressOutcome,
     MatrixComparisonAggregateWalkForwardSliceOutcome,
+    MatrixComparisonFailureModeOutcome,
     MatrixComparisonRanking,
     MatrixComparisonRiskPolicyOutcome,
     MatrixComparisonRow,
@@ -118,6 +120,11 @@ MATRIX_RISK_POLICY_SCENARIOS: tuple[tuple[str, float], ...] = (
     ("policy_tighter_75pct", 0.75),
     ("policy_baseline_100pct", 1.0),
     ("policy_looser_125pct", 1.25),
+)
+MATRIX_FAILURE_MODE_SCENARIOS: tuple[tuple[str, float, float], ...] = (
+    ("failure_reduced_capture_70pct", 0.70, 0.0),
+    ("failure_delayed_opportunity_haircut_20pct", 1.0, 0.20),
+    ("failure_combined_bad_case", 0.70, 0.20),
 )
 MATRIX_WALK_FORWARD_SLICE_COUNT = 3
 
@@ -358,6 +365,73 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
             )
         return outcomes
 
+    def _row_failure_mode_outcomes(
+        *, baseline_pnl: ReplayPnLSummary
+    ) -> list[MatrixComparisonFailureModeOutcome]:
+        outcomes: list[MatrixComparisonFailureModeOutcome] = []
+        baseline_net = baseline_pnl.net_realized_pnl_usd
+        baseline_unrealized = baseline_pnl.ending_unrealized_pnl_usd
+        for (
+            scenario_id,
+            reduced_capture_multiplier,
+            delayed_haircut_fraction,
+        ) in MATRIX_FAILURE_MODE_SCENARIOS:
+            stressed_net_realized_pnl_usd = (
+                baseline_net * reduced_capture_multiplier if baseline_net > 0 else baseline_net
+            )
+            stressed_ending_unrealized_pnl_usd = (
+                baseline_unrealized * reduced_capture_multiplier
+                if baseline_unrealized > 0
+                else baseline_unrealized
+            )
+            positive_capture_margin_usd = max(
+                stressed_net_realized_pnl_usd + stressed_ending_unrealized_pnl_usd, 0.0
+            )
+            delayed_opportunity_haircut_usd = positive_capture_margin_usd * delayed_haircut_fraction
+            stressed_net_realized_pnl_usd -= delayed_opportunity_haircut_usd
+            stressed_ending_equity_usd = (
+                baseline_pnl.starting_equity_usd
+                + stressed_net_realized_pnl_usd
+                + stressed_ending_unrealized_pnl_usd
+            )
+            stressed_return_fraction = (
+                (stressed_ending_equity_usd - baseline_pnl.starting_equity_usd)
+                / baseline_pnl.starting_equity_usd
+                if baseline_pnl.starting_equity_usd > 0
+                else 0.0
+            )
+            outcomes.append(
+                MatrixComparisonFailureModeOutcome(
+                    scenario_id=scenario_id,
+                    reduced_fill_capture_multiplier=reduced_capture_multiplier,
+                    delayed_opportunity_haircut_fraction=delayed_haircut_fraction,
+                    stressed_net_realized_pnl_usd=stressed_net_realized_pnl_usd,
+                    stressed_ending_unrealized_pnl_usd=stressed_ending_unrealized_pnl_usd,
+                    stressed_ending_equity_usd=stressed_ending_equity_usd,
+                    stressed_return_fraction=stressed_return_fraction,
+                    margin_loss_net_pnl_usd=max(
+                        baseline_pnl.net_realized_pnl_usd - stressed_net_realized_pnl_usd, 0.0
+                    ),
+                    margin_loss_return_fraction=max(
+                        baseline_pnl.return_fraction - stressed_return_fraction, 0.0
+                    ),
+                    verdict="pass" if stressed_return_fraction >= 0 else "fail",
+                )
+            )
+        return outcomes
+
+    failure_mode_order = {
+        scenario_id: index
+        for index, (scenario_id, _, _) in enumerate(MATRIX_FAILURE_MODE_SCENARIOS, start=1)
+    }
+
+    def _failure_mode_threshold_order(row: MatrixComparisonRow) -> float:
+        if row.failure_mode_first_fail_scenario_id == "baseline":
+            return 0.0
+        if row.failure_mode_first_fail_scenario_id is None:
+            return float("inf")
+        return float(failure_mode_order.get(row.failure_mode_first_fail_scenario_id, float("inf")))
+
     for entry in manifest.entries:
         summary = json.loads(Path(entry.summary_path).read_text(encoding="utf-8"))
         replay_result = replay_journal(
@@ -380,6 +454,7 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
             total_fill_notional_usd=replay_result.scorecard.total_fill_notional_usd,
         )
         risk_policy_outcomes = _row_risk_policy_outcomes(baseline_pnl=pnl)
+        failure_mode_outcomes = _row_failure_mode_outcomes(baseline_pnl=pnl)
         risk_policy_first_fail_scenario_id = next(
             (outcome.scenario_id for outcome in risk_policy_outcomes if outcome.verdict == "fail"),
             None,
@@ -405,6 +480,39 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
             risk_policy_outcomes,
             key=lambda outcome: (
                 outcome.delta_net_realized_pnl_usd_vs_baseline,
+                outcome.scenario_id,
+            ),
+            default=None,
+        )
+        failure_mode_first_fail_scenario_id = (
+            "baseline"
+            if baseline_robustness_verdict == "fail"
+            else next(
+                (
+                    outcome.scenario_id
+                    for outcome in failure_mode_outcomes
+                    if outcome.verdict == "fail"
+                ),
+                None,
+            )
+        )
+        failure_mode_pass_scenario_count = sum(
+            1 for outcome in failure_mode_outcomes if outcome.verdict == "pass"
+        )
+        failure_mode_fail_scenario_count = (
+            len(failure_mode_outcomes) - failure_mode_pass_scenario_count
+        )
+        failure_mode_stressed_net_values = [
+            outcome.stressed_net_realized_pnl_usd for outcome in failure_mode_outcomes
+        ]
+        failure_mode_stressed_return_values = [
+            outcome.stressed_return_fraction for outcome in failure_mode_outcomes
+        ]
+        failure_mode_most_adverse_outcome = max(
+            failure_mode_outcomes,
+            key=lambda outcome: (
+                outcome.margin_loss_net_pnl_usd,
+                outcome.margin_loss_return_fraction,
                 outcome.scenario_id,
             ),
             default=None,
@@ -539,6 +647,32 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
                         if outcome.scenario_id != "policy_baseline_100pct"
                     )
                 ),
+                failure_mode_outcomes=failure_mode_outcomes,
+                failure_mode_robustness_verdict=(
+                    "pass"
+                    if all(outcome.verdict == "pass" for outcome in failure_mode_outcomes)
+                    else "fail"
+                ),
+                failure_mode_first_fail_scenario_id=failure_mode_first_fail_scenario_id,
+                failure_mode_pass_scenario_count=failure_mode_pass_scenario_count,
+                failure_mode_fail_scenario_count=failure_mode_fail_scenario_count,
+                failure_mode_sensitivity_span_net_pnl_usd=(
+                    max(failure_mode_stressed_net_values) - min(failure_mode_stressed_net_values)
+                ),
+                failure_mode_sensitivity_span_return_fraction=(
+                    max(failure_mode_stressed_return_values)
+                    - min(failure_mode_stressed_return_values)
+                ),
+                failure_mode_most_adverse_scenario_id=(
+                    failure_mode_most_adverse_outcome.scenario_id
+                    if failure_mode_most_adverse_outcome is not None
+                    else None
+                ),
+                failure_mode_most_adverse_margin_loss_net_pnl_usd=(
+                    failure_mode_most_adverse_outcome.margin_loss_net_pnl_usd
+                    if failure_mode_most_adverse_outcome is not None
+                    else 0.0
+                ),
                 walk_forward_slices=walk_forward_slices,
                 walk_forward_slice_count=len(walk_forward_slices),
                 walk_forward_pass_slice_count=walk_forward_pass_slice_count,
@@ -609,6 +743,39 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
     for row in rows:
         row.fragility_rank = fragility_rank_by_run_id[row.run_id]
         row.resilience_rank = resilience_rank_by_run_id[row.run_id]
+
+    failure_mode_fragility_order = sorted(
+        rows,
+        key=lambda row: (
+            _failure_mode_threshold_order(row),
+            -row.failure_mode_most_adverse_margin_loss_net_pnl_usd,
+            row.return_fraction,
+            row.run_id,
+        ),
+    )
+    failure_mode_resilience_order = sorted(
+        rows,
+        key=lambda row: (
+            0 if row.failure_mode_first_fail_scenario_id is None else 1,
+            (
+                -_failure_mode_threshold_order(row)
+                if row.failure_mode_first_fail_scenario_id is not None
+                else 0.0
+            ),
+            row.failure_mode_most_adverse_margin_loss_net_pnl_usd,
+            -row.return_fraction,
+            row.run_id,
+        ),
+    )
+    failure_mode_fragility_rank_by_run_id = {
+        row.run_id: rank for rank, row in enumerate(failure_mode_fragility_order, start=1)
+    }
+    failure_mode_resilience_rank_by_run_id = {
+        row.run_id: rank for rank, row in enumerate(failure_mode_resilience_order, start=1)
+    }
+    for row in rows:
+        row.failure_mode_fragility_rank = failure_mode_fragility_rank_by_run_id[row.run_id]
+        row.failure_mode_resilience_rank = failure_mode_resilience_rank_by_run_id[row.run_id]
 
     total_starting_equity_usd = fsum(row.starting_equity_usd for row in rows)
     total_net_realized_pnl_usd = fsum(row.net_realized_pnl_usd for row in rows)
@@ -782,6 +949,95 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
     risk_policy_narrow_dependence_run_ids = sorted(
         row.run_id for row in rows if row.risk_policy_is_narrow_dependence
     )
+    aggregate_failure_mode_outcomes: list[MatrixComparisonAggregateFailureModeOutcome] = []
+    for (
+        scenario_id,
+        reduced_capture_multiplier,
+        delayed_haircut_fraction,
+    ) in MATRIX_FAILURE_MODE_SCENARIOS:
+        failure_mode_scenario_rows = [
+            next(
+                outcome
+                for outcome in row.failure_mode_outcomes
+                if outcome.scenario_id == scenario_id
+            )
+            for row in rows
+        ]
+        stressed_total_net_realized_pnl_usd = fsum(
+            outcome.stressed_net_realized_pnl_usd for outcome in failure_mode_scenario_rows
+        )
+        stressed_total_ending_equity_usd = fsum(
+            outcome.stressed_ending_equity_usd for outcome in failure_mode_scenario_rows
+        )
+        stressed_aggregate_return_fraction = (
+            (stressed_total_ending_equity_usd - total_starting_equity_usd)
+            / total_starting_equity_usd
+            if total_starting_equity_usd > 0
+            else 0.0
+        )
+        failing_run_count = sum(
+            1 for outcome in failure_mode_scenario_rows if outcome.verdict == "fail"
+        )
+        passing_run_count = len(failure_mode_scenario_rows) - failing_run_count
+        aggregate_failure_mode_outcomes.append(
+            MatrixComparisonAggregateFailureModeOutcome(
+                scenario_id=scenario_id,
+                reduced_fill_capture_multiplier=reduced_capture_multiplier,
+                delayed_opportunity_haircut_fraction=delayed_haircut_fraction,
+                stressed_total_net_realized_pnl_usd=stressed_total_net_realized_pnl_usd,
+                stressed_total_ending_equity_usd=stressed_total_ending_equity_usd,
+                stressed_aggregate_return_fraction=stressed_aggregate_return_fraction,
+                margin_loss_total_net_pnl_usd=max(
+                    total_net_realized_pnl_usd - stressed_total_net_realized_pnl_usd,
+                    0.0,
+                ),
+                margin_loss_aggregate_return_fraction=max(
+                    aggregate_return_fraction - stressed_aggregate_return_fraction,
+                    0.0,
+                ),
+                failing_run_count=failing_run_count,
+                passing_run_count=passing_run_count,
+                verdict="pass" if stressed_aggregate_return_fraction >= 0 else "fail",
+            )
+        )
+    failure_mode_pass_run_count = sum(
+        1 for row in rows if row.failure_mode_robustness_verdict == "pass"
+    )
+    failure_mode_fail_run_count = len(rows) - failure_mode_pass_run_count
+    failure_mode_aggregate_robustness_verdict: Literal["pass", "fail"] = (
+        "pass" if failure_mode_fail_run_count == 0 else "fail"
+    )
+    failure_mode_failure_candidates = [
+        row for row in rows if row.failure_mode_first_fail_scenario_id is not None
+    ]
+    failure_mode_first_failure_row = min(
+        failure_mode_failure_candidates,
+        key=lambda row: (_failure_mode_threshold_order(row), row.run_id),
+        default=None,
+    )
+    failure_mode_first_fail_scenario_id = (
+        failure_mode_first_failure_row.failure_mode_first_fail_scenario_id
+        if failure_mode_first_failure_row is not None
+        else None
+    )
+    failure_mode_first_fail_run_id = (
+        failure_mode_first_failure_row.run_id
+        if failure_mode_first_failure_row is not None
+        else None
+    )
+    failure_mode_failure_order_rows = sorted(
+        [row for row in rows if row.failure_mode_first_fail_scenario_id is not None],
+        key=lambda row: (_failure_mode_threshold_order(row), row.run_id),
+    )
+    failure_mode_most_sensitive_row = max(
+        rows,
+        key=lambda row: (
+            row.failure_mode_sensitivity_span_return_fraction,
+            row.failure_mode_sensitivity_span_net_pnl_usd,
+            row.run_id,
+        ),
+        default=None,
+    )
     winner_row = max(rows, key=lambda row: (row.return_fraction, row.run_id), default=None)
     walk_forward_slice_ids = sorted(
         {slice_.slice_id for row in rows for slice_ in row.walk_forward_slices},
@@ -895,6 +1151,25 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
         ),
         risk_policy_narrow_dependence_run_ids=risk_policy_narrow_dependence_run_ids,
         risk_policy_narrow_dependence_count=len(risk_policy_narrow_dependence_run_ids),
+        failure_mode_outcomes=aggregate_failure_mode_outcomes,
+        failure_mode_aggregate_robustness_verdict=failure_mode_aggregate_robustness_verdict,
+        failure_mode_pass_run_count=failure_mode_pass_run_count,
+        failure_mode_fail_run_count=failure_mode_fail_run_count,
+        failure_mode_first_fail_scenario_id=failure_mode_first_fail_scenario_id,
+        failure_mode_first_fail_run_id=failure_mode_first_fail_run_id,
+        failure_mode_failure_order_run_ids=[row.run_id for row in failure_mode_failure_order_rows],
+        failure_mode_safest_run_id=(
+            failure_mode_resilience_order[0].run_id if failure_mode_resilience_order else None
+        ),
+        failure_mode_most_sensitive_run_id=(
+            failure_mode_most_sensitive_row.run_id
+            if failure_mode_most_sensitive_row is not None
+            else None
+        ),
+        failure_mode_winner_run_id=(winner_row.run_id if winner_row is not None else None),
+        failure_mode_winner_robustness_verdict=(
+            winner_row.failure_mode_robustness_verdict if winner_row is not None else "fail"
+        ),
         walk_forward_slice_outcomes=aggregate_walk_forward_slice_outcomes,
         walk_forward_pass_run_count=walk_forward_pass_run_count,
         walk_forward_fail_run_count=walk_forward_fail_run_count,
@@ -938,6 +1213,11 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
     first_failure_row = min(
         failure_candidates,
         key=lambda row: (_fail_threshold_bps(row), row.run_id),
+        default=None,
+    )
+    first_failure_mode_failure_row = min(
+        failure_mode_failure_candidates,
+        key=lambda row: (_failure_mode_threshold_order(row), row.run_id),
         default=None,
     )
 
@@ -998,6 +1278,36 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
             ),
             winner_policy_robustness_verdict=(
                 winner_row.risk_policy_robustness_verdict if winner_row is not None else "fail"
+            ),
+            first_failure_mode_failure_run_id=(
+                first_failure_mode_failure_row.run_id
+                if first_failure_mode_failure_row is not None
+                else None
+            ),
+            first_failure_mode_failure_scenario_id=(
+                first_failure_mode_failure_row.failure_mode_first_fail_scenario_id
+                if first_failure_mode_failure_row is not None
+                else None
+            ),
+            most_failure_mode_fragile_run_id=(
+                failure_mode_fragility_order[0].run_id if failure_mode_fragility_order else None
+            ),
+            most_failure_mode_resilient_run_id=(
+                failure_mode_resilience_order[0].run_id if failure_mode_resilience_order else None
+            ),
+            failure_mode_fragility_order_run_ids=[
+                row.run_id for row in failure_mode_fragility_order
+            ],
+            failure_mode_resilience_order_run_ids=[
+                row.run_id for row in failure_mode_resilience_order
+            ],
+            most_failure_mode_sensitive_run_id=(
+                failure_mode_most_sensitive_row.run_id
+                if failure_mode_most_sensitive_row is not None
+                else None
+            ),
+            winner_failure_mode_robustness_verdict=(
+                winner_row.failure_mode_robustness_verdict if winner_row is not None else "fail"
             ),
         ),
     )
@@ -1311,6 +1621,93 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
     lines.extend(
         [
             "",
+            "## Matrix Failure-Mode Robustness Sweep",
+            "failure_mode_aggregate_robustness_verdict: "
+            f"{comparison.aggregate.failure_mode_aggregate_robustness_verdict}",
+            f"failure_mode_pass_run_count: {comparison.aggregate.failure_mode_pass_run_count}",
+            f"failure_mode_fail_run_count: {comparison.aggregate.failure_mode_fail_run_count}",
+            "failure_mode_first_fail_scenario_id: "
+            f"{comparison.aggregate.failure_mode_first_fail_scenario_id}",
+            (
+                "failure_mode_first_fail_run_id: "
+                f"{comparison.aggregate.failure_mode_first_fail_run_id}"
+            ),
+            "failure_mode_failure_order_run_ids: "
+            f"{','.join(comparison.aggregate.failure_mode_failure_order_run_ids)}",
+            f"failure_mode_safest_run_id: {comparison.aggregate.failure_mode_safest_run_id}",
+            "failure_mode_most_sensitive_run_id: "
+            f"{comparison.aggregate.failure_mode_most_sensitive_run_id}",
+            f"failure_mode_winner_run_id: {comparison.aggregate.failure_mode_winner_run_id}",
+            "failure_mode_winner_robustness_verdict: "
+            f"{comparison.aggregate.failure_mode_winner_robustness_verdict}",
+            "first_failure_mode_failure_run_id: "
+            f"{comparison.rankings.first_failure_mode_failure_run_id}",
+            "first_failure_mode_failure_scenario_id: "
+            f"{comparison.rankings.first_failure_mode_failure_scenario_id}",
+            "most_failure_mode_fragile_run_id: "
+            f"{comparison.rankings.most_failure_mode_fragile_run_id}",
+            "most_failure_mode_resilient_run_id: "
+            f"{comparison.rankings.most_failure_mode_resilient_run_id}",
+            "failure_mode_fragility_order_run_ids: "
+            f"{','.join(comparison.rankings.failure_mode_fragility_order_run_ids)}",
+            "failure_mode_resilience_order_run_ids: "
+            f"{','.join(comparison.rankings.failure_mode_resilience_order_run_ids)}",
+            "most_failure_mode_sensitive_run_id: "
+            f"{comparison.rankings.most_failure_mode_sensitive_run_id}",
+            "winner_failure_mode_robustness_verdict: "
+            f"{comparison.rankings.winner_failure_mode_robustness_verdict}",
+        ]
+    )
+    for aggregate_failure_outcome in comparison.aggregate.failure_mode_outcomes:
+        lines.extend(
+            [
+                (
+                    f"aggregate_failure_{aggregate_failure_outcome.scenario_id}_"
+                    "reduced_fill_capture_multiplier: "
+                    f"{_format_float(aggregate_failure_outcome.reduced_fill_capture_multiplier)}"
+                ),
+                (
+                    f"aggregate_failure_{aggregate_failure_outcome.scenario_id}_"
+                    "delayed_opportunity_haircut_fraction: "
+                    f"{_format_float(aggregate_failure_outcome.delayed_opportunity_haircut_fraction)}"
+                ),
+                (
+                    f"aggregate_failure_{aggregate_failure_outcome.scenario_id}_"
+                    "stressed_total_net_realized_pnl_usd: "
+                    f"{_format_float(aggregate_failure_outcome.stressed_total_net_realized_pnl_usd)}"
+                ),
+                (
+                    f"aggregate_failure_{aggregate_failure_outcome.scenario_id}_"
+                    "stressed_aggregate_return_fraction: "
+                    f"{_format_float(aggregate_failure_outcome.stressed_aggregate_return_fraction)}"
+                ),
+                (
+                    f"aggregate_failure_{aggregate_failure_outcome.scenario_id}_"
+                    "margin_loss_total_net_pnl_usd: "
+                    f"{_format_float(aggregate_failure_outcome.margin_loss_total_net_pnl_usd)}"
+                ),
+                (
+                    f"aggregate_failure_{aggregate_failure_outcome.scenario_id}_"
+                    "margin_loss_aggregate_return_fraction: "
+                    f"{_format_float(aggregate_failure_outcome.margin_loss_aggregate_return_fraction)}"
+                ),
+                (
+                    f"aggregate_failure_{aggregate_failure_outcome.scenario_id}_"
+                    f"failing_run_count: {aggregate_failure_outcome.failing_run_count}"
+                ),
+                (
+                    f"aggregate_failure_{aggregate_failure_outcome.scenario_id}_"
+                    f"passing_run_count: {aggregate_failure_outcome.passing_run_count}"
+                ),
+                (
+                    f"aggregate_failure_{aggregate_failure_outcome.scenario_id}_"
+                    f"verdict: {aggregate_failure_outcome.verdict}"
+                ),
+            ]
+        )
+    lines.extend(
+        [
+            "",
             "## Matrix Walk-Forward Regime Robustness",
             "walk_forward_aggregate_robustness_verdict: "
             f"{comparison.aggregate.walk_forward_aggregate_robustness_verdict}",
@@ -1438,6 +1835,24 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
                 f"{_format_float(comparison_row.risk_policy_most_adverse_delta_net_pnl_usd)}",
                 "risk_policy_is_narrow_dependence: "
                 f"{comparison_row.risk_policy_is_narrow_dependence}",
+                "failure_mode_robustness_verdict: "
+                f"{comparison_row.failure_mode_robustness_verdict}",
+                "failure_mode_first_fail_scenario_id: "
+                f"{comparison_row.failure_mode_first_fail_scenario_id}",
+                "failure_mode_pass_scenario_count: "
+                f"{comparison_row.failure_mode_pass_scenario_count}",
+                "failure_mode_fail_scenario_count: "
+                f"{comparison_row.failure_mode_fail_scenario_count}",
+                "failure_mode_sensitivity_span_net_pnl_usd: "
+                f"{_format_float(comparison_row.failure_mode_sensitivity_span_net_pnl_usd)}",
+                "failure_mode_sensitivity_span_return_fraction: "
+                f"{_format_float(comparison_row.failure_mode_sensitivity_span_return_fraction)}",
+                "failure_mode_most_adverse_scenario_id: "
+                f"{comparison_row.failure_mode_most_adverse_scenario_id}",
+                "failure_mode_most_adverse_margin_loss_net_pnl_usd: "
+                f"{_format_float(comparison_row.failure_mode_most_adverse_margin_loss_net_pnl_usd)}",
+                f"failure_mode_fragility_rank: {comparison_row.failure_mode_fragility_rank}",
+                f"failure_mode_resilience_rank: {comparison_row.failure_mode_resilience_rank}",
                 f"fragility_rank: {comparison_row.fragility_rank}",
                 f"resilience_rank: {comparison_row.resilience_rank}",
                 f"max_stress_scenario_id: {comparison_row.max_stress_scenario_id}",
@@ -1528,6 +1943,51 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
                         f"{_format_float(row_risk_outcome.delta_return_fraction_vs_baseline)}"
                     ),
                     f"risk_{row_risk_outcome.scenario_id}_verdict: {row_risk_outcome.verdict}",
+                    "",
+                ]
+            )
+        for row_failure_outcome in comparison_row.failure_mode_outcomes:
+            lines.extend(
+                [
+                    (
+                        f"failure_{row_failure_outcome.scenario_id}_"
+                        "reduced_fill_capture_multiplier: "
+                        f"{_format_float(row_failure_outcome.reduced_fill_capture_multiplier)}"
+                    ),
+                    (
+                        f"failure_{row_failure_outcome.scenario_id}_"
+                        "delayed_opportunity_haircut_fraction: "
+                        f"{_format_float(row_failure_outcome.delayed_opportunity_haircut_fraction)}"
+                    ),
+                    (
+                        f"failure_{row_failure_outcome.scenario_id}_"
+                        "stressed_net_realized_pnl_usd: "
+                        f"{_format_float(row_failure_outcome.stressed_net_realized_pnl_usd)}"
+                    ),
+                    (
+                        f"failure_{row_failure_outcome.scenario_id}_"
+                        "stressed_ending_equity_usd: "
+                        f"{_format_float(row_failure_outcome.stressed_ending_equity_usd)}"
+                    ),
+                    (
+                        f"failure_{row_failure_outcome.scenario_id}_"
+                        "stressed_return_fraction: "
+                        f"{_format_float(row_failure_outcome.stressed_return_fraction)}"
+                    ),
+                    (
+                        f"failure_{row_failure_outcome.scenario_id}_"
+                        "margin_loss_net_pnl_usd: "
+                        f"{_format_float(row_failure_outcome.margin_loss_net_pnl_usd)}"
+                    ),
+                    (
+                        f"failure_{row_failure_outcome.scenario_id}_"
+                        "margin_loss_return_fraction: "
+                        f"{_format_float(row_failure_outcome.margin_loss_return_fraction)}"
+                    ),
+                    (
+                        f"failure_{row_failure_outcome.scenario_id}_"
+                        f"verdict: {row_failure_outcome.verdict}"
+                    ),
                     "",
                 ]
             )
