@@ -21,6 +21,36 @@ from crypto_agent.runtime.models import (
 from crypto_agent.runtime.session_registry import upsert_forward_paper_registry_entry
 
 FIXTURES_DIR = Path("tests/fixtures")
+_FORWARD_RUNTIME_INDEX_FIELDS: tuple[str, ...] = (
+    "runtime_id",
+    "status_path",
+    "history_path",
+    "sessions_dir",
+    "registry_path",
+    "live_market_status_path",
+    "venue_constraints_path",
+    "account_state_path",
+    "reconciliation_report_path",
+    "recovery_status_path",
+    "execution_state_dir",
+    "live_control_config_path",
+    "live_control_status_path",
+    "readiness_status_path",
+    "manual_control_state_path",
+    "shadow_canary_evaluation_path",
+    "soak_evaluation_path",
+    "shadow_evaluation_path",
+    "live_market_preflight_path",
+    "live_gate_decision_path",
+    "live_gate_threshold_summary_path",
+    "live_gate_report_path",
+    "live_launch_verdict_path",
+    "live_authority_state_path",
+    "live_launch_window_path",
+    "live_transmission_decision_path",
+    "live_transmission_result_path",
+    "live_approval_state_path",
+)
 
 
 def _paper_settings_for(tmp_path: Path):
@@ -100,6 +130,7 @@ def test_forward_paper_runtime_runs_repeated_sessions_and_persists_status(
     status = ForwardPaperRuntimeStatus.model_validate(
         json.loads(result.status_path.read_text(encoding="utf-8"))
     )
+    status_payload = json.loads(result.status_path.read_text(encoding="utf-8"))
     registry = json.loads(result.registry_path.read_text(encoding="utf-8"))
 
     assert result.registry_path.exists()
@@ -124,6 +155,15 @@ def test_forward_paper_runtime_runs_repeated_sessions_and_persists_status(
     assert status.next_session_number == 3
     assert status.last_session_id == "session-0002"
     assert status.next_scheduled_at == _tick(2026, 4, 5, 9, 2)
+    for field in _FORWARD_RUNTIME_INDEX_FIELDS:
+        assert field in status_payload
+    assert status_payload["runtime_id"] == result.runtime_id
+    for field in _FORWARD_RUNTIME_INDEX_FIELDS:
+        if field == "runtime_id":
+            continue
+        path_value = getattr(result, field)
+        expected = None if path_value is None else str(path_value)
+        assert status_payload[field] == expected
     assert registry["runtime_count"] == 1
     assert registry["runtimes"][0]["runtime_id"] == runtime_id
     assert registry["runtimes"][0]["status"] == "idle"

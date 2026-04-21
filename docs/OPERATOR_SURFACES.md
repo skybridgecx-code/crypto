@@ -173,6 +173,43 @@ Gate and readiness artifacts:
 - live launch verdict: `runs/<runtime-id>/live_launch_verdict.json`
 - live-gate report: `runs/<runtime-id>/live_gate_report.md`
 
+Canonical runtime artifact index contract:
+
+- `runs/<runtime-id>/forward_paper_status.json` is the canonical persisted per-runtime artifact index for forward-paper runs.
+- do not add a parallel runtime manifest or index artifact for this path.
+- the forward-paper CLI path summary is an operator convenience view and should align with shared fields in `forward_paper_status.json`.
+
+Canonical indexed fields on `forward_paper_status.json`:
+
+- `runtime_id`
+- `status_path`
+- `history_path`
+- `sessions_dir`
+- `registry_path`
+- `live_market_status_path`
+- `venue_constraints_path`
+- `account_state_path`
+- `reconciliation_report_path`
+- `recovery_status_path`
+- `execution_state_dir`
+- `live_control_config_path`
+- `live_control_status_path`
+- `readiness_status_path`
+- `manual_control_state_path`
+- `shadow_canary_evaluation_path`
+- `soak_evaluation_path`
+- `shadow_evaluation_path`
+- `live_market_preflight_path`
+- `live_gate_decision_path`
+- `live_gate_threshold_summary_path`
+- `live_gate_report_path`
+- `live_launch_verdict_path`
+- `live_authority_state_path`
+- `live_launch_window_path`
+- `live_transmission_decision_path`
+- `live_transmission_result_path`
+- `live_approval_state_path`
+
 Canonical first-launch runbook:
 
 - [docs/LIVE_LAUNCH_RUNBOOK.md](/Users/muhammadaatif/cryp/docs/LIVE_LAUNCH_RUNBOOK.md)

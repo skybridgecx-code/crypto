@@ -827,6 +827,7 @@ class ForwardPaperRuntimeStatus(BaseModel):
     shadow_canary_evaluation_path: Path
     soak_evaluation_path: Path
     shadow_evaluation_path: Path
+    live_market_preflight_path: Path | None = None
     live_gate_decision_path: Path
     live_gate_threshold_summary_path: Path
     live_gate_report_path: Path

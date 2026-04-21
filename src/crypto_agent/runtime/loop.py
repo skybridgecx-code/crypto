@@ -917,6 +917,7 @@ def _initial_runtime_status(
         shadow_canary_evaluation_path=paths.shadow_canary_evaluation_path,
         soak_evaluation_path=paths.soak_evaluation_path,
         shadow_evaluation_path=paths.shadow_evaluation_path,
+        live_market_preflight_path=paths.live_market_preflight_path,
         live_gate_decision_path=paths.live_gate_decision_path,
         live_gate_threshold_summary_path=paths.live_gate_threshold_summary_path,
         live_gate_report_path=paths.live_gate_report_path,
@@ -1013,6 +1014,7 @@ def _ensure_runtime_status(
     status = _load_runtime_status(paths.status_path)
     status = status.model_copy(
         update={
+            "live_market_preflight_path": paths.live_market_preflight_path,
             "live_authority_state_path": paths.live_authority_state_path,
             "live_launch_window_path": paths.live_launch_window_path,
             "live_transmission_decision_path": paths.live_transmission_decision_path,
