@@ -291,6 +291,16 @@ class MatrixComparisonAggregate(BaseModel):
     promotion_winner_recommendation: Literal["promote_to_shadow_evidence_collection", "hold"] = (
         "hold"
     )
+    shadow_promotion_selected_run_id: str | None = None
+    shadow_promotion_selected_recommendation: Literal[
+        "promote_to_shadow_evidence_collection", "hold", "none"
+    ] = "none"
+    shadow_promotion_selected_rationale_codes: list[str] = Field(default_factory=list)
+    shadow_promotion_selected_rationale_summary: str = ""
+    shadow_promotion_held_run_ids: list[str] = Field(default_factory=list)
+    shadow_promotion_held_first_blockers_by_run_id: dict[str, str] = Field(default_factory=dict)
+    shadow_promotion_held_blockers_by_run_id: dict[str, list[str]] = Field(default_factory=dict)
+    shadow_promotion_hold_reason_counts: dict[str, int] = Field(default_factory=dict)
     walk_forward_slice_outcomes: list[MatrixComparisonAggregateWalkForwardSliceOutcome] = Field(
         default_factory=list
     )

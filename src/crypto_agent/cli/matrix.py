@@ -1112,6 +1112,32 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
     for reason_code in extra_promotion_reason_codes:
         promotion_blocking_reason_counts[reason_code] = int(promotion_reason_counts[reason_code])
     promotion_first_held_row = promotion_held_rows[0] if promotion_held_rows else None
+    shadow_selected_row = promotion_eligible_rows[0] if promotion_eligible_rows else None
+    if shadow_selected_row is not None:
+        shadow_selected_rationale_codes = [
+            "promotion_gate_pass",
+            "baseline_return_non_negative",
+            "cost_slippage_robustness_pass",
+            "risk_policy_robustness_pass",
+            "failure_mode_robustness_pass",
+            "walk_forward_robustness_pass",
+            "risk_policy_not_narrow_dependence",
+            "walk_forward_not_profit_concentrated",
+        ]
+        shadow_selected_rationale_summary = (
+            "selected_promotable_candidate_with_all_m2_m7_gates_passing"
+        )
+    else:
+        shadow_selected_rationale_codes = ["no_promotable_candidate"]
+        shadow_selected_rationale_summary = "no_candidate_met_m7_promotion_gate"
+    shadow_promotion_held_first_blockers_by_run_id = {
+        row.run_id: str(row.promotion_first_blocking_reason_code)
+        for row in promotion_held_rows
+        if row.promotion_first_blocking_reason_code is not None
+    }
+    shadow_promotion_held_blockers_by_run_id = {
+        row.run_id: list(row.promotion_blocking_reason_codes) for row in promotion_held_rows
+    }
     winner_row = max(rows, key=lambda row: (row.return_fraction, row.run_id), default=None)
     walk_forward_slice_ids = sorted(
         {slice_.slice_id for row in rows for slice_ in row.walk_forward_slices},
@@ -1264,6 +1290,20 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
         promotion_winner_recommendation=(
             winner_row.promotion_recommendation if winner_row is not None else "hold"
         ),
+        shadow_promotion_selected_run_id=(
+            shadow_selected_row.run_id if shadow_selected_row is not None else None
+        ),
+        shadow_promotion_selected_recommendation=(
+            shadow_selected_row.promotion_recommendation
+            if shadow_selected_row is not None
+            else "none"
+        ),
+        shadow_promotion_selected_rationale_codes=shadow_selected_rationale_codes,
+        shadow_promotion_selected_rationale_summary=shadow_selected_rationale_summary,
+        shadow_promotion_held_run_ids=[row.run_id for row in promotion_held_rows],
+        shadow_promotion_held_first_blockers_by_run_id=shadow_promotion_held_first_blockers_by_run_id,
+        shadow_promotion_held_blockers_by_run_id=shadow_promotion_held_blockers_by_run_id,
+        shadow_promotion_hold_reason_counts=promotion_blocking_reason_counts,
         walk_forward_slice_outcomes=aggregate_walk_forward_slice_outcomes,
         walk_forward_pass_run_count=walk_forward_pass_run_count,
         walk_forward_fail_run_count=walk_forward_fail_run_count,
@@ -1613,6 +1653,48 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
     )
     for reason_code, reason_count in comparison.aggregate.promotion_blocking_reason_counts.items():
         lines.append(f"promotion_blocking_reason_{reason_code}_count: {reason_count}")
+    lines.extend(
+        [
+            "",
+            "## Matrix Shadow Promotion Packet",
+            (
+                "shadow_promotion_selected_run_id: "
+                f"{comparison.aggregate.shadow_promotion_selected_run_id}"
+            ),
+            (
+                "shadow_promotion_selected_recommendation: "
+                f"{comparison.aggregate.shadow_promotion_selected_recommendation}"
+            ),
+            (
+                "shadow_promotion_selected_rationale_codes: "
+                f"{','.join(comparison.aggregate.shadow_promotion_selected_rationale_codes)}"
+            ),
+            (
+                "shadow_promotion_selected_rationale_summary: "
+                f"{comparison.aggregate.shadow_promotion_selected_rationale_summary}"
+            ),
+            (
+                "shadow_promotion_held_run_ids: "
+                f"{','.join(comparison.aggregate.shadow_promotion_held_run_ids)}"
+            ),
+        ]
+    )
+    for (
+        reason_code,
+        reason_count,
+    ) in comparison.aggregate.shadow_promotion_hold_reason_counts.items():
+        lines.append(f"shadow_promotion_hold_reason_{reason_code}_count: {reason_count}")
+    for run_id in comparison.aggregate.shadow_promotion_held_run_ids:
+        first_blocker = comparison.aggregate.shadow_promotion_held_first_blockers_by_run_id.get(
+            run_id
+        )
+        blockers = comparison.aggregate.shadow_promotion_held_blockers_by_run_id.get(run_id, [])
+        lines.extend(
+            [
+                f"shadow_promotion_hold_{run_id}_first_blocker: {first_blocker}",
+                f"shadow_promotion_hold_{run_id}_blockers: {','.join(blockers)}",
+            ]
+        )
     lines.extend(
         [
             "",

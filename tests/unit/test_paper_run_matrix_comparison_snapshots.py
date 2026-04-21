@@ -416,6 +416,18 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
         int(reason_count) >= 0
         for reason_count in aggregate["promotion_blocking_reason_counts"].values()
     )
+    assert aggregate["shadow_promotion_selected_run_id"] in expected_run_ids + [None]
+    assert aggregate["shadow_promotion_selected_recommendation"] in {
+        "promote_to_shadow_evidence_collection",
+        "hold",
+        "none",
+    }
+    assert isinstance(aggregate["shadow_promotion_selected_rationale_codes"], list)
+    assert isinstance(aggregate["shadow_promotion_selected_rationale_summary"], str)
+    assert all(run_id in expected_run_ids for run_id in aggregate["shadow_promotion_held_run_ids"])
+    assert isinstance(aggregate["shadow_promotion_held_first_blockers_by_run_id"], dict)
+    assert isinstance(aggregate["shadow_promotion_held_blockers_by_run_id"], dict)
+    assert isinstance(aggregate["shadow_promotion_hold_reason_counts"], dict)
     failure_mode_aggregate_outcomes = aggregate["failure_mode_outcomes"]
     assert [outcome["scenario_id"] for outcome in failure_mode_aggregate_outcomes] == [
         "failure_reduced_capture_70pct",

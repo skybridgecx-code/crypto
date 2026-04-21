@@ -145,6 +145,53 @@
     "risk_policy_winner_run_id": "paper-run-matrix-demo-high-vol-no-signal-paper-run",
     "robustness_verdict": "fail",
     "run_count": 5,
+    "shadow_promotion_held_blockers_by_run_id": {
+      "paper-run-matrix-demo-breakout-paper-run": [
+        "baseline_negative_return",
+        "cost_slippage_robustness_fail",
+        "risk_policy_robustness_fail",
+        "failure_mode_robustness_fail",
+        "walk_forward_robustness_fail",
+        "walk_forward_profit_concentration"
+      ],
+      "paper-run-matrix-demo-mean-reversion-paper-run": [
+        "baseline_negative_return",
+        "cost_slippage_robustness_fail",
+        "risk_policy_robustness_fail",
+        "failure_mode_robustness_fail",
+        "walk_forward_robustness_fail",
+        "walk_forward_profit_concentration"
+      ]
+    },
+    "shadow_promotion_held_first_blockers_by_run_id": {
+      "paper-run-matrix-demo-breakout-paper-run": "baseline_negative_return",
+      "paper-run-matrix-demo-mean-reversion-paper-run": "baseline_negative_return"
+    },
+    "shadow_promotion_held_run_ids": [
+      "paper-run-matrix-demo-breakout-paper-run",
+      "paper-run-matrix-demo-mean-reversion-paper-run"
+    ],
+    "shadow_promotion_hold_reason_counts": {
+      "baseline_negative_return": 2,
+      "cost_slippage_robustness_fail": 2,
+      "failure_mode_robustness_fail": 2,
+      "risk_policy_robustness_fail": 2,
+      "walk_forward_profit_concentration": 2,
+      "walk_forward_robustness_fail": 2
+    },
+    "shadow_promotion_selected_rationale_codes": [
+      "promotion_gate_pass",
+      "baseline_return_non_negative",
+      "cost_slippage_robustness_pass",
+      "risk_policy_robustness_pass",
+      "failure_mode_robustness_pass",
+      "walk_forward_robustness_pass",
+      "risk_policy_not_narrow_dependence",
+      "walk_forward_not_profit_concentrated"
+    ],
+    "shadow_promotion_selected_rationale_summary": "selected_promotable_candidate_with_all_m2_m7_gates_passing",
+    "shadow_promotion_selected_recommendation": "promote_to_shadow_evidence_collection",
+    "shadow_promotion_selected_run_id": "paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run",
     "stress_delta_aggregate_return_fraction_by_scenario": {
       "cost_slippage_plus_10bps": -0.0002000112443311063,
       "cost_slippage_plus_5bps": -0.00010000562216555314
