@@ -379,13 +379,6 @@ def test_limited_live_boundary_authorizes_without_affecting_shadow_path(tmp_path
     assert per_request_decision.live_transmission_result_path == Path(
         session.live_transmission_result_path
     )
-    assert runtime_transmission_result.per_request_request_id == per_request_decision.request_id
-    assert runtime_transmission_result.per_request_decision_path == Path(
-        session.live_transmission_request_decision_path
-    )
-    assert runtime_transmission_result.per_request_result_path == Path(
-        session.live_transmission_request_result_path
-    )
     assert (
         runtime_transmission_result.per_request_artifact_summary
         == LiveTransmissionPerRequestArtifactSummary(
@@ -394,24 +387,11 @@ def test_limited_live_boundary_authorizes_without_affecting_shadow_path(tmp_path
             result_path=Path(session.live_transmission_request_result_path),
         )
     )
-    assert (
-        runtime_transmission_result.per_request_request_id
-        == runtime_transmission_result.per_request_artifact_summary.request_id
-    )
-    assert (
-        runtime_transmission_result.per_request_decision_path
-        == runtime_transmission_result.per_request_artifact_summary.decision_path
-    )
-    assert (
-        runtime_transmission_result.per_request_result_path
-        == runtime_transmission_result.per_request_artifact_summary.result_path
-    )
     assert session.per_request_artifact_summary == LiveTransmissionPerRequestArtifactSummary(
         request_id=per_request_decision.request_id,
         decision_path=Path(session.live_transmission_request_decision_path),
         result_path=Path(session.live_transmission_request_result_path),
     )
-    assert session.per_request_request_id == per_request_decision.request_id
     assert per_request_result.request_id == per_request_decision.request_id
     assert per_request_result.bounded_result_state == "not_submitted_terminal_blocked"
     assert per_request_result.submission_status == "not_submitted"
@@ -735,13 +715,6 @@ def test_limited_live_boundary_authorized_invokes_live_adapter_once(tmp_path: Pa
     assert runtime_transmission_result.rehearsal_gate_reason_codes == []
     assert runtime_transmission_result.rehearsal_gate_passed is True
     assert runtime_transmission_result.final_state == "filled"
-    assert runtime_transmission_result.per_request_request_id == live_result.ack.request_id
-    assert runtime_transmission_result.per_request_decision_path == Path(
-        session.live_transmission_request_decision_path
-    )
-    assert runtime_transmission_result.per_request_result_path == Path(
-        session.live_transmission_request_result_path
-    )
     assert (
         runtime_transmission_result.per_request_artifact_summary
         == LiveTransmissionPerRequestArtifactSummary(
@@ -750,24 +723,11 @@ def test_limited_live_boundary_authorized_invokes_live_adapter_once(tmp_path: Pa
             result_path=Path(session.live_transmission_request_result_path),
         )
     )
-    assert (
-        runtime_transmission_result.per_request_request_id
-        == runtime_transmission_result.per_request_artifact_summary.request_id
-    )
-    assert (
-        runtime_transmission_result.per_request_decision_path
-        == runtime_transmission_result.per_request_artifact_summary.decision_path
-    )
-    assert (
-        runtime_transmission_result.per_request_result_path
-        == runtime_transmission_result.per_request_artifact_summary.result_path
-    )
     assert session.per_request_artifact_summary == LiveTransmissionPerRequestArtifactSummary(
         request_id=live_result.ack.request_id,
         decision_path=Path(session.live_transmission_request_decision_path),
         result_path=Path(session.live_transmission_request_result_path),
     )
-    assert session.per_request_request_id == live_result.ack.request_id
     assert per_request_decision.request_id == live_result.ack.request_id
     assert per_request_decision.bounded_decision == "allowed"
     assert per_request_decision.bounded_seam_allowed is True
@@ -1259,11 +1219,7 @@ def test_bounded_live_zero_request_emits_explicit_reason(
     assert live_result.adapter_call_attempted is False
     assert live_state.state == "not_submitted_terminal_blocked"
     assert runtime_transmission_result.transmission_attempted is False
-    assert runtime_transmission_result.per_request_request_id is None
-    assert runtime_transmission_result.per_request_decision_path is None
-    assert runtime_transmission_result.per_request_result_path is None
     assert runtime_transmission_result.per_request_artifact_summary is None
-    assert session.per_request_request_id is None
     assert session.per_request_artifact_summary is None
     assert session.live_transmission_request_decision_path is None
     assert session.live_transmission_request_result_path is None
@@ -1309,6 +1265,98 @@ def test_session_summary_validator_rejects_mismatched_typed_summary() -> None:
                 },
             }
         )
+
+
+def test_runtime_result_legacy_mirror_fields_are_isolated_compatibility_surface() -> None:
+    runtime_result = LiveTransmissionRuntimeResultArtifact.model_validate(
+        {
+            "runtime_id": "rt-1",
+            "generated_at": "2026-04-20T12:00:00Z",
+            "summary": "ok",
+            "transmission_decision_path": "runs/rt-1/transmission_decision.json",
+            "per_request_request_id": "req-a",
+            "per_request_decision_path": "runs/rt-1/decision-a.json",
+            "per_request_result_path": "runs/rt-1/result-a.json",
+            "per_request_artifact_summary": {
+                "request_id": "req-a",
+                "decision_path": "runs/rt-1/decision-a.json",
+                "result_path": "runs/rt-1/result-a.json",
+            },
+        }
+    )
+
+    assert runtime_result.per_request_artifact_summary == LiveTransmissionPerRequestArtifactSummary(
+        request_id="req-a",
+        decision_path=Path("runs/rt-1/decision-a.json"),
+        result_path=Path("runs/rt-1/result-a.json"),
+    )
+    assert runtime_result.per_request_request_id == "req-a"
+    assert runtime_result.per_request_decision_path == Path("runs/rt-1/decision-a.json")
+    assert runtime_result.per_request_result_path == Path("runs/rt-1/result-a.json")
+
+
+def test_session_summary_legacy_mirror_fields_are_isolated_compatibility_surface() -> None:
+    session = ForwardPaperSessionSummary.model_validate(
+        {
+            "runtime_id": "rt-1",
+            "session_id": "session-0001",
+            "session_number": 1,
+            "status": "completed",
+            "scheduled_at": "2026-04-20T12:00:00Z",
+            "started_at": "2026-04-20T12:00:01Z",
+            "per_request_request_id": "req-a",
+            "live_transmission_request_decision_path": "runs/rt-1/decision-a.json",
+            "live_transmission_request_result_path": "runs/rt-1/result-a.json",
+            "per_request_artifact_summary": {
+                "request_id": "req-a",
+                "decision_path": "runs/rt-1/decision-a.json",
+                "result_path": "runs/rt-1/result-a.json",
+            },
+        }
+    )
+
+    assert session.per_request_artifact_summary == LiveTransmissionPerRequestArtifactSummary(
+        request_id="req-a",
+        decision_path=Path("runs/rt-1/decision-a.json"),
+        result_path=Path("runs/rt-1/result-a.json"),
+    )
+    assert session.per_request_request_id == "req-a"
+    assert session.live_transmission_request_decision_path == Path("runs/rt-1/decision-a.json")
+    assert session.live_transmission_request_result_path == Path("runs/rt-1/result-a.json")
+
+
+def test_runtime_result_legacy_mirror_fields_can_be_absent() -> None:
+    runtime_result = LiveTransmissionRuntimeResultArtifact.model_validate(
+        {
+            "runtime_id": "rt-1",
+            "generated_at": "2026-04-20T12:00:00Z",
+            "summary": "ok",
+            "transmission_decision_path": "runs/rt-1/transmission_decision.json",
+        }
+    )
+
+    assert runtime_result.per_request_artifact_summary is None
+    assert runtime_result.per_request_request_id is None
+    assert runtime_result.per_request_decision_path is None
+    assert runtime_result.per_request_result_path is None
+
+
+def test_session_summary_legacy_mirror_fields_can_be_absent() -> None:
+    session = ForwardPaperSessionSummary.model_validate(
+        {
+            "runtime_id": "rt-1",
+            "session_id": "session-0001",
+            "session_number": 1,
+            "status": "completed",
+            "scheduled_at": "2026-04-20T12:00:00Z",
+            "started_at": "2026-04-20T12:00:01Z",
+        }
+    )
+
+    assert session.per_request_artifact_summary is None
+    assert session.per_request_request_id is None
+    assert session.live_transmission_request_decision_path is None
+    assert session.live_transmission_request_result_path is None
 
 
 def test_bounded_live_multi_request_emits_explicit_reason(
@@ -1386,11 +1434,7 @@ def test_bounded_live_multi_request_emits_explicit_reason(
     assert live_result.adapter_call_attempted is False
     assert live_state.state == "not_submitted_terminal_blocked"
     assert runtime_transmission_result.transmission_attempted is False
-    assert runtime_transmission_result.per_request_request_id is None
-    assert runtime_transmission_result.per_request_decision_path is None
-    assert runtime_transmission_result.per_request_result_path is None
     assert runtime_transmission_result.per_request_artifact_summary is None
-    assert session.per_request_request_id is None
     assert session.per_request_artifact_summary is None
     assert session.live_transmission_request_decision_path is None
     assert session.live_transmission_request_result_path is None
