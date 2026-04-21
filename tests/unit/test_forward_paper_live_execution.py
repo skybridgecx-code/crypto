@@ -392,6 +392,18 @@ def test_limited_live_boundary_authorizes_without_affecting_shadow_path(tmp_path
             result_path=Path(session.live_transmission_request_result_path),
         )
     )
+    assert (
+        runtime_transmission_result.per_request_request_id
+        == runtime_transmission_result.per_request_artifact_summary.request_id
+    )
+    assert (
+        runtime_transmission_result.per_request_decision_path
+        == runtime_transmission_result.per_request_artifact_summary.decision_path
+    )
+    assert (
+        runtime_transmission_result.per_request_result_path
+        == runtime_transmission_result.per_request_artifact_summary.result_path
+    )
     assert session.per_request_artifact_summary == LiveTransmissionPerRequestArtifactSummary(
         request_id=per_request_decision.request_id,
         decision_path=Path(session.live_transmission_request_decision_path),
@@ -735,6 +747,18 @@ def test_limited_live_boundary_authorized_invokes_live_adapter_once(tmp_path: Pa
             decision_path=Path(session.live_transmission_request_decision_path),
             result_path=Path(session.live_transmission_request_result_path),
         )
+    )
+    assert (
+        runtime_transmission_result.per_request_request_id
+        == runtime_transmission_result.per_request_artifact_summary.request_id
+    )
+    assert (
+        runtime_transmission_result.per_request_decision_path
+        == runtime_transmission_result.per_request_artifact_summary.decision_path
+    )
+    assert (
+        runtime_transmission_result.per_request_result_path
+        == runtime_transmission_result.per_request_artifact_summary.result_path
     )
     assert session.per_request_artifact_summary == LiveTransmissionPerRequestArtifactSummary(
         request_id=live_result.ack.request_id,

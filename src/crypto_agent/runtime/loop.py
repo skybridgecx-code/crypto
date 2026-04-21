@@ -609,6 +609,11 @@ def _sync_runtime_live_transmission_result_from_session(
             ),
         )
     adapter_submission_attempted = session_result.adapter_call_attempted
+    per_request_summary = _build_per_request_artifact_summary(
+        session_request,
+        session_summary.live_transmission_request_decision_path,
+        session_summary.live_transmission_request_result_path,
+    )
     _write_json_artifact(
         status.live_transmission_result_path,
         LiveTransmissionRuntimeResultArtifact(
@@ -626,14 +631,16 @@ def _sync_runtime_live_transmission_result_from_session(
             final_state=session_state.state,
             summary=session_result.summary,
             reason_codes=session_result.reason_codes,
-            per_request_request_id=_single_request_request_id(session_request),
-            per_request_decision_path=session_summary.live_transmission_request_decision_path,
-            per_request_result_path=session_summary.live_transmission_request_result_path,
-            per_request_artifact_summary=_build_per_request_artifact_summary(
-                session_request,
-                session_summary.live_transmission_request_decision_path,
-                session_summary.live_transmission_request_result_path,
+            per_request_request_id=(
+                None if per_request_summary is None else per_request_summary.request_id
             ),
+            per_request_decision_path=(
+                None if per_request_summary is None else per_request_summary.decision_path
+            ),
+            per_request_result_path=(
+                None if per_request_summary is None else per_request_summary.result_path
+            ),
+            per_request_artifact_summary=per_request_summary,
             transmission_decision_path=status.live_transmission_decision_path,
         ),
     )
