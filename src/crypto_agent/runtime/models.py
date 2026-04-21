@@ -165,6 +165,14 @@ class ForwardPaperSessionSkipEvidence(BaseModel):
         return _normalize_datetime(value)
 
 
+class LiveTransmissionPerRequestArtifactSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    decision_path: Path
+    result_path: Path
+
+
 class ForwardPaperSessionSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -207,6 +215,7 @@ class ForwardPaperSessionSummary(BaseModel):
     live_transmission_result_path: Path | None = None
     live_transmission_state_path: Path | None = None
     per_request_request_id: str | None = None
+    per_request_artifact_summary: LiveTransmissionPerRequestArtifactSummary | None = None
     live_transmission_request_decision_path: Path | None = None
     live_transmission_request_result_path: Path | None = None
     skip_evidence_path: Path | None = None
@@ -582,6 +591,7 @@ class LiveTransmissionRuntimeResultArtifact(BaseModel):
     per_request_request_id: str | None = None
     per_request_decision_path: Path | None = None
     per_request_result_path: Path | None = None
+    per_request_artifact_summary: LiveTransmissionPerRequestArtifactSummary | None = None
     transmission_decision_path: Path
 
     @field_validator("generated_at")

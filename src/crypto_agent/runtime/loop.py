@@ -78,6 +78,7 @@ from crypto_agent.runtime.models import (
     LiveMarketPreflightResult,
     LiveRehearsalGateScope,
     LiveTransmissionDecisionArtifact,
+    LiveTransmissionPerRequestArtifactSummary,
     LiveTransmissionPerRequestDecisionArtifact,
     LiveTransmissionPerRequestResultArtifact,
     LiveTransmissionRuntimeResultArtifact,
@@ -547,6 +548,21 @@ def _single_request_request_id(
     return request_artifact.requests[0].request_id
 
 
+def _build_per_request_artifact_summary(
+    request_artifact: LiveTransmissionRequestArtifact,
+    decision_path: Path | None,
+    result_path: Path | None,
+) -> LiveTransmissionPerRequestArtifactSummary | None:
+    request_id = _single_request_request_id(request_artifact)
+    if request_id is None or decision_path is None or result_path is None:
+        return None
+    return LiveTransmissionPerRequestArtifactSummary(
+        request_id=request_id,
+        decision_path=decision_path,
+        result_path=result_path,
+    )
+
+
 def _sync_runtime_live_transmission_result_from_session(
     *,
     status: ForwardPaperRuntimeStatus,
@@ -613,6 +629,11 @@ def _sync_runtime_live_transmission_result_from_session(
             per_request_request_id=_single_request_request_id(session_request),
             per_request_decision_path=session_summary.live_transmission_request_decision_path,
             per_request_result_path=session_summary.live_transmission_request_result_path,
+            per_request_artifact_summary=_build_per_request_artifact_summary(
+                session_request,
+                session_summary.live_transmission_request_decision_path,
+                session_summary.live_transmission_request_result_path,
+            ),
             transmission_decision_path=status.live_transmission_decision_path,
         ),
     )
@@ -1929,6 +1950,7 @@ def _session_summary_with_live_transmission_artifacts(
         "live_transmission_result_path": result_path,
         "live_transmission_state_path": state_path,
         "per_request_request_id": None,
+        "per_request_artifact_summary": None,
         "artifact_paths_exist": artifact_paths_exist,
         "all_artifact_paths_exist": all(artifact_paths_exist.values()),
     }
@@ -1940,7 +1962,15 @@ def _session_summary_with_live_transmission_artifacts(
         request_model = LiveTransmissionRequestArtifact.model_validate(
             json.loads(request_path.read_text(encoding="utf-8"))
         )
-        update_payload["per_request_request_id"] = _single_request_request_id(request_model)
+        per_request_summary = _build_per_request_artifact_summary(
+            request_model,
+            request_decision_path,
+            request_result_path,
+        )
+        update_payload["per_request_artifact_summary"] = per_request_summary
+        update_payload["per_request_request_id"] = (
+            None if per_request_summary is None else per_request_summary.request_id
+        )
     return session_summary.model_copy(update=update_payload)
 
 
