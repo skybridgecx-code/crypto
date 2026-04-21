@@ -29,6 +29,7 @@ from crypto_agent.policy.readiness import default_live_readiness_status
 from crypto_agent.runtime.loop import run_forward_paper_runtime
 from crypto_agent.runtime.models import (
     ForwardPaperRuntimeStatus,
+    ForwardPaperSessionSummary,
     LiveApprovalStateArtifact,
     LiveRehearsalGateScope,
     LiveTransmissionDecisionArtifact,
@@ -37,6 +38,7 @@ from crypto_agent.runtime.models import (
     LiveTransmissionPerRequestResultArtifact,
     LiveTransmissionRuntimeResultArtifact,
 )
+from pydantic import ValidationError
 
 FIXTURES_DIR = Path("tests/fixtures")
 
@@ -1265,6 +1267,48 @@ def test_bounded_live_zero_request_emits_explicit_reason(
     assert session.per_request_artifact_summary is None
     assert session.live_transmission_request_decision_path is None
     assert session.live_transmission_request_result_path is None
+
+
+def test_runtime_result_validator_rejects_mismatched_typed_summary() -> None:
+    with pytest.raises(ValidationError):
+        LiveTransmissionRuntimeResultArtifact.model_validate(
+            {
+                "runtime_id": "rt-1",
+                "generated_at": "2026-04-20T12:00:00Z",
+                "summary": "mismatch",
+                "transmission_decision_path": "runs/rt-1/transmission_decision.json",
+                "per_request_request_id": "req-a",
+                "per_request_decision_path": "runs/rt-1/decision-a.json",
+                "per_request_result_path": "runs/rt-1/result-a.json",
+                "per_request_artifact_summary": {
+                    "request_id": "req-b",
+                    "decision_path": "runs/rt-1/decision-b.json",
+                    "result_path": "runs/rt-1/result-b.json",
+                },
+            }
+        )
+
+
+def test_session_summary_validator_rejects_mismatched_typed_summary() -> None:
+    with pytest.raises(ValidationError):
+        ForwardPaperSessionSummary.model_validate(
+            {
+                "runtime_id": "rt-1",
+                "session_id": "session-0001",
+                "session_number": 1,
+                "status": "completed",
+                "scheduled_at": "2026-04-20T12:00:00Z",
+                "started_at": "2026-04-20T12:00:01Z",
+                "per_request_request_id": "req-a",
+                "live_transmission_request_decision_path": "runs/rt-1/decision-a.json",
+                "live_transmission_request_result_path": "runs/rt-1/result-a.json",
+                "per_request_artifact_summary": {
+                    "request_id": "req-b",
+                    "decision_path": "runs/rt-1/decision-b.json",
+                    "result_path": "runs/rt-1/result-b.json",
+                },
+            }
+        )
 
 
 def test_bounded_live_multi_request_emits_explicit_reason(
