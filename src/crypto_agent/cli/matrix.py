@@ -126,6 +126,15 @@ MATRIX_FAILURE_MODE_SCENARIOS: tuple[tuple[str, float, float], ...] = (
     ("failure_delayed_opportunity_haircut_20pct", 1.0, 0.20),
     ("failure_combined_bad_case", 0.70, 0.20),
 )
+MATRIX_PROMOTION_BLOCKING_REASON_ORDER: tuple[str, ...] = (
+    "baseline_negative_return",
+    "cost_slippage_robustness_fail",
+    "risk_policy_robustness_fail",
+    "risk_policy_narrow_dependence",
+    "failure_mode_robustness_fail",
+    "walk_forward_robustness_fail",
+    "walk_forward_profit_concentration",
+)
 MATRIX_WALK_FORWARD_SLICE_COUNT = 3
 
 
@@ -777,6 +786,39 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
         row.failure_mode_fragility_rank = failure_mode_fragility_rank_by_run_id[row.run_id]
         row.failure_mode_resilience_rank = failure_mode_resilience_rank_by_run_id[row.run_id]
 
+    def _promotion_blocking_reason_codes(row: MatrixComparisonRow) -> list[str]:
+        reason_codes: list[str] = []
+        if row.baseline_robustness_verdict == "fail":
+            reason_codes.append("baseline_negative_return")
+        if row.robustness_verdict == "fail":
+            reason_codes.append("cost_slippage_robustness_fail")
+        if row.risk_policy_robustness_verdict == "fail":
+            reason_codes.append("risk_policy_robustness_fail")
+        if row.risk_policy_is_narrow_dependence:
+            reason_codes.append("risk_policy_narrow_dependence")
+        if row.failure_mode_robustness_verdict == "fail":
+            reason_codes.append("failure_mode_robustness_fail")
+        if row.walk_forward_robustness_verdict == "fail":
+            reason_codes.append("walk_forward_robustness_fail")
+        if row.walk_forward_is_profit_concentrated:
+            reason_codes.append("walk_forward_profit_concentration")
+        return reason_codes
+
+    promotion_reason_order = {
+        reason_code: index
+        for index, reason_code in enumerate(MATRIX_PROMOTION_BLOCKING_REASON_ORDER, start=1)
+    }
+    for row in rows:
+        blocking_reason_codes = _promotion_blocking_reason_codes(row)
+        row.promotion_blocking_reason_codes = blocking_reason_codes
+        row.promotion_first_blocking_reason_code = (
+            blocking_reason_codes[0] if blocking_reason_codes else None
+        )
+        row.promotion_is_eligible = len(blocking_reason_codes) == 0
+        row.promotion_recommendation = (
+            "promote_to_shadow_evidence_collection" if row.promotion_is_eligible else "hold"
+        )
+
     total_starting_equity_usd = fsum(row.starting_equity_usd for row in rows)
     total_net_realized_pnl_usd = fsum(row.net_realized_pnl_usd for row in rows)
     total_ending_equity_usd = fsum(row.ending_equity_usd for row in rows)
@@ -1038,6 +1080,38 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
         ),
         default=None,
     )
+    promotion_eligible_rows = sorted(
+        [row for row in rows if row.promotion_is_eligible],
+        key=lambda row: (-row.return_fraction, row.run_id),
+    )
+    promotion_held_rows = sorted(
+        [row for row in rows if not row.promotion_is_eligible],
+        key=lambda row: (
+            promotion_reason_order.get(
+                str(row.promotion_first_blocking_reason_code),
+                len(MATRIX_PROMOTION_BLOCKING_REASON_ORDER) + 1,
+            ),
+            row.run_id,
+        ),
+    )
+    promotion_reason_counts = Counter(
+        reason_code
+        for row in promotion_held_rows
+        for reason_code in row.promotion_blocking_reason_codes
+    )
+    promotion_blocking_reason_counts: dict[str, int] = {
+        reason_code: int(promotion_reason_counts[reason_code])
+        for reason_code in MATRIX_PROMOTION_BLOCKING_REASON_ORDER
+        if promotion_reason_counts[reason_code] > 0
+    }
+    extra_promotion_reason_codes = sorted(
+        reason_code
+        for reason_code in promotion_reason_counts
+        if reason_code not in promotion_blocking_reason_counts
+    )
+    for reason_code in extra_promotion_reason_codes:
+        promotion_blocking_reason_counts[reason_code] = int(promotion_reason_counts[reason_code])
+    promotion_first_held_row = promotion_held_rows[0] if promotion_held_rows else None
     winner_row = max(rows, key=lambda row: (row.return_fraction, row.run_id), default=None)
     walk_forward_slice_ids = sorted(
         {slice_.slice_id for row in rows for slice_ in row.walk_forward_slices},
@@ -1169,6 +1243,26 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
         failure_mode_winner_run_id=(winner_row.run_id if winner_row is not None else None),
         failure_mode_winner_robustness_verdict=(
             winner_row.failure_mode_robustness_verdict if winner_row is not None else "fail"
+        ),
+        promotion_eligible_run_count=len(promotion_eligible_rows),
+        promotion_held_run_count=len(promotion_held_rows),
+        promotion_eligible_run_ids=[row.run_id for row in promotion_eligible_rows],
+        promotion_held_run_ids=[row.run_id for row in promotion_held_rows],
+        promotion_first_blocking_run_id=(
+            promotion_first_held_row.run_id if promotion_first_held_row is not None else None
+        ),
+        promotion_first_blocking_reason_code=(
+            promotion_first_held_row.promotion_first_blocking_reason_code
+            if promotion_first_held_row is not None
+            else None
+        ),
+        promotion_blocking_reason_counts=promotion_blocking_reason_counts,
+        promotion_recommended_run_id=(
+            promotion_eligible_rows[0].run_id if promotion_eligible_rows else None
+        ),
+        promotion_winner_run_id=(winner_row.run_id if winner_row is not None else None),
+        promotion_winner_recommendation=(
+            winner_row.promotion_recommendation if winner_row is not None else "hold"
         ),
         walk_forward_slice_outcomes=aggregate_walk_forward_slice_outcomes,
         walk_forward_pass_run_count=walk_forward_pass_run_count,
@@ -1308,6 +1402,18 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
             ),
             winner_failure_mode_robustness_verdict=(
                 winner_row.failure_mode_robustness_verdict if winner_row is not None else "fail"
+            ),
+            top_promotable_run_id=(
+                promotion_eligible_rows[0].run_id if promotion_eligible_rows else None
+            ),
+            promotable_order_run_ids=[row.run_id for row in promotion_eligible_rows],
+            first_held_run_id=(
+                promotion_first_held_row.run_id if promotion_first_held_row else None
+            ),
+            first_held_reason_code=(
+                promotion_first_held_row.promotion_first_blocking_reason_code
+                if promotion_first_held_row is not None
+                else None
             ),
         ),
     )
@@ -1478,6 +1584,35 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
     )
     comparison = _build_matrix_comparison(manifest)
     comparison_rows_by_run_id = {row.run_id: row for row in comparison.rows}
+    lines.extend(
+        [
+            "",
+            "## Matrix Candidate Promotion Gate",
+            f"promotion_eligible_run_count: {comparison.aggregate.promotion_eligible_run_count}",
+            f"promotion_held_run_count: {comparison.aggregate.promotion_held_run_count}",
+            (
+                "promotion_eligible_run_ids: "
+                f"{','.join(comparison.aggregate.promotion_eligible_run_ids)}"
+            ),
+            f"promotion_held_run_ids: {','.join(comparison.aggregate.promotion_held_run_ids)}",
+            f"promotion_recommended_run_id: {comparison.aggregate.promotion_recommended_run_id}",
+            "promotion_first_blocking_run_id: "
+            f"{comparison.aggregate.promotion_first_blocking_run_id}",
+            "promotion_first_blocking_reason_code: "
+            f"{comparison.aggregate.promotion_first_blocking_reason_code}",
+            f"promotion_winner_run_id: {comparison.aggregate.promotion_winner_run_id}",
+            (
+                "promotion_winner_recommendation: "
+                f"{comparison.aggregate.promotion_winner_recommendation}"
+            ),
+            f"top_promotable_run_id: {comparison.rankings.top_promotable_run_id}",
+            f"promotable_order_run_ids: {','.join(comparison.rankings.promotable_order_run_ids)}",
+            f"first_held_run_id: {comparison.rankings.first_held_run_id}",
+            f"first_held_reason_code: {comparison.rankings.first_held_reason_code}",
+        ]
+    )
+    for reason_code, reason_count in comparison.aggregate.promotion_blocking_reason_counts.items():
+        lines.append(f"promotion_blocking_reason_{reason_code}_count: {reason_count}")
     lines.extend(
         [
             "",
@@ -1810,6 +1945,12 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
                 f"replay_ending_unrealized_pnl_usd: {_format_float(pnl.ending_unrealized_pnl_usd)}",
                 f"replay_ending_equity_usd: {_format_float(pnl.ending_equity_usd)}",
                 f"replay_return_fraction: {_format_float(pnl.return_fraction)}",
+                f"promotion_recommendation: {comparison_row.promotion_recommendation}",
+                f"promotion_is_eligible: {comparison_row.promotion_is_eligible}",
+                "promotion_first_blocking_reason_code: "
+                f"{comparison_row.promotion_first_blocking_reason_code}",
+                "promotion_blocking_reason_codes: "
+                f"{','.join(comparison_row.promotion_blocking_reason_codes)}",
                 f"baseline_robustness_verdict: {comparison_row.baseline_robustness_verdict}",
                 f"robustness_verdict: {comparison_row.robustness_verdict}",
                 f"first_fail_scenario_id: {comparison_row.first_fail_scenario_id}",

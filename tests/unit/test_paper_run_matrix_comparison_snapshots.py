@@ -108,6 +108,22 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
         assert row["return_fraction"] == pytest.approx(replay_pnl.return_fraction)
         expected_baseline_verdict = "pass" if replay_pnl.return_fraction >= 0 else "fail"
         assert row["baseline_robustness_verdict"] == expected_baseline_verdict
+        assert row["promotion_recommendation"] in {"promote_to_shadow_evidence_collection", "hold"}
+        assert row["promotion_is_eligible"] in {True, False}
+        assert row["promotion_first_blocking_reason_code"] in {
+            "baseline_negative_return",
+            "cost_slippage_robustness_fail",
+            "risk_policy_robustness_fail",
+            "risk_policy_narrow_dependence",
+            "failure_mode_robustness_fail",
+            "walk_forward_robustness_fail",
+            "walk_forward_profit_concentration",
+            None,
+        }
+        assert isinstance(row["promotion_blocking_reason_codes"], list)
+        assert (row["promotion_recommendation"] == "promote_to_shadow_evidence_collection") == bool(
+            row["promotion_is_eligible"]
+        )
         assert row["robustness_verdict"] in {"pass", "fail"}
         assert row["first_fail_scenario_id"] in {
             "baseline",
@@ -373,6 +389,33 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
     assert aggregate["failure_mode_most_sensitive_run_id"] in expected_run_ids + [None]
     assert aggregate["failure_mode_winner_run_id"] in expected_run_ids + [None]
     assert aggregate["failure_mode_winner_robustness_verdict"] in {"pass", "fail"}
+    assert int(aggregate["promotion_eligible_run_count"]) + int(
+        aggregate["promotion_held_run_count"]
+    ) == len(rows)
+    assert all(run_id in expected_run_ids for run_id in aggregate["promotion_eligible_run_ids"])
+    assert all(run_id in expected_run_ids for run_id in aggregate["promotion_held_run_ids"])
+    assert aggregate["promotion_first_blocking_run_id"] in expected_run_ids + [None]
+    assert aggregate["promotion_first_blocking_reason_code"] in {
+        "baseline_negative_return",
+        "cost_slippage_robustness_fail",
+        "risk_policy_robustness_fail",
+        "risk_policy_narrow_dependence",
+        "failure_mode_robustness_fail",
+        "walk_forward_robustness_fail",
+        "walk_forward_profit_concentration",
+        None,
+    }
+    assert aggregate["promotion_recommended_run_id"] in expected_run_ids + [None]
+    assert aggregate["promotion_winner_run_id"] in expected_run_ids + [None]
+    assert aggregate["promotion_winner_recommendation"] in {
+        "promote_to_shadow_evidence_collection",
+        "hold",
+    }
+    assert isinstance(aggregate["promotion_blocking_reason_counts"], dict)
+    assert all(
+        int(reason_count) >= 0
+        for reason_count in aggregate["promotion_blocking_reason_counts"].values()
+    )
     failure_mode_aggregate_outcomes = aggregate["failure_mode_outcomes"]
     assert [outcome["scenario_id"] for outcome in failure_mode_aggregate_outcomes] == [
         "failure_reduced_capture_70pct",
@@ -510,3 +553,16 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
     assert sorted(rankings["failure_mode_resilience_order_run_ids"]) == sorted(expected_run_ids)
     assert rankings["most_failure_mode_sensitive_run_id"] in expected_run_ids + [None]
     assert rankings["winner_failure_mode_robustness_verdict"] in {"pass", "fail"}
+    assert rankings["top_promotable_run_id"] in expected_run_ids + [None]
+    assert all(run_id in expected_run_ids for run_id in rankings["promotable_order_run_ids"])
+    assert rankings["first_held_run_id"] in expected_run_ids + [None]
+    assert rankings["first_held_reason_code"] in {
+        "baseline_negative_return",
+        "cost_slippage_robustness_fail",
+        "risk_policy_robustness_fail",
+        "risk_policy_narrow_dependence",
+        "failure_mode_robustness_fail",
+        "walk_forward_robustness_fail",
+        "walk_forward_profit_concentration",
+        None,
+    }

@@ -88,6 +88,40 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
         assert aggregate_manifest[key] == str(value)
     aggregate_pnl = _section_key_values(report, "## Aggregate Replay PnL")
     assert float(aggregate_pnl["starting_equity_usd"]) > 0
+    promotion_gate = _section_key_values(report, "## Matrix Candidate Promotion Gate")
+    assert int(promotion_gate["promotion_eligible_run_count"]) >= 0
+    assert int(promotion_gate["promotion_held_run_count"]) >= 0
+    assert "promotion_eligible_run_ids" in promotion_gate
+    assert "promotion_held_run_ids" in promotion_gate
+    assert "promotion_recommended_run_id" in promotion_gate
+    assert promotion_gate["promotion_first_blocking_reason_code"] in {
+        "baseline_negative_return",
+        "cost_slippage_robustness_fail",
+        "risk_policy_robustness_fail",
+        "risk_policy_narrow_dependence",
+        "failure_mode_robustness_fail",
+        "walk_forward_robustness_fail",
+        "walk_forward_profit_concentration",
+        "None",
+    }
+    assert "promotion_winner_run_id" in promotion_gate
+    assert promotion_gate["promotion_winner_recommendation"] in {
+        "promote_to_shadow_evidence_collection",
+        "hold",
+    }
+    assert "top_promotable_run_id" in promotion_gate
+    assert "promotable_order_run_ids" in promotion_gate
+    assert "first_held_run_id" in promotion_gate
+    assert promotion_gate["first_held_reason_code"] in {
+        "baseline_negative_return",
+        "cost_slippage_robustness_fail",
+        "risk_policy_robustness_fail",
+        "risk_policy_narrow_dependence",
+        "failure_mode_robustness_fail",
+        "walk_forward_robustness_fail",
+        "walk_forward_profit_concentration",
+        "None",
+    }
     robustness = _section_key_values(report, "## Matrix Cost/Slippage Robustness Gate")
     assert robustness["baseline_robustness_verdict"] in {"pass", "fail"}
     assert robustness["robustness_verdict"] in {"pass", "fail"}
@@ -208,6 +242,22 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
         )
         assert section["replay_ending_equity_usd"] == _format_float(pnl.ending_equity_usd)
         assert section["replay_return_fraction"] == _format_float(pnl.return_fraction)
+        assert section["promotion_recommendation"] in {
+            "promote_to_shadow_evidence_collection",
+            "hold",
+        }
+        assert section["promotion_is_eligible"] in {"True", "False"}
+        assert section["promotion_first_blocking_reason_code"] in {
+            "baseline_negative_return",
+            "cost_slippage_robustness_fail",
+            "risk_policy_robustness_fail",
+            "risk_policy_narrow_dependence",
+            "failure_mode_robustness_fail",
+            "walk_forward_robustness_fail",
+            "walk_forward_profit_concentration",
+            "None",
+        }
+        assert "promotion_blocking_reason_codes" in section
         assert section["baseline_robustness_verdict"] in {"pass", "fail"}
         assert section["robustness_verdict"] in {"pass", "fail"}
         assert section["first_fail_scenario_id"] in {

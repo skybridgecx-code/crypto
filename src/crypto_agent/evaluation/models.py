@@ -142,6 +142,10 @@ class MatrixComparisonRow(BaseModel):
     failure_mode_most_adverse_margin_loss_net_pnl_usd: float = Field(default=0.0, ge=0)
     failure_mode_fragility_rank: int = Field(default=0, ge=0)
     failure_mode_resilience_rank: int = Field(default=0, ge=0)
+    promotion_recommendation: Literal["promote_to_shadow_evidence_collection", "hold"] = "hold"
+    promotion_is_eligible: bool = False
+    promotion_first_blocking_reason_code: str | None = None
+    promotion_blocking_reason_codes: list[str] = Field(default_factory=list)
     fragility_rank: int = Field(default=0, ge=0)
     resilience_rank: int = Field(default=0, ge=0)
     walk_forward_slices: list[MatrixComparisonWalkForwardSliceOutcome] = Field(default_factory=list)
@@ -275,6 +279,18 @@ class MatrixComparisonAggregate(BaseModel):
     failure_mode_most_sensitive_run_id: str | None = None
     failure_mode_winner_run_id: str | None = None
     failure_mode_winner_robustness_verdict: Literal["pass", "fail"] = "fail"
+    promotion_eligible_run_count: int = Field(default=0, ge=0)
+    promotion_held_run_count: int = Field(default=0, ge=0)
+    promotion_eligible_run_ids: list[str] = Field(default_factory=list)
+    promotion_held_run_ids: list[str] = Field(default_factory=list)
+    promotion_first_blocking_run_id: str | None = None
+    promotion_first_blocking_reason_code: str | None = None
+    promotion_blocking_reason_counts: dict[str, int] = Field(default_factory=dict)
+    promotion_recommended_run_id: str | None = None
+    promotion_winner_run_id: str | None = None
+    promotion_winner_recommendation: Literal["promote_to_shadow_evidence_collection", "hold"] = (
+        "hold"
+    )
     walk_forward_slice_outcomes: list[MatrixComparisonAggregateWalkForwardSliceOutcome] = Field(
         default_factory=list
     )
@@ -377,6 +393,10 @@ class MatrixComparisonRanking(BaseModel):
     failure_mode_resilience_order_run_ids: list[str] = Field(default_factory=list)
     most_failure_mode_sensitive_run_id: str | None = None
     winner_failure_mode_robustness_verdict: Literal["pass", "fail"] = "fail"
+    top_promotable_run_id: str | None = None
+    promotable_order_run_ids: list[str] = Field(default_factory=list)
+    first_held_run_id: str | None = None
+    first_held_reason_code: str | None = None
 
 
 class MatrixComparison(BaseModel):
