@@ -203,6 +203,7 @@ def _relative_matrix_comparison_path(matrix_run_id: str) -> str:
 def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparison:
     rows: list[MatrixComparisonRow] = []
     scenario_bps = dict(MATRIX_STRESS_SCENARIOS)
+    max_stress_scenario_id, max_stress_bps = MATRIX_STRESS_SCENARIOS[-1]
 
     def _row_stress_outcomes(
         *,
@@ -236,6 +237,13 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
             )
         return outcomes
 
+    def _fail_threshold_bps(row: MatrixComparisonRow) -> float:
+        if row.first_fail_scenario_id == "baseline":
+            return 0.0
+        if row.first_fail_scenario_id is None:
+            return float("inf")
+        return float(scenario_bps.get(row.first_fail_scenario_id, float("inf")))
+
     for entry in manifest.entries:
         summary = json.loads(Path(entry.summary_path).read_text(encoding="utf-8"))
         replay_result = replay_journal(
@@ -265,6 +273,28 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
                 None,
             )
         )
+        first_fail_additional_cost_slippage_bps = (
+            0.0
+            if first_fail_scenario_id == "baseline"
+            else (
+                float(scenario_bps[first_fail_scenario_id])
+                if first_fail_scenario_id is not None and first_fail_scenario_id in scenario_bps
+                else None
+            )
+        )
+        max_stress_outcome = next(
+            (
+                outcome
+                for outcome in stress_outcomes
+                if outcome.scenario_id == max_stress_scenario_id
+            ),
+            None,
+        )
+        max_stress_net_pnl_drag_usd = (
+            abs(float(max_stress_outcome.delta_net_realized_pnl_usd_vs_baseline))
+            if max_stress_outcome is not None
+            else 0.0
+        )
         rows.append(
             MatrixComparisonRow(
                 run_id=entry.run_id,
@@ -290,10 +320,52 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
                     else "fail"
                 ),
                 first_fail_scenario_id=first_fail_scenario_id,
+                first_fail_additional_cost_slippage_bps=first_fail_additional_cost_slippage_bps,
+                max_stress_scenario_id=max_stress_scenario_id,
+                max_stress_additional_cost_slippage_bps=max_stress_bps,
+                max_stress_net_pnl_drag_usd=max_stress_net_pnl_drag_usd,
+                stress_delta_net_realized_pnl_usd_by_scenario={
+                    outcome.scenario_id: outcome.delta_net_realized_pnl_usd_vs_baseline
+                    for outcome in stress_outcomes
+                },
+                stress_delta_return_fraction_by_scenario={
+                    outcome.scenario_id: outcome.delta_return_fraction_vs_baseline
+                    for outcome in stress_outcomes
+                },
             )
         )
 
+    fragility_order = sorted(
+        rows,
+        key=lambda row: (
+            _fail_threshold_bps(row),
+            -row.max_stress_net_pnl_drag_usd,
+            row.return_fraction,
+            row.run_id,
+        ),
+    )
+    resilience_order = sorted(
+        rows,
+        key=lambda row: (
+            0 if row.first_fail_scenario_id is None else 1,
+            -_fail_threshold_bps(row) if row.first_fail_scenario_id is not None else 0.0,
+            row.max_stress_net_pnl_drag_usd,
+            -row.return_fraction,
+            row.run_id,
+        ),
+    )
+    fragility_rank_by_run_id = {
+        row.run_id: rank for rank, row in enumerate(fragility_order, start=1)
+    }
+    resilience_rank_by_run_id = {
+        row.run_id: rank for rank, row in enumerate(resilience_order, start=1)
+    }
+    for row in rows:
+        row.fragility_rank = fragility_rank_by_run_id[row.run_id]
+        row.resilience_rank = resilience_rank_by_run_id[row.run_id]
+
     total_starting_equity_usd = fsum(row.starting_equity_usd for row in rows)
+    total_net_realized_pnl_usd = fsum(row.net_realized_pnl_usd for row in rows)
     total_ending_equity_usd = fsum(row.ending_equity_usd for row in rows)
     aggregate_return_fraction = (
         (total_ending_equity_usd - total_starting_equity_usd) / total_starting_equity_usd
@@ -324,7 +396,7 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
                 additional_cost_slippage_bps=additional_cost_slippage_bps,
                 incremental_cost_usd=incremental_cost_usd,
                 stressed_total_net_realized_pnl_usd=(
-                    fsum(row.net_realized_pnl_usd for row in rows) - incremental_cost_usd
+                    total_net_realized_pnl_usd - incremental_cost_usd
                 ),
                 stressed_total_ending_equity_usd=stressed_total_ending_equity_usd,
                 stressed_aggregate_return_fraction=stressed_aggregate_return_fraction,
@@ -353,6 +425,30 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
             None,
         )
     )
+    aggregate_first_fail_additional_cost_slippage_bps = (
+        0.0
+        if aggregate_first_fail_scenario_id == "baseline"
+        else (
+            float(scenario_bps[aggregate_first_fail_scenario_id])
+            if aggregate_first_fail_scenario_id is not None
+            and aggregate_first_fail_scenario_id in scenario_bps
+            else None
+        )
+    )
+    failure_order_rows = sorted(
+        [row for row in rows if row.first_fail_scenario_id is not None],
+        key=lambda row: (_fail_threshold_bps(row), row.run_id),
+    )
+    first_failure_run_ids = (
+        [
+            row.run_id
+            for row in failure_order_rows
+            if _fail_threshold_bps(row) == _fail_threshold_bps(failure_order_rows[0])
+        ]
+        if failure_order_rows
+        else []
+    )
+    max_stress_total_net_pnl_drag_usd = fsum(row.max_stress_net_pnl_drag_usd for row in rows)
     aggregate = MatrixComparisonAggregate(
         run_count=len(rows),
         total_proposal_count=sum(row.proposal_count for row in rows),
@@ -363,7 +459,7 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
         total_alert_count=sum(row.alert_count for row in rows),
         total_ledger_row_count=sum(row.ledger_row_count for row in rows),
         total_starting_equity_usd=total_starting_equity_usd,
-        total_net_realized_pnl_usd=fsum(row.net_realized_pnl_usd for row in rows),
+        total_net_realized_pnl_usd=total_net_realized_pnl_usd,
         total_ending_unrealized_pnl_usd=fsum(row.ending_unrealized_pnl_usd for row in rows),
         total_ending_equity_usd=total_ending_equity_usd,
         aggregate_return_fraction=aggregate_return_fraction,
@@ -376,6 +472,20 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
             else "fail"
         ),
         first_fail_scenario_id=aggregate_first_fail_scenario_id,
+        first_fail_additional_cost_slippage_bps=aggregate_first_fail_additional_cost_slippage_bps,
+        first_failure_run_ids=first_failure_run_ids,
+        failure_order_run_ids=[row.run_id for row in failure_order_rows],
+        max_stress_scenario_id=max_stress_scenario_id,
+        max_stress_additional_cost_slippage_bps=max_stress_bps,
+        max_stress_total_net_pnl_drag_usd=max_stress_total_net_pnl_drag_usd,
+        stress_delta_total_net_realized_pnl_usd_by_scenario={
+            outcome.scenario_id: outcome.delta_total_net_realized_pnl_usd_vs_baseline
+            for outcome in aggregate_stress_outcomes
+        },
+        stress_delta_aggregate_return_fraction_by_scenario={
+            outcome.scenario_id: outcome.delta_aggregate_return_fraction_vs_baseline
+            for outcome in aggregate_stress_outcomes
+        },
         passed_run_count=sum(1 for row in rows if row.robustness_verdict == "pass"),
         failed_run_count=sum(1 for row in rows if row.robustness_verdict == "fail"),
     )
@@ -395,12 +505,7 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
     failure_candidates = [row for row in rows if row.first_fail_scenario_id is not None]
     first_failure_row = min(
         failure_candidates,
-        key=lambda row: (
-            -1
-            if row.first_fail_scenario_id == "baseline"
-            else scenario_bps.get(str(row.first_fail_scenario_id), float("inf")),
-            row.run_id,
-        ),
+        key=lambda row: (_fail_threshold_bps(row), row.run_id),
         default=None,
     )
 
@@ -424,6 +529,10 @@ def _build_matrix_comparison(manifest: PaperRunMatrixManifest) -> MatrixComparis
             first_robustness_failure_scenario_id=(
                 first_failure_row.first_fail_scenario_id if first_failure_row is not None else None
             ),
+            most_fragile_run_id=fragility_order[0].run_id if fragility_order else None,
+            most_resilient_run_id=resilience_order[0].run_id if resilience_order else None,
+            fragility_order_run_ids=[row.run_id for row in fragility_order],
+            resilience_order_run_ids=[row.run_id for row in resilience_order],
         ),
     )
 
@@ -593,7 +702,6 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
     )
     comparison = _build_matrix_comparison(manifest)
     comparison_rows_by_run_id = {row.run_id: row for row in comparison.rows}
-    comparison_rows_by_run_id = {row.run_id: row for row in comparison.rows}
     lines.extend(
         [
             "",
@@ -601,12 +709,25 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
             f"baseline_robustness_verdict: {comparison.aggregate.baseline_robustness_verdict}",
             f"robustness_verdict: {comparison.aggregate.robustness_verdict}",
             f"first_fail_scenario_id: {comparison.aggregate.first_fail_scenario_id}",
+            "first_fail_additional_cost_slippage_bps: "
+            f"{comparison.aggregate.first_fail_additional_cost_slippage_bps}",
             f"passed_run_count: {comparison.aggregate.passed_run_count}",
             f"failed_run_count: {comparison.aggregate.failed_run_count}",
             "first_robustness_failure_run_id: "
             f"{comparison.rankings.first_robustness_failure_run_id}",
             "first_robustness_failure_scenario_id: "
             f"{comparison.rankings.first_robustness_failure_scenario_id}",
+            f"first_failure_run_ids: {','.join(comparison.aggregate.first_failure_run_ids)}",
+            f"failure_order_run_ids: {','.join(comparison.aggregate.failure_order_run_ids)}",
+            f"most_fragile_run_id: {comparison.rankings.most_fragile_run_id}",
+            f"most_resilient_run_id: {comparison.rankings.most_resilient_run_id}",
+            f"fragility_order_run_ids: {','.join(comparison.rankings.fragility_order_run_ids)}",
+            f"resilience_order_run_ids: {','.join(comparison.rankings.resilience_order_run_ids)}",
+            f"max_stress_scenario_id: {comparison.aggregate.max_stress_scenario_id}",
+            "max_stress_additional_cost_slippage_bps: "
+            f"{_format_float(comparison.aggregate.max_stress_additional_cost_slippage_bps)}",
+            "max_stress_total_net_pnl_drag_usd: "
+            f"{_format_float(comparison.aggregate.max_stress_total_net_pnl_drag_usd)}",
         ]
     )
     for aggregate_outcome in comparison.aggregate.stress_outcomes:
@@ -634,6 +755,17 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
                 (
                     f"aggregate_stress_{aggregate_outcome.scenario_id}_failing_run_count: "
                     f"{aggregate_outcome.failing_run_count}"
+                ),
+                (
+                    "aggregate_stress_"
+                    f"{aggregate_outcome.scenario_id}_"
+                    "delta_total_net_realized_pnl_usd_vs_baseline: "
+                    f"{_format_float(aggregate_outcome.delta_total_net_realized_pnl_usd_vs_baseline)}"
+                ),
+                (
+                    "aggregate_stress_"
+                    f"{aggregate_outcome.scenario_id}_delta_aggregate_return_fraction_vs_baseline: "
+                    f"{_format_float(aggregate_outcome.delta_aggregate_return_fraction_vs_baseline)}"
                 ),
                 (
                     f"aggregate_stress_{aggregate_outcome.scenario_id}_verdict: "
@@ -697,6 +829,15 @@ def _build_operator_report(manifest: PaperRunMatrixManifest) -> str:
                 f"baseline_robustness_verdict: {comparison_row.baseline_robustness_verdict}",
                 f"robustness_verdict: {comparison_row.robustness_verdict}",
                 f"first_fail_scenario_id: {comparison_row.first_fail_scenario_id}",
+                "first_fail_additional_cost_slippage_bps: "
+                f"{comparison_row.first_fail_additional_cost_slippage_bps}",
+                f"fragility_rank: {comparison_row.fragility_rank}",
+                f"resilience_rank: {comparison_row.resilience_rank}",
+                f"max_stress_scenario_id: {comparison_row.max_stress_scenario_id}",
+                "max_stress_additional_cost_slippage_bps: "
+                f"{_format_float(comparison_row.max_stress_additional_cost_slippage_bps)}",
+                "max_stress_net_pnl_drag_usd: "
+                f"{_format_float(comparison_row.max_stress_net_pnl_drag_usd)}",
                 "",
             ]
         )

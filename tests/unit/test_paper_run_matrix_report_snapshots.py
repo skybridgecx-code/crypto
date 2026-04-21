@@ -97,6 +97,15 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
         "cost_slippage_plus_10bps",
         "None",
     }
+    assert robustness["first_fail_additional_cost_slippage_bps"] in {"0.0", "5.0", "10.0", "None"}
+    assert "first_failure_run_ids" in robustness
+    assert "failure_order_run_ids" in robustness
+    assert "most_fragile_run_id" in robustness
+    assert "most_resilient_run_id" in robustness
+    assert "fragility_order_run_ids" in robustness
+    assert "resilience_order_run_ids" in robustness
+    assert robustness["max_stress_scenario_id"] == "cost_slippage_plus_10bps"
+    assert robustness["max_stress_additional_cost_slippage_bps"] == "10"
 
     run_sections = _run_sections(report)
     expected_run_ids = [str(entry["run_id"]) for entry in manifest_payload["entries"]]
@@ -153,5 +162,11 @@ def test_matrix_report_snapshot_and_reconciliation(tmp_path: Path) -> None:
             "cost_slippage_plus_10bps",
             "None",
         }
+        assert section["first_fail_additional_cost_slippage_bps"] in {"0.0", "5.0", "10.0", "None"}
+        assert int(section["fragility_rank"]) >= 1
+        assert int(section["resilience_rank"]) >= 1
+        assert section["max_stress_scenario_id"] == "cost_slippage_plus_10bps"
+        assert section["max_stress_additional_cost_slippage_bps"] == "10"
+        assert float(section["max_stress_net_pnl_drag_usd"]) >= 0.0
         assert "stress_cost_slippage_plus_5bps_verdict" in section
         assert "stress_cost_slippage_plus_10bps_verdict" in section

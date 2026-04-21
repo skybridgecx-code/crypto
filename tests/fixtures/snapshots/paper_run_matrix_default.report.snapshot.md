@@ -52,21 +52,35 @@ return_fraction: -0.0000618856
 baseline_robustness_verdict: fail
 robustness_verdict: fail
 first_fail_scenario_id: baseline
+first_fail_additional_cost_slippage_bps: 0.0
 passed_run_count: 3
 failed_run_count: 2
 first_robustness_failure_run_id: paper-run-matrix-demo-breakout-paper-run
 first_robustness_failure_scenario_id: baseline
+first_failure_run_ids: paper-run-matrix-demo-breakout-paper-run,paper-run-matrix-demo-mean-reversion-paper-run
+failure_order_run_ids: paper-run-matrix-demo-breakout-paper-run,paper-run-matrix-demo-mean-reversion-paper-run
+most_fragile_run_id: paper-run-matrix-demo-breakout-paper-run
+most_resilient_run_id: paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run
+fragility_order_run_ids: paper-run-matrix-demo-breakout-paper-run,paper-run-matrix-demo-mean-reversion-paper-run,paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run,paper-run-matrix-demo-breakout-reject-low-equity-paper-run,paper-run-matrix-demo-high-vol-no-signal-paper-run
+resilience_order_run_ids: paper-run-matrix-demo-breakout-halt-drawdown-zero-paper-run,paper-run-matrix-demo-breakout-reject-low-equity-paper-run,paper-run-matrix-demo-high-vol-no-signal-paper-run,paper-run-matrix-demo-mean-reversion-paper-run,paper-run-matrix-demo-breakout-paper-run
+max_stress_scenario_id: cost_slippage_plus_10bps
+max_stress_additional_cost_slippage_bps: 10
+max_stress_total_net_pnl_drag_usd: 80.0046977437
 aggregate_stress_cost_slippage_plus_5bps_additional_cost_slippage_bps: 5
 aggregate_stress_cost_slippage_plus_5bps_incremental_cost_usd: 40.0023488718
 aggregate_stress_cost_slippage_plus_5bps_stressed_total_net_realized_pnl_usd: -56.0032884206
 aggregate_stress_cost_slippage_plus_5bps_stressed_aggregate_return_fraction: -0.0001618912
 aggregate_stress_cost_slippage_plus_5bps_failing_run_count: 2
+aggregate_stress_cost_slippage_plus_5bps_delta_total_net_realized_pnl_usd_vs_baseline: -40.0023488718
+aggregate_stress_cost_slippage_plus_5bps_delta_aggregate_return_fraction_vs_baseline: -0.0001000056
 aggregate_stress_cost_slippage_plus_5bps_verdict: fail
 aggregate_stress_cost_slippage_plus_10bps_additional_cost_slippage_bps: 10
 aggregate_stress_cost_slippage_plus_10bps_incremental_cost_usd: 80.0046977437
 aggregate_stress_cost_slippage_plus_10bps_stressed_total_net_realized_pnl_usd: -96.0056372924
 aggregate_stress_cost_slippage_plus_10bps_stressed_aggregate_return_fraction: -0.0002618969
 aggregate_stress_cost_slippage_plus_10bps_failing_run_count: 2
+aggregate_stress_cost_slippage_plus_10bps_delta_total_net_realized_pnl_usd_vs_baseline: -80.0046977437
+aggregate_stress_cost_slippage_plus_10bps_delta_aggregate_return_fraction_vs_baseline: -0.0002000112
 aggregate_stress_cost_slippage_plus_10bps_verdict: fail
 
 ## Per-Run Details
@@ -113,6 +127,12 @@ replay_return_fraction: -0.0001475472
 baseline_robustness_verdict: fail
 robustness_verdict: fail
 first_fail_scenario_id: baseline
+first_fail_additional_cost_slippage_bps: 0.0
+fragility_rank: 1
+resilience_rank: 5
+max_stress_scenario_id: cost_slippage_plus_10bps
+max_stress_additional_cost_slippage_bps: 10
+max_stress_net_pnl_drag_usd: 40.0067166727
 
 stress_cost_slippage_plus_5bps_additional_cost_slippage_bps: 5
 stress_cost_slippage_plus_5bps_incremental_cost_usd: 20.0033583364
@@ -173,6 +193,12 @@ replay_return_fraction: -0.000099996
 baseline_robustness_verdict: fail
 robustness_verdict: fail
 first_fail_scenario_id: baseline
+first_fail_additional_cost_slippage_bps: 0.0
+fragility_rank: 2
+resilience_rank: 4
+max_stress_scenario_id: cost_slippage_plus_10bps
+max_stress_additional_cost_slippage_bps: 10
+max_stress_net_pnl_drag_usd: 39.9979810709
 
 stress_cost_slippage_plus_5bps_additional_cost_slippage_bps: 5
 stress_cost_slippage_plus_5bps_incremental_cost_usd: 19.9989905355
@@ -233,6 +259,12 @@ replay_return_fraction: 0
 baseline_robustness_verdict: pass
 robustness_verdict: pass
 first_fail_scenario_id: None
+first_fail_additional_cost_slippage_bps: None
+fragility_rank: 5
+resilience_rank: 3
+max_stress_scenario_id: cost_slippage_plus_10bps
+max_stress_additional_cost_slippage_bps: 10
+max_stress_net_pnl_drag_usd: 0
 
 stress_cost_slippage_plus_5bps_additional_cost_slippage_bps: 5
 stress_cost_slippage_plus_5bps_incremental_cost_usd: 0
@@ -293,6 +325,12 @@ replay_return_fraction: 0
 baseline_robustness_verdict: pass
 robustness_verdict: pass
 first_fail_scenario_id: None
+first_fail_additional_cost_slippage_bps: None
+fragility_rank: 4
+resilience_rank: 2
+max_stress_scenario_id: cost_slippage_plus_10bps
+max_stress_additional_cost_slippage_bps: 10
+max_stress_net_pnl_drag_usd: 0
 
 stress_cost_slippage_plus_5bps_additional_cost_slippage_bps: 5
 stress_cost_slippage_plus_5bps_incremental_cost_usd: 0
@@ -353,6 +391,12 @@ replay_return_fraction: 0
 baseline_robustness_verdict: pass
 robustness_verdict: pass
 first_fail_scenario_id: None
+first_fail_additional_cost_slippage_bps: None
+fragility_rank: 3
+resilience_rank: 1
+max_stress_scenario_id: cost_slippage_plus_10bps
+max_stress_additional_cost_slippage_bps: 10
+max_stress_net_pnl_drag_usd: 0
 
 stress_cost_slippage_plus_5bps_additional_cost_slippage_bps: 5
 stress_cost_slippage_plus_5bps_incremental_cost_usd: 0
