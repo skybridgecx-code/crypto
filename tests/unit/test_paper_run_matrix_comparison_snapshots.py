@@ -119,6 +119,38 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
         assert row["max_stress_scenario_id"] == "cost_slippage_plus_10bps"
         assert float(row["max_stress_additional_cost_slippage_bps"]) == pytest.approx(10.0)
         assert float(row["max_stress_net_pnl_drag_usd"]) >= 0.0
+        assert row["risk_policy_robustness_verdict"] in {"pass", "fail"}
+        assert row["risk_policy_first_fail_scenario_id"] in {
+            "policy_tighter_75pct",
+            "policy_baseline_100pct",
+            "policy_looser_125pct",
+            None,
+        }
+        assert row["risk_policy_first_fail_scale_multiplier"] in {0.75, 1.0, 1.25, None}
+        assert int(row["risk_policy_pass_scenario_count"]) >= 0
+        assert int(row["risk_policy_fail_scenario_count"]) >= 0
+        assert int(row["risk_policy_pass_scenario_count"]) + int(
+            row["risk_policy_fail_scenario_count"]
+        ) == len(row["risk_policy_outcomes"])
+        assert float(row["risk_policy_sensitivity_span_net_pnl_usd"]) >= 0.0
+        assert float(row["risk_policy_sensitivity_span_return_fraction"]) >= 0.0
+        assert row["risk_policy_most_adverse_scenario_id"] in {
+            "policy_tighter_75pct",
+            "policy_baseline_100pct",
+            "policy_looser_125pct",
+            None,
+        }
+        assert row["risk_policy_is_narrow_dependence"] in {True, False}
+        risk_policy_outcomes = row["risk_policy_outcomes"]
+        assert [outcome["scenario_id"] for outcome in risk_policy_outcomes] == [
+            "policy_tighter_75pct",
+            "policy_baseline_100pct",
+            "policy_looser_125pct",
+        ]
+        for outcome in risk_policy_outcomes:
+            assert outcome["verdict"] in {"pass", "fail"}
+            assert float(outcome["risk_scale_multiplier"]) in {0.75, 1.0, 1.25}
+            assert float(outcome["stressed_ending_equity_usd"]) >= 0.0
         assert int(row["fragility_rank"]) >= 1
         assert int(row["resilience_rank"]) >= 1
         assert row["walk_forward_robustness_verdict"] in {"pass", "fail"}
@@ -267,6 +299,35 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
     assert float(aggregate["max_stress_total_net_pnl_drag_usd"]) == pytest.approx(
         sum(float(row["max_stress_net_pnl_drag_usd"]) for row in rows)
     )
+    assert aggregate["risk_policy_robustness_verdict"] in {"pass", "fail"}
+    assert int(aggregate["risk_policy_pass_run_count"]) + int(
+        aggregate["risk_policy_fail_run_count"]
+    ) == len(rows)
+    assert aggregate["risk_policy_first_fail_scenario_id"] in {
+        "policy_tighter_75pct",
+        "policy_baseline_100pct",
+        "policy_looser_125pct",
+        None,
+    }
+    assert aggregate["risk_policy_first_fail_run_id"] in expected_run_ids + [None]
+    assert aggregate["risk_policy_most_sensitive_run_id"] in expected_run_ids + [None]
+    assert aggregate["risk_policy_winner_run_id"] in expected_run_ids + [None]
+    assert aggregate["risk_policy_winner_robustness_verdict"] in {"pass", "fail"}
+    assert int(aggregate["risk_policy_narrow_dependence_count"]) >= 0
+    assert all(
+        run_id in expected_run_ids for run_id in aggregate["risk_policy_narrow_dependence_run_ids"]
+    )
+    risk_policy_aggregate_outcomes = aggregate["risk_policy_outcomes"]
+    assert [outcome["scenario_id"] for outcome in risk_policy_aggregate_outcomes] == [
+        "policy_tighter_75pct",
+        "policy_baseline_100pct",
+        "policy_looser_125pct",
+    ]
+    for outcome in risk_policy_aggregate_outcomes:
+        assert float(outcome["risk_scale_multiplier"]) in {0.75, 1.0, 1.25}
+        assert outcome["verdict"] in {"pass", "fail"}
+        assert int(outcome["failing_run_count"]) >= 0
+        assert int(outcome["passing_run_count"]) >= 0
     assert aggregate["walk_forward_aggregate_robustness_verdict"] in {"pass", "fail"}
     assert int(aggregate["walk_forward_pass_run_count"]) + int(
         aggregate["walk_forward_fail_run_count"]
@@ -356,3 +417,12 @@ def test_matrix_comparison_snapshot_and_reconciliation(tmp_path: Path) -> None:
         None,
     }
     assert rankings["winner_walk_forward_robustness_verdict"] in {"pass", "fail"}
+    assert rankings["most_policy_sensitive_run_id"] in expected_run_ids + [None]
+    assert rankings["first_policy_failure_run_id"] in expected_run_ids + [None]
+    assert rankings["first_policy_failure_scenario_id"] in {
+        "policy_tighter_75pct",
+        "policy_baseline_100pct",
+        "policy_looser_125pct",
+        None,
+    }
+    assert rankings["winner_policy_robustness_verdict"] in {"pass", "fail"}
