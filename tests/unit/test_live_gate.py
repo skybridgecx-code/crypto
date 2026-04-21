@@ -10,6 +10,31 @@ from crypto_agent.policy.readiness import LiveReadinessStatus
 from crypto_agent.runtime.loop import run_forward_paper_runtime
 
 FIXTURES_DIR = Path("tests/fixtures")
+_FORWARD_RUNTIME_STATUS_CLI_SHARED_FIELDS: tuple[str, ...] = (
+    "runtime_id",
+    "registry_path",
+    "status_path",
+    "history_path",
+    "sessions_dir",
+    "live_market_status_path",
+    "venue_constraints_path",
+    "account_state_path",
+    "reconciliation_report_path",
+    "recovery_status_path",
+    "execution_state_dir",
+    "live_control_config_path",
+    "live_control_status_path",
+    "readiness_status_path",
+    "manual_control_state_path",
+    "shadow_canary_evaluation_path",
+    "live_market_preflight_path",
+    "soak_evaluation_path",
+    "shadow_evaluation_path",
+    "live_gate_decision_path",
+    "live_gate_threshold_summary_path",
+    "live_gate_report_path",
+    "live_launch_verdict_path",
+)
 
 
 def _paper_settings_for(tmp_path: Path):
@@ -437,6 +462,7 @@ def test_cli_forward_runtime_prints_live_gate_paths(tmp_path: Path, capsys) -> N
         ]
     )
     output = json.loads(capsys.readouterr().out)
+    status_payload = json.loads(Path(output["status_path"]).read_text(encoding="utf-8"))
 
     assert exit_code == 0
     assert Path(output["shadow_canary_evaluation_path"]).exists()
@@ -446,3 +472,5 @@ def test_cli_forward_runtime_prints_live_gate_paths(tmp_path: Path, capsys) -> N
     assert Path(output["live_gate_threshold_summary_path"]).exists()
     assert Path(output["live_gate_report_path"]).exists()
     assert Path(output["live_launch_verdict_path"]).exists()
+    for field in _FORWARD_RUNTIME_STATUS_CLI_SHARED_FIELDS:
+        assert output[field] == status_payload[field]
