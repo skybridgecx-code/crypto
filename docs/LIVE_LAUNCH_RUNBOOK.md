@@ -19,19 +19,20 @@ For a candidate runtime `runs/<runtime-id>/`, review artifacts in this order:
 
 1. `live_market_preflight.json`
 2. `shadow_canary_evaluation.json`
-3. `live_gate_threshold_summary.json`
-4. `live_gate_decision.json`
-5. `live_launch_verdict.json`
-6. `live_gate_report.md`
-7. `soak_evaluation.json`
-8. `shadow_evaluation.json`
-9. `live_control_status.json`
-10. `live_readiness_status.json`
-11. `manual_control_state.json`
-12. `account_state.json`
-13. `reconciliation_report.json`
-14. `forward_paper_status.json`
-15. `forward_paper_history.jsonl`
+3. `live_gate_config.json`
+4. `live_gate_threshold_summary.json`
+5. `live_gate_decision.json`
+6. `live_launch_verdict.json`
+7. `live_gate_report.md`
+8. `soak_evaluation.json`
+9. `shadow_evaluation.json`
+10. `live_control_status.json`
+11. `live_readiness_status.json`
+12. `manual_control_state.json`
+13. `account_state.json`
+14. `reconciliation_report.json`
+15. `forward_paper_status.json`
+16. `forward_paper_history.jsonl`
 
 Do not review these out of order. The gate decision is only trustworthy when the preflight and canary were passable first, and when the threshold summary, control status, and reconciliation report all agree.
 

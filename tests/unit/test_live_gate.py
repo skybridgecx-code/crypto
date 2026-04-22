@@ -30,6 +30,7 @@ _FORWARD_RUNTIME_STATUS_CLI_SHARED_FIELDS: tuple[str, ...] = (
     "live_market_preflight_path",
     "soak_evaluation_path",
     "shadow_evaluation_path",
+    "live_gate_config_path",
     "live_gate_decision_path",
     "live_gate_threshold_summary_path",
     "live_gate_report_path",
@@ -345,6 +346,8 @@ def test_fresh_runtime_materializes_live_gate_artifacts_without_existing_control
 
     assert session.session_outcome == "skipped_unavailable_feed"
     assert result.live_control_status_path.exists()
+    assert result.live_gate_config_path is not None
+    assert result.live_gate_config_path.exists()
     assert result.live_gate_decision_path.exists()
     assert result.live_gate_threshold_summary_path.exists()
     assert result.live_gate_report_path.exists()

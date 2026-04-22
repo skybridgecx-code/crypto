@@ -469,6 +469,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "live_market_preflight_path": str(result.live_market_preflight_path),
                 "soak_evaluation_path": str(result.soak_evaluation_path),
                 "shadow_evaluation_path": str(result.shadow_evaluation_path),
+                "live_gate_config_path": str(result.live_gate_config_path)
+                if result.live_gate_config_path is not None
+                else None,
                 "live_gate_decision_path": str(result.live_gate_decision_path),
                 "live_gate_threshold_summary_path": str(result.live_gate_threshold_summary_path),
                 "live_gate_report_path": str(result.live_gate_report_path),

@@ -712,6 +712,7 @@ def build_forward_paper_runtime_paths(
         soak_evaluation_path=runtime_dir / "soak_evaluation.json",
         shadow_evaluation_path=runtime_dir / "shadow_evaluation.json",
         live_market_preflight_path=runtime_dir / "live_market_preflight.json",
+        live_gate_config_path=runtime_dir / "live_gate_config.json",
         live_gate_decision_path=runtime_dir / "live_gate_decision.json",
         live_gate_threshold_summary_path=runtime_dir / "live_gate_threshold_summary.json",
         live_gate_report_path=runtime_dir / "live_gate_report.md",
@@ -918,6 +919,7 @@ def _initial_runtime_status(
         soak_evaluation_path=paths.soak_evaluation_path,
         shadow_evaluation_path=paths.shadow_evaluation_path,
         live_market_preflight_path=paths.live_market_preflight_path,
+        live_gate_config_path=paths.live_gate_config_path,
         live_gate_decision_path=paths.live_gate_decision_path,
         live_gate_threshold_summary_path=paths.live_gate_threshold_summary_path,
         live_gate_report_path=paths.live_gate_report_path,
@@ -1015,6 +1017,7 @@ def _ensure_runtime_status(
     status = status.model_copy(
         update={
             "live_market_preflight_path": paths.live_market_preflight_path,
+            "live_gate_config_path": paths.live_gate_config_path,
             "live_authority_state_path": paths.live_authority_state_path,
             "live_launch_window_path": paths.live_launch_window_path,
             "live_transmission_decision_path": paths.live_transmission_decision_path,
@@ -2191,6 +2194,7 @@ def _materialize_live_gate_artifacts(
     _write_json_artifact(paths.shadow_canary_evaluation_path, shadow_canary)
     _write_json_artifact(paths.soak_evaluation_path, soak_evaluation)
     _write_json_artifact(paths.shadow_evaluation_path, shadow_evaluation)
+    _write_json_artifact(paths.live_gate_config_path, gate_config)
     _write_json_artifact(paths.live_gate_threshold_summary_path, threshold_summary)
     _write_json_artifact(paths.live_gate_decision_path, decision)
     _write_json_artifact(paths.live_launch_verdict_path, launch_verdict)
@@ -3246,6 +3250,7 @@ def run_forward_paper_runtime(
         live_market_preflight_path=paths.live_market_preflight_path,
         soak_evaluation_path=status.soak_evaluation_path,
         shadow_evaluation_path=status.shadow_evaluation_path,
+        live_gate_config_path=status.live_gate_config_path,
         live_gate_decision_path=status.live_gate_decision_path,
         live_gate_threshold_summary_path=status.live_gate_threshold_summary_path,
         live_gate_report_path=status.live_gate_report_path,

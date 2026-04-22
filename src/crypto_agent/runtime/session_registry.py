@@ -72,6 +72,7 @@ def registry_entry_from_status(
         shadow_canary_evaluation_path=status.shadow_canary_evaluation_path,
         soak_evaluation_path=status.soak_evaluation_path,
         shadow_evaluation_path=status.shadow_evaluation_path,
+        live_gate_config_path=status.live_gate_config_path,
         live_gate_decision_path=status.live_gate_decision_path,
         live_gate_threshold_summary_path=status.live_gate_threshold_summary_path,
         live_gate_report_path=status.live_gate_report_path,

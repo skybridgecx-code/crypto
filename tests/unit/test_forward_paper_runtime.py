@@ -41,6 +41,7 @@ _FORWARD_RUNTIME_INDEX_FIELDS: tuple[str, ...] = (
     "soak_evaluation_path",
     "shadow_evaluation_path",
     "live_market_preflight_path",
+    "live_gate_config_path",
     "live_gate_decision_path",
     "live_gate_threshold_summary_path",
     "live_gate_report_path",

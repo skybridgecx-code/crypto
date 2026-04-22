@@ -193,6 +193,7 @@ Gate and readiness artifacts:
 - manual control state: `runs/<runtime-id>/manual_control_state.json`
 - soak evaluation: `runs/<runtime-id>/soak_evaluation.json`
 - shadow evaluation: `runs/<runtime-id>/shadow_evaluation.json`
+- live-gate config: `runs/<runtime-id>/live_gate_config.json`
 - live-gate threshold summary: `runs/<runtime-id>/live_gate_threshold_summary.json`
 - live-gate decision: `runs/<runtime-id>/live_gate_decision.json`
 - live launch verdict: `runs/<runtime-id>/live_launch_verdict.json`
@@ -225,6 +226,7 @@ Canonical indexed fields on `forward_paper_status.json`:
 - `soak_evaluation_path`
 - `shadow_evaluation_path`
 - `live_market_preflight_path`
+- `live_gate_config_path`
 - `live_gate_decision_path`
 - `live_gate_threshold_summary_path`
 - `live_gate_report_path`

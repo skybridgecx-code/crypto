@@ -379,3 +379,10 @@ Phase L2O freezes the operator-facing reason-code contract for L2N edge-qualific
 
 Closeout doc:
 - `docs/PHASE_L2O_EDGE_REASON_CODE_FREEZE.md`
+
+## Phase L2P — Live gate config artifact surface
+
+Phase L2P persists `live_gate_config.json` and threads `live_gate_config_path` through runtime status, registry, and CLI/shared operator surfaces.
+
+Closeout doc:
+- `docs/PHASE_L2P_LIVE_GATE_CONFIG_ARTIFACT_SURFACE.md`
