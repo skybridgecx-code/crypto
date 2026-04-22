@@ -126,3 +126,9 @@ Deterministic advisory-proof command (proposal-level, no live/replay dependency)
 ```bash
 pytest -q tests/unit/test_external_confirmation_deterministic_proof.py
 ```
+
+OMEGA fixture seam-proof command (loader -> proposal evaluation seam):
+
+```bash
+pytest -q tests/unit/test_external_confirmation_deterministic_proof.py -k omega_fixture_loader_to_proposal_seam_proof
+```

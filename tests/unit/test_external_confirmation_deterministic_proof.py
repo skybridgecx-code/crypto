@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from crypto_agent.enums import Side
-from crypto_agent.external_signals.loader import apply_external_confirmation_to_proposal
+from crypto_agent.external_signals.loader import (
+    apply_external_confirmation_to_proposal,
+    load_external_confirmation_artifact,
+)
 from crypto_agent.external_signals.models import ExternalConfirmationArtifact
 from crypto_agent.types import ExecutionConstraints, TradeProposal
+
+FIXTURES_DIR = Path("tests/fixtures")
 
 
 def _base_proposal() -> TradeProposal:
@@ -135,3 +142,46 @@ def test_asset_mismatch_is_ignored_with_decision_and_no_proposal_mutation() -> N
     assert adjusted.confidence == 0.6
     assert "external_confirmation_status" not in adjusted.supporting_features
     assert "external_confirmation_status" not in adjusted.regime_context
+
+
+def test_omega_fixture_loader_to_proposal_seam_proof() -> None:
+    proposal = _base_proposal()
+    artifact = load_external_confirmation_artifact(
+        FIXTURES_DIR / "external_confirmation_omega_emitted_btc_buy.json"
+    )
+
+    assert artifact is not None
+    assert artifact.artifact_kind == "external_confirmation_advisory_v1"
+    assert artifact.asset == "BTCUSDT"
+    assert artifact.directional_bias == "buy"
+    assert artifact.confidence_adjustment == pytest.approx(0.18)
+    assert artifact.veto_trade is False
+    assert artifact.source_system == "omega_fusion_engine"
+    assert artifact.supporting_tags == [
+        "omega",
+        "advisory_only",
+        "posture:strong_long",
+        "venue:binance",
+        "directional_bias:buy",
+        "cross_venue_confirmed",
+        "exogenous_net:risk_on",
+    ]
+
+    adjusted, decision = apply_external_confirmation_to_proposal(
+        proposal=proposal,
+        artifact=artifact,
+    )
+
+    assert adjusted is not None
+    assert decision.status == "boosted_confirmation"
+    assert adjusted.confidence == pytest.approx(0.78)
+    assert decision.asset == "BTCUSDT"
+    assert decision.directional_bias == "buy"
+    assert decision.applied_confidence_delta == pytest.approx(0.18)
+    assert decision.veto_trade is False
+    assert decision.source_system == "omega_fusion_engine"
+    assert decision.supporting_tags == artifact.supporting_tags
+    assert adjusted.supporting_features["external_confirmation_source_system"] == "omega_fusion_engine"
+    assert adjusted.supporting_features["external_confirmation_supporting_tags"] == ",".join(
+        artifact.supporting_tags
+    )
