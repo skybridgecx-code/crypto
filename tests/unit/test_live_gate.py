@@ -43,6 +43,25 @@ def _load_snapshot(snapshot_name: str) -> dict[str, object]:
     return json.loads((SNAPSHOTS_DIR / snapshot_name).read_text(encoding="utf-8"))
 
 
+def _normalize_cli_paths_snapshot(
+    payload: dict[str, object],
+    *,
+    runs_dir: Path,
+) -> dict[str, object]:
+    normalized: dict[str, object] = {}
+    for field in _FORWARD_RUNTIME_STATUS_CLI_SHARED_FIELDS:
+        value = payload[field]
+        if field == "runtime_id":
+            normalized[field] = value
+            continue
+        if value is None:
+            normalized[field] = None
+            continue
+        path_value = Path(str(value))
+        normalized[field] = str(path_value.relative_to(runs_dir))
+    return normalized
+
+
 def _paper_settings_for(tmp_path: Path):
     settings = load_settings(Path("config/paper.yaml"))
     return settings.model_copy(
@@ -620,3 +639,61 @@ def test_cli_forward_runtime_prints_live_gate_paths(tmp_path: Path, capsys) -> N
     assert Path(output["live_gate_config_path"]).exists()
     for field in _FORWARD_RUNTIME_STATUS_CLI_SHARED_FIELDS:
         assert output[field] == status_payload[field]
+
+
+def test_cli_forward_runtime_paths_snapshot(tmp_path: Path, capsys) -> None:
+    config_path = tmp_path / "paper_test.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "mode: paper",
+                "paths:",
+                f"  runs_dir: {tmp_path / 'runs'}",
+                f"  journals_dir: {tmp_path / 'journals'}",
+                "venue:",
+                "  default_venue: paper",
+                "  allowed_symbols:",
+                "    - BTCUSDT",
+                "risk:",
+                "  risk_per_trade_fraction: 0.005",
+                "  max_portfolio_gross_exposure: 1.0",
+                "  max_symbol_gross_exposure: 0.4",
+                "  max_daily_realized_loss: 0.015",
+                "  max_open_positions: 2",
+                "  max_leverage: 1.0",
+                "  max_spread_bps: 12.0",
+                "  max_expected_slippage_bps: 15.0",
+                "  min_average_dollar_volume_usd: 5000000.0",
+                "policy:",
+                "  allow_live_orders: false",
+                "  require_manual_approval_above_notional_usd: 1000.0",
+                "  kill_switch_enabled: true",
+                "  max_consecutive_order_rejects: 3",
+                "  max_slippage_breaches: 2",
+                "  max_drawdown_fraction: 0.03",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    from crypto_agent.cli.forward_paper import main
+
+    exit_code = main(
+        [
+            str(FIXTURES_DIR / "paper_candles_breakout_long.jsonl"),
+            "--config",
+            str(config_path),
+            "--runtime-id",
+            "forward-gate-cli-snapshot",
+            "--max-sessions",
+            "1",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    normalized_paths = _normalize_cli_paths_snapshot(
+        output,
+        runs_dir=tmp_path / "runs",
+    )
+
+    assert exit_code == 0
+    assert normalized_paths == _load_snapshot("forward_runtime_cli_paths.snapshot.json")

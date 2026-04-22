@@ -407,3 +407,10 @@ Phase L2S adds deterministic snapshot coverage for canonical `forward_paper_regi
 
 Closeout doc:
 - `docs/PHASE_L2S_RUNTIME_REGISTRY_ENTRY_REGRESSION_SNAPSHOT.md`
+
+## Phase L2T — Runtime CLI path surface regression snapshot
+
+Phase L2T adds deterministic snapshot coverage for forward-paper CLI path output fields, including `live_gate_config_path`, to prevent CLI/status operator-surface drift.
+
+Closeout doc:
+- `docs/PHASE_L2T_RUNTIME_CLI_PATH_SURFACE_REGRESSION_SNAPSHOT.md`
