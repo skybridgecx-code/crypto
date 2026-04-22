@@ -372,3 +372,10 @@ Phase L2N adds bounded edge-quality readiness checks to the live-gate threshold 
 
 Closeout doc:
 - `docs/PHASE_L2N_LIVE_EDGE_QUALIFICATION_GATE.md`
+
+## Phase L2O — Edge qualification reason-code freeze
+
+Phase L2O freezes the operator-facing reason-code contract for L2N edge-qualification checks.
+
+Closeout doc:
+- `docs/PHASE_L2O_EDGE_REASON_CODE_FREEZE.md`
