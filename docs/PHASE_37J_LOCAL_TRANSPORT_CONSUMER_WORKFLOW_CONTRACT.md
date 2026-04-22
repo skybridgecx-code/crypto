@@ -132,3 +132,12 @@ OMEGA fixture seam-proof command (loader -> proposal evaluation seam):
 ```bash
 pytest -q tests/unit/test_external_confirmation_deterministic_proof.py -k omega_fixture_loader_to_proposal_seam_proof
 ```
+
+Advisory vs control forward-paper comparison command:
+
+```bash
+python -m crypto_agent.cli.forward_paper_compare \
+  --advisory-run-id omega-advisory-btcusdt-us \
+  --control-run-id omega-control-btcusdt-us \
+  --runs-dir runs
+```
