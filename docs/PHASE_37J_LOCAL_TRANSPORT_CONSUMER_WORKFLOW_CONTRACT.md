@@ -141,3 +141,17 @@ python -m crypto_agent.cli.forward_paper_compare \
   --control-run-id omega-control-btcusdt-us \
   --runs-dir runs
 ```
+
+Repeatable multi-symbol advisory/control experiment command:
+
+```bash
+python -m crypto_agent.cli.forward_paper_experiment \
+  --symbols BTCUSDT ETHUSDT SOLUSDT \
+  --advisory-artifact-path /absolute/path/external_confirmation.json \
+  --binance-base-url https://api.binance.us \
+  --run-id-prefix omega-us-phase37j \
+  --session-interval-seconds 60 \
+  --max-sessions 2 \
+  --output-dir runs/advisory_control_experiments \
+  --runs-dir runs
+```
