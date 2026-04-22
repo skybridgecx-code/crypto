@@ -414,3 +414,10 @@ Phase L2T adds deterministic snapshot coverage for forward-paper CLI path output
 
 Closeout doc:
 - `docs/PHASE_L2T_RUNTIME_CLI_PATH_SURFACE_REGRESSION_SNAPSHOT.md`
+
+## Phase L2U — Live gate thresholds and decision regression snapshots
+
+Phase L2U adds deterministic snapshot coverage for `live_gate_threshold_summary.json` and `live_gate_decision.json` payloads to prevent live-gate semantic drift.
+
+Closeout doc:
+- `docs/PHASE_L2U_LIVE_GATE_THRESHOLDS_DECISION_REGRESSION_SNAPSHOTS.md`

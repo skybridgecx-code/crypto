@@ -62,6 +62,22 @@ def _normalize_cli_paths_snapshot(
     return normalized
 
 
+def _normalize_live_gate_decision_snapshot(
+    payload: dict[str, object],
+    *,
+    runs_dir: Path,
+) -> dict[str, object]:
+    normalized = dict(payload)
+    for field in (
+        "soak_evaluation_path",
+        "shadow_evaluation_path",
+        "threshold_summary_path",
+    ):
+        path_value = Path(str(payload[field]))
+        normalized[field] = str(path_value.relative_to(runs_dir))
+    return normalized
+
+
 def _paper_settings_for(tmp_path: Path):
     settings = load_settings(Path("config/paper.yaml"))
     return settings.model_copy(
@@ -575,6 +591,48 @@ def test_live_gate_config_snapshot_and_path_contract(tmp_path: Path) -> None:
 
     assert live_gate_config_payload == _load_snapshot("forward_live_gate_config.snapshot.json")
     assert status_payload["live_gate_config_path"] == str(result.live_gate_config_path)
+
+
+def test_live_gate_thresholds_and_decision_snapshot(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    generated_at = _ts(2026, 4, 5, 16, 0)
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="forward-gate-thresholds-snapshot",
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=3,
+        tick_times=[
+            _ts(2026, 4, 5, 12, 2),
+            _ts(2026, 4, 5, 12, 3),
+            _ts(2026, 4, 5, 12, 4),
+        ],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_flat_live_adapter(3),
+        readiness_status=LiveReadinessStatus(
+            runtime_id="forward-gate-thresholds-snapshot",
+            updated_at=_ts(2026, 4, 5, 12, 1),
+            status="ready",
+            limited_live_gate_status="ready_for_review",
+        ),
+        now_fn=lambda: generated_at,
+    )
+    thresholds_payload = json.loads(
+        result.live_gate_threshold_summary_path.read_text(encoding="utf-8")
+    )
+    decision_payload = json.loads(result.live_gate_decision_path.read_text(encoding="utf-8"))
+    normalized_decision_payload = _normalize_live_gate_decision_snapshot(
+        decision_payload,
+        runs_dir=tmp_path / "runs",
+    )
+
+    assert thresholds_payload == _load_snapshot("forward_live_gate_thresholds.snapshot.json")
+    assert normalized_decision_payload == _load_snapshot("forward_live_gate_decision.snapshot.json")
 
 
 def test_cli_forward_runtime_prints_live_gate_paths(tmp_path: Path, capsys) -> None:

@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-04-05T16:00:00Z",
+  "reason_codes": [
+    "insufficient_shadow_requests",
+    "insufficient_shadow_nonzero_request_sessions",
+    "insufficient_shadow_would_send_requests",
+    "shadow_artifacts_missing"
+  ],
+  "runtime_id": "forward-gate-thresholds-snapshot",
+  "shadow_evaluation_path": "forward-gate-thresholds-snapshot/shadow_evaluation.json",
+  "soak_evaluation_path": "forward-gate-thresholds-snapshot/soak_evaluation.json",
+  "state": "not_ready",
+  "summary": "Live gate is not ready because soak or shadow thresholds are not yet met.",
+  "threshold_summary_path": "forward-gate-thresholds-snapshot/live_gate_threshold_summary.json"
+}
