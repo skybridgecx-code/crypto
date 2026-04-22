@@ -386,3 +386,10 @@ Phase L2P persists `live_gate_config.json` and threads `live_gate_config_path` t
 
 Closeout doc:
 - `docs/PHASE_L2P_LIVE_GATE_CONFIG_ARTIFACT_SURFACE.md`
+
+## Phase L2Q — Live gate config regression snapshots
+
+Phase L2Q adds deterministic regression snapshot coverage for `live_gate_config.json` and asserts runtime status and CLI path reconciliation for `live_gate_config_path`.
+
+Closeout doc:
+- `docs/PHASE_L2Q_LIVE_GATE_CONFIG_REGRESSION_SNAPSHOTS.md`

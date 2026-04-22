@@ -1,0 +1,14 @@
+{
+  "max_failed_sessions": 0,
+  "max_interrupted_sessions": 0,
+  "min_average_return_fraction": -1.0,
+  "min_completed_sessions": 3,
+  "min_cumulative_net_realized_pnl_usd": -1000000000.0,
+  "min_executed_sessions": 2,
+  "min_nonzero_shadow_request_sessions": 1,
+  "min_shadow_request_count": 1,
+  "min_shadow_sessions": 1,
+  "min_shadow_would_send_count": 1,
+  "runtime_id": "forward-gate-config-snapshot",
+  "updated_at": "2026-04-05T14:00:00Z"
+}

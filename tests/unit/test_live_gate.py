@@ -10,6 +10,7 @@ from crypto_agent.policy.readiness import LiveReadinessStatus
 from crypto_agent.runtime.loop import run_forward_paper_runtime
 
 FIXTURES_DIR = Path("tests/fixtures")
+SNAPSHOTS_DIR = FIXTURES_DIR / "snapshots"
 _FORWARD_RUNTIME_STATUS_CLI_SHARED_FIELDS: tuple[str, ...] = (
     "runtime_id",
     "registry_path",
@@ -36,6 +37,10 @@ _FORWARD_RUNTIME_STATUS_CLI_SHARED_FIELDS: tuple[str, ...] = (
     "live_gate_report_path",
     "live_launch_verdict_path",
 )
+
+
+def _load_snapshot(snapshot_name: str) -> dict[str, object]:
+    return json.loads((SNAPSHOTS_DIR / snapshot_name).read_text(encoding="utf-8"))
 
 
 def _paper_settings_for(tmp_path: Path):
@@ -532,6 +537,27 @@ def test_live_gate_is_not_ready_for_executed_non_firing_shadow_sessions(tmp_path
     assert "insufficient_shadow_would_send_requests" in gate["reason_codes"]
 
 
+def test_live_gate_config_snapshot_and_path_contract(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    generated_at = _ts(2026, 4, 5, 14, 0)
+    result = run_forward_paper_runtime(
+        FIXTURES_DIR / "paper_candles_breakout_long.jsonl",
+        settings=settings,
+        runtime_id="forward-gate-config-snapshot",
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 5, 13, 59)],
+        now_fn=lambda: generated_at,
+    )
+
+    assert result.live_gate_config_path is not None
+    live_gate_config_payload = json.loads(result.live_gate_config_path.read_text(encoding="utf-8"))
+    status_payload = json.loads(result.status_path.read_text(encoding="utf-8"))
+
+    assert live_gate_config_payload == _load_snapshot("forward_live_gate_config.snapshot.json")
+    assert status_payload["live_gate_config_path"] == str(result.live_gate_config_path)
+
+
 def test_cli_forward_runtime_prints_live_gate_paths(tmp_path: Path, capsys) -> None:
     config_path = tmp_path / "paper_test.yaml"
     config_path.write_text(
@@ -591,5 +617,6 @@ def test_cli_forward_runtime_prints_live_gate_paths(tmp_path: Path, capsys) -> N
     assert Path(output["live_gate_threshold_summary_path"]).exists()
     assert Path(output["live_gate_report_path"]).exists()
     assert Path(output["live_launch_verdict_path"]).exists()
+    assert Path(output["live_gate_config_path"]).exists()
     for field in _FORWARD_RUNTIME_STATUS_CLI_SHARED_FIELDS:
         assert output[field] == status_payload[field]
