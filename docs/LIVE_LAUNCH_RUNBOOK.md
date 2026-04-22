@@ -70,10 +70,13 @@ Before any future tiny live launch is attempted, all of the following must be tr
 - `manual_control_state.json.halt_active == false`
 - `shadow_evaluation.json.all_shadow_artifacts_present == true`
 - `shadow_evaluation.json.request_count >= 1`
+- `shadow_evaluation.json.shadow_nonzero_request_session_count >= 1`
+- `shadow_evaluation.json.would_send_count >= 1`
 - `soak_evaluation.json.completed_session_count >= 3`
 - `soak_evaluation.json.executed_session_count >= 2`
 - `soak_evaluation.json.failed_session_count == 0`
 - `soak_evaluation.json.interrupted_session_count == 0`
+- `soak_evaluation` PnL and return values satisfy the currently configured live-gate floors
 
 If any one of these checks fails, launch status is `no_go`.
 

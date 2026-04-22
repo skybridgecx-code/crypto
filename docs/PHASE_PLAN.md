@@ -366,3 +366,9 @@ Phase L2M records the exact prerequisites that must be true before any future bo
 Closeout doc:
 - `docs/PHASE_L2M_SECOND_ATTEMPT_PREREQUISITES_CLOSEOUT.md`
 
+## Phase L2N — Live edge qualification gate
+
+Phase L2N adds bounded edge-quality readiness checks to the live-gate threshold summary so session completion alone cannot be misread as launchable edge evidence.
+
+Closeout doc:
+- `docs/PHASE_L2N_LIVE_EDGE_QUALIFICATION_GATE.md`

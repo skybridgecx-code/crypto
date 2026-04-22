@@ -346,6 +346,7 @@ class ForwardPaperShadowEvaluation(BaseModel):
     generated_at: datetime
     shadow_session_count: int = Field(default=0, ge=0)
     shadow_executed_session_count: int = Field(default=0, ge=0)
+    shadow_nonzero_request_session_count: int = Field(default=0, ge=0)
     request_count: int = Field(default=0, ge=0)
     rejected_request_count: int = Field(default=0, ge=0)
     would_send_count: int = Field(default=0, ge=0)

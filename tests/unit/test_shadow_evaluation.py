@@ -142,6 +142,7 @@ def test_forward_runtime_writes_shadow_evaluation_for_repeated_shadow_sessions(
     assert result.shadow_evaluation_path.exists()
     assert shadow["shadow_session_count"] == 3
     assert shadow["shadow_executed_session_count"] == 3
+    assert shadow["shadow_nonzero_request_session_count"] >= 1
     assert shadow["request_count"] >= 1
     assert shadow["would_send_count"] >= 1
     assert shadow["missing_request_artifact_count"] == 0
@@ -253,6 +254,7 @@ def test_shadow_evaluation_unavailable_feed_session_has_skip_evidence_artifact(
     # Shadow evaluation reflects skip evidence
     assert shadow["shadow_session_count"] == 1
     assert shadow["shadow_executed_session_count"] == 0
+    assert shadow["shadow_nonzero_request_session_count"] == 0
     assert shadow["shadow_unavailable_feed_session_count"] == 1
     assert shadow["skip_evidence_count"] == 1
     assert shadow["missing_skip_evidence_count"] == 0

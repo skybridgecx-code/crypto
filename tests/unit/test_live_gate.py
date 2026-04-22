@@ -157,6 +157,81 @@ def _live_adapter(session_count: int) -> BinanceSpotLiveMarketDataAdapter:
     return BinanceSpotLiveMarketDataAdapter(fetch_json=ScriptedFetcher(responses))
 
 
+def _flat_live_adapter(session_count: int) -> BinanceSpotLiveMarketDataAdapter:
+    flat_klines = [
+        _kline(
+            open_time_ms=_millis(2026, 4, 5, 11, 55),
+            close_time_ms=_millis(2026, 4, 5, 11, 56),
+            open_price="101.0",
+            high_price="101.0",
+            low_price="101.0",
+            close_price="101.0",
+            volume="1000",
+        ),
+        _kline(
+            open_time_ms=_millis(2026, 4, 5, 11, 56),
+            close_time_ms=_millis(2026, 4, 5, 11, 57),
+            open_price="101.0",
+            high_price="101.0",
+            low_price="101.0",
+            close_price="101.0",
+            volume="1000",
+        ),
+        _kline(
+            open_time_ms=_millis(2026, 4, 5, 11, 57),
+            close_time_ms=_millis(2026, 4, 5, 11, 58),
+            open_price="101.0",
+            high_price="101.0",
+            low_price="101.0",
+            close_price="101.0",
+            volume="1000",
+        ),
+        _kline(
+            open_time_ms=_millis(2026, 4, 5, 11, 58),
+            close_time_ms=_millis(2026, 4, 5, 11, 59),
+            open_price="101.0",
+            high_price="101.0",
+            low_price="101.0",
+            close_price="101.0",
+            volume="1000",
+        ),
+        _kline(
+            open_time_ms=_millis(2026, 4, 5, 11, 59),
+            close_time_ms=_millis(2026, 4, 5, 12, 0),
+            open_price="101.0",
+            high_price="101.0",
+            low_price="101.0",
+            close_price="101.0",
+            volume="1000",
+        ),
+        _kline(
+            open_time_ms=_millis(2026, 4, 5, 12, 0),
+            close_time_ms=_millis(2026, 4, 5, 12, 1),
+            open_price="101.0",
+            high_price="101.0",
+            low_price="101.0",
+            close_price="101.0",
+            volume="1000",
+        ),
+    ]
+    responses: list[object] = []
+    for _ in range(session_count):
+        responses.extend(
+            [
+                _exchange_info(),
+                flat_klines,
+                {
+                    "symbol": "BTCUSDT",
+                    "bidPrice": "100.90",
+                    "bidQty": "1.5",
+                    "askPrice": "101.10",
+                    "askQty": "1.4",
+                },
+            ]
+        )
+    return BinanceSpotLiveMarketDataAdapter(fetch_json=ScriptedFetcher(responses))
+
+
 def _unavailable_live_adapter() -> BinanceSpotLiveMarketDataAdapter:
     return BinanceSpotLiveMarketDataAdapter(
         fetch_json=ScriptedFetcher([RuntimeError("exchange unavailable")])
@@ -411,6 +486,47 @@ def test_live_gate_is_not_ready_when_shadow_evidence_is_missing(tmp_path: Path) 
     assert gate["state"] == "not_ready"
     assert "insufficient_shadow_sessions" in gate["reason_codes"]
     assert "insufficient_shadow_requests" in gate["reason_codes"]
+
+
+def test_live_gate_is_not_ready_for_executed_non_firing_shadow_sessions(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="forward-gate-non-firing-shadow",
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=3,
+        tick_times=[
+            _ts(2026, 4, 5, 12, 2),
+            _ts(2026, 4, 5, 12, 3),
+            _ts(2026, 4, 5, 12, 4),
+        ],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_flat_live_adapter(3),
+        readiness_status=LiveReadinessStatus(
+            runtime_id="forward-gate-non-firing-shadow",
+            updated_at=_ts(2026, 4, 5, 12, 1),
+            status="ready",
+            limited_live_gate_status="ready_for_review",
+        ),
+    )
+
+    gate = json.loads(result.live_gate_decision_path.read_text(encoding="utf-8"))
+    shadow = json.loads(result.shadow_evaluation_path.read_text(encoding="utf-8"))
+
+    assert any(session.session_outcome == "executed" for session in result.session_summaries)
+    assert shadow["shadow_nonzero_request_session_count"] == 0
+    assert shadow["request_count"] == 0
+    assert shadow["would_send_count"] == 0
+    assert gate["state"] == "not_ready"
+    assert "insufficient_shadow_requests" in gate["reason_codes"]
+    assert "insufficient_shadow_nonzero_request_sessions" in gate["reason_codes"]
+    assert "insufficient_shadow_would_send_requests" in gate["reason_codes"]
 
 
 def test_cli_forward_runtime_prints_live_gate_paths(tmp_path: Path, capsys) -> None:
