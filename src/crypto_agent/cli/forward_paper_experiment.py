@@ -23,7 +23,17 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Symbol list, e.g. BTCUSDT ETHUSDT SOLUSDT.",
     )
-    parser.add_argument("--advisory-artifact-path", required=True)
+    parser.add_argument(
+        "--advisory-artifact-path",
+        default=None,
+        help="Shared advisory artifact path used as fallback for all symbols.",
+    )
+    parser.add_argument(
+        "--symbol-advisory",
+        action="append",
+        default=None,
+        help="Per-symbol advisory path mapping in SYMBOL=/path/to/artifact.json format.",
+    )
     parser.add_argument("--binance-base-url", required=True)
     parser.add_argument("--run-id-prefix", required=True)
     parser.add_argument("--output-dir", required=True)
@@ -86,6 +96,33 @@ def _sanitize_token(value: str) -> str:
     if not normalized:
         raise ValueError("forward_paper_experiment_invalid_token")
     return normalized
+
+
+def _parse_symbol_advisory_mapping(raw_values: list[str] | None) -> dict[str, str]:
+    if not raw_values:
+        return {}
+    mapping: dict[str, str] = {}
+    for raw in raw_values:
+        symbol, separator, artifact_path = raw.partition("=")
+        normalized_symbol = symbol.strip().upper()
+        normalized_path = artifact_path.strip()
+        if separator != "=" or not normalized_symbol or not normalized_path:
+            raise ValueError(f"forward_paper_experiment_invalid_symbol_advisory:{raw}")
+        mapping[normalized_symbol] = str(Path(normalized_path).resolve())
+    return mapping
+
+
+def _resolve_advisory_for_symbol(
+    *,
+    symbol: str,
+    per_symbol_mapping: dict[str, str],
+    shared_artifact_path: str | None,
+) -> tuple[str | None, str, bool]:
+    if symbol in per_symbol_mapping:
+        return per_symbol_mapping[symbol], "per_symbol", False
+    if shared_artifact_path is not None:
+        return shared_artifact_path, "shared_fallback", False
+    return None, "none", True
 
 
 def _forward_paper_command(
@@ -182,7 +219,12 @@ def run_advisory_control_experiment(
     comparisons_dir = output_dir / "comparisons"
     comparisons_dir.mkdir(parents=True, exist_ok=True)
     runs_dir = Path(args.runs_dir).resolve()
-    advisory_artifact_path = str(Path(args.advisory_artifact_path).resolve())
+    advisory_artifact_path = (
+        str(Path(args.advisory_artifact_path).resolve())
+        if args.advisory_artifact_path is not None
+        else None
+    )
+    per_symbol_mapping = _parse_symbol_advisory_mapping(args.symbol_advisory)
     symbols = [symbol.strip().upper() for symbol in args.symbols if symbol.strip()]
     if not symbols:
         raise ValueError("forward_paper_experiment_empty_symbol_list")
@@ -194,14 +236,26 @@ def run_advisory_control_experiment(
         advisory_runtime_id = f"{prefix_token}-{symbol_token}-advisory"
         control_runtime_id = f"{prefix_token}-{symbol_token}-control"
 
-        advisory_result = cli_runner(
-            _forward_paper_command(
-                runtime_id=advisory_runtime_id,
-                symbol=symbol,
-                args=args,
-                external_confirmation_path=advisory_artifact_path,
-            )
+        (
+            resolved_advisory_artifact_path,
+            advisory_artifact_resolution,
+            advisory_lane_skipped,
+        ) = _resolve_advisory_for_symbol(
+            symbol=symbol,
+            per_symbol_mapping=per_symbol_mapping,
+            shared_artifact_path=advisory_artifact_path,
         )
+
+        advisory_result: dict[str, Any] | None = None
+        if not advisory_lane_skipped:
+            advisory_result = cli_runner(
+                _forward_paper_command(
+                    runtime_id=advisory_runtime_id,
+                    symbol=symbol,
+                    args=args,
+                    external_confirmation_path=resolved_advisory_artifact_path,
+                )
+            )
         control_result = cli_runner(
             _forward_paper_command(
                 runtime_id=control_runtime_id,
@@ -210,43 +264,72 @@ def run_advisory_control_experiment(
                 external_confirmation_path=None,
             )
         )
-        comparison_result = cli_runner(
-            _forward_paper_compare_command(
-                advisory_runtime_id=advisory_runtime_id,
-                control_runtime_id=control_runtime_id,
-                runs_dir=runs_dir,
-                output_dir=comparisons_dir,
+        comparison_json_path: Path | None = None
+        comparison_report_path: Path | None = None
+        delta: dict[str, Any] = {}
+        advisory_run_payload: dict[str, Any] = {}
+        control_run_payload: dict[str, Any] = {}
+        if not advisory_lane_skipped:
+            comparison_result = cli_runner(
+                _forward_paper_compare_command(
+                    advisory_runtime_id=advisory_runtime_id,
+                    control_runtime_id=control_runtime_id,
+                    runs_dir=runs_dir,
+                    output_dir=comparisons_dir,
+                )
             )
-        )
-
-        comparison_json_path = Path(str(comparison_result["json_path"])).resolve()
-        comparison_report_path = Path(str(comparison_result["report_path"])).resolve()
-        comparison_payload = _load_json_file(comparison_json_path)
-        delta = comparison_payload.get("delta", {})
-        advisory_run_payload = comparison_payload.get("advisory_run", {})
-        control_run_payload = comparison_payload.get("control_run", {})
+            comparison_json_path = Path(str(comparison_result["json_path"])).resolve()
+            comparison_report_path = Path(str(comparison_result["report_path"])).resolve()
+            comparison_payload = _load_json_file(comparison_json_path)
+            delta = comparison_payload.get("delta", {})
+            advisory_run_payload = comparison_payload.get("advisory_run", {})
+            control_run_payload = comparison_payload.get("control_run", {})
 
         rows.append(
             {
                 "symbol": symbol,
                 "advisory_runtime_id": advisory_runtime_id,
                 "control_runtime_id": control_runtime_id,
-                "advisory_status_path": advisory_result.get("status_path"),
+                "advisory_artifact_path_used": resolved_advisory_artifact_path,
+                "advisory_artifact_resolution": advisory_artifact_resolution,
+                "advisory_lane_skipped": advisory_lane_skipped,
+                "advisory_skip_reason": (
+                    "no_symbol_or_shared_advisory_artifact" if advisory_lane_skipped else None
+                ),
+                "advisory_status_path": advisory_result.get("status_path")
+                if advisory_result is not None
+                else None,
                 "control_status_path": control_result.get("status_path"),
-                "comparison_json_path": str(comparison_json_path),
-                "comparison_report_path": str(comparison_report_path),
-                "proposal_count_delta": int(delta.get("proposal_count", 0)),
-                "event_count_delta": int(delta.get("event_count", 0)),
-                "execution_request_count_delta": int(delta.get("execution_request_count", 0)),
+                "comparison_json_path": str(comparison_json_path)
+                if comparison_json_path is not None
+                else None,
+                "comparison_report_path": str(comparison_report_path)
+                if comparison_report_path is not None
+                else None,
+                "proposal_count_delta": int(delta.get("proposal_count", 0))
+                if not advisory_lane_skipped
+                else None,
+                "event_count_delta": int(delta.get("event_count", 0))
+                if not advisory_lane_skipped
+                else None,
+                "execution_request_count_delta": int(delta.get("execution_request_count", 0))
+                if not advisory_lane_skipped
+                else None,
                 "advisory_marker_presence": advisory_run_payload.get(
                     "advisory_decision_marker_presence"
-                ),
+                )
+                if not advisory_lane_skipped
+                else "skipped",
                 "advisory_session_outcome_counts": advisory_run_payload.get(
                     "session_outcome_counts", {}
-                ),
+                )
+                if not advisory_lane_skipped
+                else {},
                 "control_session_outcome_counts": control_run_payload.get(
                     "session_outcome_counts", {}
-                ),
+                )
+                if not advisory_lane_skipped
+                else {},
             }
         )
 
@@ -255,6 +338,7 @@ def run_advisory_control_experiment(
         "generated_at": datetime.now(UTC).isoformat(),
         "run_id_prefix": args.run_id_prefix,
         "advisory_artifact_path": advisory_artifact_path,
+        "symbol_advisory_mapping": per_symbol_mapping,
         "binance_base_url": args.binance_base_url,
         "execution_mode": args.execution_mode,
         "session_interval_seconds": args.session_interval_seconds,
@@ -274,6 +358,10 @@ def _render_index_markdown(payload: dict[str, Any]) -> str:
         "# Forward-Paper Advisory vs Control Experiment Index",
         f"- run_id_prefix: `{payload['run_id_prefix']}`",
         f"- advisory_artifact_path: `{payload['advisory_artifact_path']}`",
+        (
+            "- symbol_advisory_mapping: "
+            f"`{json.dumps(payload['symbol_advisory_mapping'], sort_keys=True)}`"
+        ),
         f"- binance_base_url: `{payload['binance_base_url']}`",
         f"- execution_mode: `{payload['execution_mode']}`",
         f"- session_interval_seconds: {payload['session_interval_seconds']}",
@@ -287,6 +375,10 @@ def _render_index_markdown(payload: dict[str, Any]) -> str:
                 f"## {row['symbol']}",
                 f"- advisory_runtime_id: `{row['advisory_runtime_id']}`",
                 f"- control_runtime_id: `{row['control_runtime_id']}`",
+                f"- advisory_artifact_path_used: `{row['advisory_artifact_path_used']}`",
+                f"- advisory_artifact_resolution: `{row['advisory_artifact_resolution']}`",
+                f"- advisory_lane_skipped: {row['advisory_lane_skipped']}",
+                f"- advisory_skip_reason: `{row['advisory_skip_reason']}`",
                 f"- comparison_report_path: `{row['comparison_report_path']}`",
                 f"- comparison_json_path: `{row['comparison_json_path']}`",
                 f"- proposal_count_delta: {row['proposal_count_delta']}",

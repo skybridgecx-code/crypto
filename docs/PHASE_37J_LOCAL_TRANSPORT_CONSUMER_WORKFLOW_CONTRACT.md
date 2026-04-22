@@ -147,7 +147,10 @@ Repeatable multi-symbol advisory/control experiment command:
 ```bash
 python -m crypto_agent.cli.forward_paper_experiment \
   --symbols BTCUSDT ETHUSDT SOLUSDT \
-  --advisory-artifact-path /absolute/path/external_confirmation.json \
+  --symbol-advisory BTCUSDT=/absolute/path/btc_external_confirmation.json \
+  --symbol-advisory ETHUSDT=/absolute/path/eth_external_confirmation.json \
+  --symbol-advisory SOLUSDT=/absolute/path/sol_external_confirmation.json \
+  --advisory-artifact-path /absolute/path/shared_fallback_external_confirmation.json \
   --binance-base-url https://api.binance.us \
   --run-id-prefix omega-us-phase37j \
   --session-interval-seconds 60 \
