@@ -21,6 +21,7 @@ from crypto_agent.runtime.models import (
 from crypto_agent.runtime.session_registry import upsert_forward_paper_registry_entry
 
 FIXTURES_DIR = Path("tests/fixtures")
+SNAPSHOTS_DIR = FIXTURES_DIR / "snapshots"
 _FORWARD_RUNTIME_INDEX_FIELDS: tuple[str, ...] = (
     "runtime_id",
     "status_path",
@@ -52,6 +53,29 @@ _FORWARD_RUNTIME_INDEX_FIELDS: tuple[str, ...] = (
     "live_transmission_result_path",
     "live_approval_state_path",
 )
+
+
+def _load_snapshot(snapshot_name: str) -> dict[str, object]:
+    return json.loads((SNAPSHOTS_DIR / snapshot_name).read_text(encoding="utf-8"))
+
+
+def _normalize_runtime_index_snapshot(
+    payload: dict[str, object],
+    *,
+    runs_dir: Path,
+) -> dict[str, object]:
+    normalized: dict[str, object] = {}
+    for field in _FORWARD_RUNTIME_INDEX_FIELDS:
+        value = payload[field]
+        if field == "runtime_id":
+            normalized[field] = value
+            continue
+        if value is None:
+            normalized[field] = None
+            continue
+        path_value = Path(str(value))
+        normalized[field] = str(path_value.relative_to(runs_dir))
+    return normalized
 
 
 def _paper_settings_for(tmp_path: Path):
@@ -187,6 +211,25 @@ def test_forward_paper_runtime_runs_repeated_sessions_and_persists_status(
     assert result.session_summaries[1].pnl.starting_equity_usd == pytest.approx(
         result.session_summaries[0].pnl.ending_equity_usd
     )
+
+
+def test_forward_runtime_status_index_snapshot(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    runtime_id = "forward-runtime-index-snapshot"
+    result = run_forward_paper_runtime(
+        FIXTURES_DIR / "paper_candles_breakout_long.jsonl",
+        settings=settings,
+        runtime_id=runtime_id,
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[_tick(2026, 4, 5, 15, 0)],
+    )
+    status_payload = json.loads(result.status_path.read_text(encoding="utf-8"))
+    normalized_index = _normalize_runtime_index_snapshot(
+        status_payload,
+        runs_dir=settings.paths.runs_dir,
+    )
+    assert normalized_index == _load_snapshot("forward_runtime_status_index.snapshot.json")
 
 
 def test_forward_paper_runtime_recovers_interrupted_session_on_restart(

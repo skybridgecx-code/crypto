@@ -393,3 +393,10 @@ Phase L2Q adds deterministic regression snapshot coverage for `live_gate_config.
 
 Closeout doc:
 - `docs/PHASE_L2Q_LIVE_GATE_CONFIG_REGRESSION_SNAPSHOTS.md`
+
+## Phase L2R — Runtime status index regression snapshot
+
+Phase L2R adds deterministic snapshot coverage for canonical `forward_paper_status.json` index fields, including `live_gate_config_path`, to prevent operator-surface path drift.
+
+Closeout doc:
+- `docs/PHASE_L2R_RUNTIME_STATUS_INDEX_REGRESSION_SNAPSHOT.md`
