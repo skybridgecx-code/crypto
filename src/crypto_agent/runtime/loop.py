@@ -2602,6 +2602,7 @@ def run_forward_paper_runtime(
     live_control_config: LiveControlConfig | None = None,
     readiness_status: LiveReadinessStatus | None = None,
     manual_control_state: ManualControlState | None = None,
+    external_confirmation_path: str | Path | None = None,
 ) -> ForwardPaperRuntimeResult:
     replay_fixture_path = Path(replay_path) if replay_path is not None else None
     scheduled_ticks = (
@@ -2770,6 +2771,7 @@ def run_forward_paper_runtime(
                     run_id=run_id,
                     equity_usd=account_state.ending_equity_usd,
                     starting_portfolio=account_state.to_portfolio_state(),
+                    external_confirmation_path=external_confirmation_path,
                 )
                 replay_session = running_session
                 if sandbox_fixture_rehearsal and execution_mode == "sandbox":
@@ -2936,6 +2938,7 @@ def run_forward_paper_runtime(
                         run_id=run_id,
                         equity_usd=account_state.ending_equity_usd,
                         starting_portfolio=account_state.to_portfolio_state(),
+                        external_confirmation_path=external_confirmation_path,
                     )
                     completed_at = _normalize_datetime(now_fn())
                     completed_session = _completed_session_summary(

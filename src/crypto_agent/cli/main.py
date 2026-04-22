@@ -21,6 +21,11 @@ from crypto_agent.events.journal import (
     build_review_packet,
 )
 from crypto_agent.execution.router import ExecutionRouter
+from crypto_agent.external_signals.loader import (
+    apply_external_confirmation_to_proposal,
+    load_external_confirmation_artifact,
+)
+from crypto_agent.external_signals.models import ExternalConfirmationDecision
 from crypto_agent.features.pipeline import build_feature_snapshot
 from crypto_agent.ids import new_id
 from crypto_agent.market_data.replay import assess_candle_quality, load_candle_replay
@@ -89,6 +94,24 @@ def _alert_events(
         )
         for alert in alerts
     ]
+
+
+def _external_confirmation_event(
+    *,
+    run_id: str,
+    proposal: TradeProposal,
+    settings: Settings,
+    decision: ExternalConfirmationDecision,
+) -> EventEnvelope:
+    return EventEnvelope(
+        event_type=EventType.ALERT_RAISED,
+        source="external_confirmation",
+        run_id=run_id,
+        strategy_id=proposal.strategy_id,
+        symbol=proposal.symbol,
+        mode=settings.mode,
+        payload=decision.model_dump(mode="json"),
+    )
 
 
 def _kill_switch_event(
@@ -473,6 +496,7 @@ def run_paper_replay(
     starting_portfolio: PortfolioState | None = None,
     journal_path: str | Path | None = None,
     run_dir: str | Path | None = None,
+    external_confirmation_path: str | Path | None = None,
 ) -> PaperRunResult:
     if settings.mode is not Mode.PAPER:
         raise ValueError("Paper replay harness requires settings.mode to be paper.")
@@ -525,6 +549,8 @@ def run_paper_replay(
     execution_router = ExecutionRouter()
     breakout_config = BreakoutSignalConfig()
     mean_reversion_config = MeanReversionSignalConfig()
+    external_confirmation = load_external_confirmation_artifact(external_confirmation_path)
+    external_confirmation_decisions: list[ExternalConfirmationDecision] = []
 
     for candle_index in range(1, len(candles) + 1):
         candle_window = candles[:candle_index]
@@ -563,8 +589,31 @@ def run_paper_replay(
                 proposals.append(mean_reversion_proposal)
 
         for proposal in proposals:
+            proposal_for_evaluation: TradeProposal | None = proposal
+            if external_confirmation is not None:
+                proposal_for_evaluation, confirmation_decision = (
+                    apply_external_confirmation_to_proposal(
+                        proposal=proposal,
+                        artifact=external_confirmation,
+                    )
+                )
+                external_confirmation_decisions.append(confirmation_decision)
+                journal.append(
+                    _external_confirmation_event(
+                        run_id=resolved_run_id,
+                        proposal=proposal,
+                        settings=settings,
+                        decision=confirmation_decision,
+                    )
+                )
+                if proposal_for_evaluation is None:
+                    continue
+            if proposal_for_evaluation is None:
+                continue
+            evaluated_proposal = proposal_for_evaluation
+
             risk_result = evaluate_trade_proposal(
-                proposal,
+                evaluated_proposal,
                 portfolio,
                 settings,
                 kill_switch_context=kill_switch_context,
@@ -573,15 +622,15 @@ def run_paper_replay(
             if risk_result.decision.action is PolicyAction.ALLOW:
                 report = execution_router.execute(risk_result)
                 journal.append_many(
-                    build_execution_events(resolved_run_id, proposal, risk_result, report)
+                    build_execution_events(resolved_run_id, evaluated_proposal, risk_result, report)
                 )
                 alerts = generate_execution_alerts(report)
                 journal.append_many(
                     _alert_events(
                         alerts,
                         run_id=resolved_run_id,
-                        strategy_id=proposal.strategy_id,
-                        symbol=proposal.symbol,
+                        strategy_id=evaluated_proposal.strategy_id,
+                        symbol=evaluated_proposal.symbol,
                         mode=settings.mode,
                     )
                 )
@@ -595,7 +644,9 @@ def run_paper_replay(
                     portfolio = _apply_execution_to_portfolio(portfolio, report.fills)
                 continue
 
-            journal.append_many(build_execution_events(resolved_run_id, proposal, risk_result))
+            journal.append_many(
+                build_execution_events(resolved_run_id, evaluated_proposal, risk_result)
+            )
             if (
                 risk_result.decision.action is PolicyAction.HALT
                 and "kill_switch_active" in risk_result.decision.reason_codes
@@ -608,7 +659,7 @@ def run_paper_replay(
                 journal.append(
                     _kill_switch_event(
                         run_id=resolved_run_id,
-                        proposal=proposal,
+                        proposal=evaluated_proposal,
                         settings=settings,
                         reason_codes=kill_reason_codes,
                     )
@@ -622,8 +673,8 @@ def run_paper_replay(
                     _alert_events(
                         kill_switch_alerts,
                         run_id=resolved_run_id,
-                        strategy_id=proposal.strategy_id,
-                        symbol=proposal.symbol,
+                        strategy_id=evaluated_proposal.strategy_id,
+                        symbol=evaluated_proposal.symbol,
                         mode=settings.mode,
                     )
                 )
@@ -661,6 +712,19 @@ def run_paper_replay(
         "review_packet": review_packet,
         "operator_summary": operator_summary,
     }
+    if external_confirmation_path is not None:
+        summary["external_confirmation"] = {
+            "artifact_path": str(Path(external_confirmation_path).resolve()),
+            "artifact_loaded": external_confirmation is not None,
+            "source_system": external_confirmation.source_system
+            if external_confirmation is not None
+            else None,
+            "asset": external_confirmation.asset if external_confirmation is not None else None,
+            "decision_count": len(external_confirmation_decisions),
+            "decision_status_counts": dict(
+                Counter(decision.status for decision in external_confirmation_decisions)
+            ),
+        }
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
     trade_ledger_path.write_text(
         json.dumps(trade_ledger.model_dump(mode="json"), indent=2, sort_keys=True),

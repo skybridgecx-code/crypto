@@ -108,3 +108,21 @@ This Phase 37J consumer contract does not introduce:
 - replacement of existing `cryp` runtime guardrails
 
 This document aligns local intake boundary behavior only.
+
+## Advisory External Confirmation (Forward-Paper Only)
+
+Optional advisory context can be provided to forward-paper evaluation without changing
+transport contract shape and without authoring executable trade parameters:
+
+```bash
+python -m crypto_agent.cli.forward_paper tests/fixtures/paper_candles_breakout_long.jsonl \
+  --runtime-id phase-37j-advisory-demo \
+  --execution-mode paper \
+  --external-confirmation-path /absolute/path/external_confirmation.json
+```
+
+Deterministic advisory-proof command (proposal-level, no live/replay dependency):
+
+```bash
+pytest -q tests/unit/test_external_confirmation_deterministic_proof.py
+```

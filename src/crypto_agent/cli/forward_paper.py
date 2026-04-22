@@ -217,6 +217,15 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--external-confirmation-path",
+        default=None,
+        help=(
+            "Optional advisory external confirmation artifact path. "
+            "This input can adjust confidence or veto proposals only; it cannot author "
+            "entry/stop/take-profit fields."
+        ),
+    )
+    parser.add_argument(
         "--live-market-poll-retry-count",
         type=int,
         default=2,
@@ -441,6 +450,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         sandbox_execution_adapter=(
             _build_cli_sandbox_execution_adapter() if args.execution_mode == "sandbox" else None
         ),
+        external_confirmation_path=args.external_confirmation_path,
     )
     print(
         json.dumps(
