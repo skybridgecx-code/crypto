@@ -400,3 +400,10 @@ Phase L2R adds deterministic snapshot coverage for canonical `forward_paper_stat
 
 Closeout doc:
 - `docs/PHASE_L2R_RUNTIME_STATUS_INDEX_REGRESSION_SNAPSHOT.md`
+
+## Phase L2S — Runtime registry entry regression snapshot
+
+Phase L2S adds deterministic snapshot coverage for canonical `forward_paper_registry.json` runtime entry path fields, including `live_gate_config_path`, to prevent status/registry surface drift.
+
+Closeout doc:
+- `docs/PHASE_L2S_RUNTIME_REGISTRY_ENTRY_REGRESSION_SNAPSHOT.md`

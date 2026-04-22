@@ -53,6 +53,36 @@ _FORWARD_RUNTIME_INDEX_FIELDS: tuple[str, ...] = (
     "live_transmission_result_path",
     "live_approval_state_path",
 )
+_FORWARD_RUNTIME_REGISTRY_PATH_FIELDS: tuple[str, ...] = (
+    "runtime_id",
+    "runtime_dir",
+    "status_path",
+    "history_path",
+    "sessions_dir",
+    "live_market_status_path",
+    "venue_constraints_path",
+    "account_state_path",
+    "reconciliation_report_path",
+    "recovery_status_path",
+    "execution_state_dir",
+    "live_control_config_path",
+    "live_control_status_path",
+    "readiness_status_path",
+    "manual_control_state_path",
+    "shadow_canary_evaluation_path",
+    "soak_evaluation_path",
+    "shadow_evaluation_path",
+    "live_gate_config_path",
+    "live_gate_decision_path",
+    "live_gate_threshold_summary_path",
+    "live_gate_report_path",
+    "live_launch_verdict_path",
+    "live_authority_state_path",
+    "live_launch_window_path",
+    "live_transmission_decision_path",
+    "live_transmission_result_path",
+    "live_approval_state_path",
+)
 
 
 def _load_snapshot(snapshot_name: str) -> dict[str, object]:
@@ -66,6 +96,25 @@ def _normalize_runtime_index_snapshot(
 ) -> dict[str, object]:
     normalized: dict[str, object] = {}
     for field in _FORWARD_RUNTIME_INDEX_FIELDS:
+        value = payload[field]
+        if field == "runtime_id":
+            normalized[field] = value
+            continue
+        if value is None:
+            normalized[field] = None
+            continue
+        path_value = Path(str(value))
+        normalized[field] = str(path_value.relative_to(runs_dir))
+    return normalized
+
+
+def _normalize_runtime_registry_entry_snapshot(
+    payload: dict[str, object],
+    *,
+    runs_dir: Path,
+) -> dict[str, object]:
+    normalized: dict[str, object] = {}
+    for field in _FORWARD_RUNTIME_REGISTRY_PATH_FIELDS:
         value = payload[field]
         if field == "runtime_id":
             normalized[field] = value
@@ -230,6 +279,26 @@ def test_forward_runtime_status_index_snapshot(tmp_path: Path) -> None:
         runs_dir=settings.paths.runs_dir,
     )
     assert normalized_index == _load_snapshot("forward_runtime_status_index.snapshot.json")
+
+
+def test_forward_runtime_registry_entry_snapshot(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    runtime_id = "forward-runtime-registry-snapshot"
+    result = run_forward_paper_runtime(
+        FIXTURES_DIR / "paper_candles_breakout_long.jsonl",
+        settings=settings,
+        runtime_id=runtime_id,
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[_tick(2026, 4, 5, 15, 1)],
+    )
+    registry_payload = json.loads(result.registry_path.read_text(encoding="utf-8"))
+    assert registry_payload["runtime_count"] == 1
+    normalized_entry = _normalize_runtime_registry_entry_snapshot(
+        registry_payload["runtimes"][0],
+        runs_dir=settings.paths.runs_dir,
+    )
+    assert normalized_entry == _load_snapshot("forward_runtime_registry_entry.snapshot.json")
 
 
 def test_forward_paper_runtime_recovers_interrupted_session_on_restart(
