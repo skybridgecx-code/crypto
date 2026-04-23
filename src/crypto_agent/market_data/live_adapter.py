@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-import base64
 import json
 import os
-import subprocess
-import tempfile
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-from uuid import uuid4
 
 from crypto_agent.market_data.live_models import LiveFeedHealth, LiveMarketState
 from crypto_agent.market_data.models import BookLevel, Candle, OrderBookSnapshot
@@ -32,53 +28,19 @@ def _to_millis(value: datetime) -> int:
     return int(value.timestamp() * 1000)
 
 
+def _from_epoch(value: int) -> datetime:
+    # Coinbase may return epoch seconds (documented) while older fixtures may use millis.
+    if value >= 1_000_000_000_000:
+        return _from_millis(value)
+    return datetime.fromtimestamp(value, tz=UTC)
+
+
+def _to_epoch_seconds(value: datetime) -> int:
+    return int(value.timestamp())
+
+
 class LiveMarketDataUnavailableError(RuntimeError):
     pass
-
-
-def _base64url(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
-
-def _decode_der_integer(content: bytes, index: int) -> tuple[bytes, int]:
-    if index >= len(content) or content[index] != 0x02:
-        raise ValueError("expected ASN.1 INTEGER")
-    index += 1
-    if index >= len(content):
-        raise ValueError("missing INTEGER length")
-    length = content[index]
-    index += 1
-    if index + length > len(content):
-        raise ValueError("INTEGER length exceeds payload")
-    value = content[index : index + length]
-    index += length
-    while len(value) > 1 and value[0] == 0:
-        value = value[1:]
-    if len(value) > 32:
-        raise ValueError("INTEGER too large for ES256")
-    return value.rjust(32, b"\x00"), index
-
-
-def _der_signature_to_jose(der: bytes) -> bytes:
-    if len(der) < 2 or der[0] != 0x30:
-        raise ValueError("invalid DER ECDSA signature")
-    index = 1
-    sequence_length = der[index]
-    index += 1
-    if sequence_length & 0x80:
-        length_bytes = sequence_length & 0x7F
-        if length_bytes == 0 or index + length_bytes > len(der):
-            raise ValueError("invalid DER sequence length")
-        sequence_length = int.from_bytes(der[index : index + length_bytes], "big")
-        index += length_bytes
-    if index + sequence_length != len(der):
-        raise ValueError("invalid DER sequence payload length")
-    sequence = der[index:]
-    r, next_index = _decode_der_integer(sequence, 0)
-    s, terminal_index = _decode_der_integer(sequence, next_index)
-    if terminal_index != len(sequence):
-        raise ValueError("unexpected DER payload trailing bytes")
-    return r + s
 
 
 class BinanceSpotLiveMarketDataAdapter:
@@ -318,13 +280,13 @@ class BinanceSpotLiveMarketDataAdapter:
 
 
 class CoinbaseSpotLiveMarketDataAdapter:
-    _GRANULARITY_SECONDS: dict[str, int] = {
-        "1m": 60,
-        "5m": 300,
-        "15m": 900,
-        "1h": 3600,
-        "6h": 21600,
-        "1d": 86400,
+    _GRANULARITY: dict[str, tuple[int, str]] = {
+        "1m": (60, "ONE_MINUTE"),
+        "5m": (300, "FIVE_MINUTE"),
+        "15m": (900, "FIFTEEN_MINUTE"),
+        "1h": (3600, "ONE_HOUR"),
+        "6h": (21600, "SIX_HOUR"),
+        "1d": (86400, "ONE_DAY"),
     }
 
     def __init__(
@@ -334,11 +296,15 @@ class CoinbaseSpotLiveMarketDataAdapter:
         timeout_seconds: float = 5.0,
         fetch_json: Callable[..., Any] | None = None,
         jwt_token_factory: Callable[[str, str, datetime], str] | None = None,
+        sdk_format_uri: Callable[[str, str], str] | None = None,
+        sdk_build_rest_jwt: Callable[[str, str, str], str] | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self._fetch_json = fetch_json or self._default_fetch_json
         self._jwt_token_factory = jwt_token_factory
+        self._sdk_format_uri = sdk_format_uri
+        self._sdk_build_rest_jwt = sdk_build_rest_jwt
         self._constraints_by_symbol: dict[str, VenueSymbolConstraints] = {}
         self._last_market_state: dict[tuple[str, str], LiveMarketState] = {}
         self._last_success_at: dict[tuple[str, str], datetime] = {}
@@ -396,6 +362,7 @@ class CoinbaseSpotLiveMarketDataAdapter:
     ) -> str:
         if self._jwt_token_factory is not None:
             return self._jwt_token_factory(method, endpoint, now)
+        _ = now
         key_name = os.environ.get("COINBASE_API_KEY_NAME")
         key_secret = os.environ.get("COINBASE_API_KEY_SECRET")
         if key_name is None or not key_name.strip():
@@ -407,61 +374,34 @@ class CoinbaseSpotLiveMarketDataAdapter:
                 "coinbase_auth_config_error: COINBASE_API_KEY_SECRET is required for coinbase_spot."
             )
         normalized_secret = key_secret.replace("\\n", "\n")
-        now_epoch = int(now.timestamp())
-        header = {
-            "alg": "ES256",
-            "typ": "JWT",
-            "kid": key_name,
-        }
-        issuer_host = self.base_url.replace("https://", "").replace("http://", "")
-        payload = {
-            "sub": key_name,
-            "iss": "cdp",
-            "nbf": now_epoch,
-            "exp": now_epoch + 120,
-            "uri": f"{method} {issuer_host}{endpoint}",
-            "jti": uuid4().hex,
-        }
-        encoded_header = _base64url(
-            json.dumps(header, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        )
-        encoded_payload = _base64url(
-            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        )
-        signing_input = (f"{encoded_header}.{encoded_payload}").encode("ascii")
-        signature = self._sign_es256(
-            signing_input=signing_input,
-            private_key_pem=normalized_secret,
-        )
-        return f"{signing_input.decode('ascii')}.{_base64url(signature)}"
-
-    def _sign_es256(
-        self,
-        *,
-        signing_input: bytes,
-        private_key_pem: str,
-    ) -> bytes:
-        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=True) as key_file:
-            key_file.write(private_key_pem)
-            key_file.flush()
-            completed = subprocess.run(
-                ["openssl", "dgst", "-sha256", "-sign", key_file.name],
-                input=signing_input,
-                capture_output=True,
-                check=False,
-            )
-        if completed.returncode != 0:
-            stderr = completed.stderr.decode("utf-8", errors="replace").strip()
+        format_uri, build_rest_jwt = self._resolve_coinbase_sdk_jwt_functions()
+        try:
+            uri = format_uri(method, endpoint)
+            token = build_rest_jwt(uri, key_name, normalized_secret)
+        except Exception as exc:
             raise LiveMarketDataUnavailableError(
                 "coinbase_auth_signing_error: failed to sign JWT for coinbase_spot."
-                + (f" openssl_error={stderr}" if stderr else "")
-            )
-        try:
-            return _der_signature_to_jose(completed.stdout)
-        except ValueError as exc:
-            raise LiveMarketDataUnavailableError(
-                "coinbase_auth_signing_error: invalid ES256 signature format."
             ) from exc
+        if isinstance(token, bytes):
+            return token.decode("utf-8")
+        return str(token)
+
+    def _resolve_coinbase_sdk_jwt_functions(
+        self,
+    ) -> tuple[Callable[[str, str], str], Callable[[str, str, str], str]]:
+        if self._sdk_format_uri is not None and self._sdk_build_rest_jwt is not None:
+            return self._sdk_format_uri, self._sdk_build_rest_jwt
+        try:
+            from coinbase.jwt_generator import (  # type: ignore[import-not-found]
+                build_rest_jwt,
+                format_jwt_uri,
+            )
+        except ModuleNotFoundError as exc:
+            raise LiveMarketDataUnavailableError(
+                "coinbase_auth_dependency_error: coinbase-advanced-py is required "
+                "for coinbase_spot JWT generation."
+            ) from exc
+        return format_jwt_uri, build_rest_jwt
 
     def load_venue_constraints(
         self,
@@ -547,16 +487,16 @@ class CoinbaseSpotLiveMarketDataAdapter:
             registry = self.load_venue_constraints(symbol=symbol, now=observed_at)
             constraints = registry.symbol_constraints[0]
             normalized_symbol = constraints.symbol
-            granularity_seconds = self._interval_to_granularity(interval)
+            granularity_seconds, granularity_label = self._interval_to_granularity(interval)
             candles_payload = self._fetch_authenticated_json(
                 endpoint=f"/api/v3/brokerage/products/{product_id}/candles",
                 params={
                     "start": str(
-                        _to_millis(observed_at)
-                        - ((lookback_candles + 1) * granularity_seconds * 1000)
+                        _to_epoch_seconds(observed_at)
+                        - ((lookback_candles + 1) * granularity_seconds)
                     ),
-                    "end": str(_to_millis(observed_at)),
-                    "granularity": str(granularity_seconds),
+                    "end": str(_to_epoch_seconds(observed_at)),
+                    "granularity": granularity_label,
                 },
                 now=observed_at,
             )
@@ -671,7 +611,7 @@ class CoinbaseSpotLiveMarketDataAdapter:
             assert low_price is not None
             assert close_price is not None
             assert volume is not None
-            open_time = _from_millis(int(start))
+            open_time = _from_epoch(int(start))
             close_time = open_time + self._interval_delta(interval)
             candle = Candle(
                 venue=self.name,
@@ -729,9 +669,9 @@ class CoinbaseSpotLiveMarketDataAdapter:
             "or a recognized base+quote pair."
         )
 
-    def _interval_to_granularity(self, interval: str) -> int:
+    def _interval_to_granularity(self, interval: str) -> tuple[int, str]:
         normalized_interval = interval.strip().lower()
-        granularity = self._GRANULARITY_SECONDS.get(normalized_interval)
+        granularity = self._GRANULARITY.get(normalized_interval)
         if granularity is None:
             raise LiveMarketDataUnavailableError(
                 f"Unsupported Coinbase candle interval: {interval}"
@@ -739,7 +679,8 @@ class CoinbaseSpotLiveMarketDataAdapter:
         return granularity
 
     def _interval_delta(self, interval: str) -> timedelta:
-        return timedelta(seconds=self._interval_to_granularity(interval))
+        granularity_seconds, _ = self._interval_to_granularity(interval)
+        return timedelta(seconds=granularity_seconds)
 
     def _as_positive_float(self, value: Any, label: str) -> float:
         resolved = float(value)

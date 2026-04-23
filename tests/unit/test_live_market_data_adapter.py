@@ -558,9 +558,9 @@ def test_coinbase_spot_live_adapter_returns_normalized_market_state() -> None:
         (
             "/api/v3/brokerage/products/BTC-USD/candles",
             {
-                "start": str(_millis(2026, 4, 5, 12, 0)),
-                "end": str(_millis(2026, 4, 5, 12, 4)),
-                "granularity": "60",
+                "start": str(int(_ts(2026, 4, 5, 12, 0).timestamp())),
+                "end": str(int(_ts(2026, 4, 5, 12, 4).timestamp())),
+                "granularity": "ONE_MINUTE",
             },
             {
                 "Authorization": "Bearer test-token",
@@ -653,3 +653,111 @@ def test_coinbase_spot_live_adapter_requires_auth_env_by_default(
             stale_after_seconds=120,
             now=_ts(2026, 4, 5, 12, 3),
         )
+
+
+def test_coinbase_spot_auth_header_uses_official_sdk_jwt_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "COINBASE_API_KEY_NAME",
+        "organizations/test-org/apiKeys/test-key",
+    )
+    monkeypatch.setenv(
+        "COINBASE_API_KEY_SECRET",
+        "-----BEGIN EC PRIVATE KEY-----\\nabc\\n-----END EC PRIVATE KEY-----",
+    )
+    recorded: dict[str, str] = {}
+
+    def _format_uri(method: str, path: str) -> str:
+        recorded["method"] = method
+        recorded["path"] = path
+        return f"{method} api.coinbase.com{path}"
+
+    def _build_rest_jwt(uri: str, key_var: str, secret_var: str) -> str:
+        recorded["uri"] = uri
+        recorded["key_var"] = key_var
+        recorded["secret_var"] = secret_var
+        return "sdk-token"
+
+    adapter = CoinbaseSpotLiveMarketDataAdapter(
+        sdk_format_uri=_format_uri,
+        sdk_build_rest_jwt=_build_rest_jwt,
+    )
+
+    headers = adapter._auth_headers(
+        method="GET",
+        endpoint="/api/v3/brokerage/products/BTC-USD",
+        now=_ts(2026, 4, 5, 12, 3),
+    )
+
+    assert headers["Authorization"] == "Bearer sdk-token"
+    assert headers["Content-Type"] == "application/json"
+    assert recorded["method"] == "GET"
+    assert recorded["path"] == "/api/v3/brokerage/products/BTC-USD"
+    assert recorded["uri"] == "GET api.coinbase.com/api/v3/brokerage/products/BTC-USD"
+    assert recorded["key_var"] == "organizations/test-org/apiKeys/test-key"
+    assert "BEGIN EC PRIVATE KEY" in recorded["secret_var"]
+
+
+def test_coinbase_spot_candle_request_uses_required_params_for_5m_interval() -> None:
+    fetcher = ScriptedFetcher(
+        [
+            _coinbase_product(),
+            {
+                "candles": [
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 11, 45),
+                        open_price="100.0",
+                        high_price="101.0",
+                        low_price="99.5",
+                        close_price="100.5",
+                        volume="1000",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 11, 50),
+                        open_price="100.5",
+                        high_price="101.5",
+                        low_price="100.2",
+                        close_price="101.0",
+                        volume="1001",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 11, 55),
+                        open_price="101.0",
+                        high_price="101.8",
+                        low_price="100.8",
+                        close_price="101.5",
+                        volume="1002",
+                    ),
+                ]
+            },
+            {
+                "pricebook": {
+                    "bids": [{"price": "101.80"}],
+                    "asks": [{"price": "101.90"}],
+                }
+            },
+        ]
+    )
+    adapter = CoinbaseSpotLiveMarketDataAdapter(
+        fetch_json=fetcher,
+        jwt_token_factory=lambda _method, _endpoint, _now: "test-token",
+    )
+
+    now = _ts(2026, 4, 5, 12, 0)
+    adapter.poll_market_state(
+        symbol="BTC-USD",
+        interval="5m",
+        lookback_candles=2,
+        stale_after_seconds=300,
+        now=now,
+    )
+
+    candles_call = fetcher.calls[1]
+    assert candles_call[0] == "/api/v3/brokerage/products/BTC-USD/candles"
+    assert candles_call[1]["start"] == str(int(now.timestamp()) - (3 * 300))
+    assert candles_call[1]["end"] == str(int(now.timestamp()))
+    assert candles_call[1]["granularity"] == "FIVE_MINUTE"
+    product_book_call = fetcher.calls[2]
+    assert product_book_call[0] == "/api/v3/brokerage/product_book"
+    assert product_book_call[1]["product_id"] == "BTC-USD"
