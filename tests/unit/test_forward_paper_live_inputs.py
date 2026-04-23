@@ -979,3 +979,101 @@ def test_forward_paper_runtime_coinbase_live_mode_executes_healthy_session(
     assert market_state["venue"] == "coinbase_spot"
     assert market_state["symbol"] == "BTCUSD"
     assert status.venue_constraints_ready is True
+
+
+def test_forward_paper_runtime_coinbase_symbol_allowlist_accepts_product_notation(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    fetcher = ScriptedFetcher(
+        [
+            _coinbase_product(),
+            {
+                "candles": [
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 13, 55),
+                        open_price="100.0",
+                        high_price="101.0",
+                        low_price="99.5",
+                        close_price="100.5",
+                        volume="1000",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 13, 56),
+                        open_price="100.5",
+                        high_price="101.5",
+                        low_price="100.0",
+                        close_price="101.0",
+                        volume="1001",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 13, 57),
+                        open_price="101.0",
+                        high_price="102.0",
+                        low_price="100.7",
+                        close_price="101.5",
+                        volume="1002",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 13, 58),
+                        open_price="101.5",
+                        high_price="102.3",
+                        low_price="101.2",
+                        close_price="102.1",
+                        volume="1003",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 13, 59),
+                        open_price="102.1",
+                        high_price="103.2",
+                        low_price="101.9",
+                        close_price="103.0",
+                        volume="1004",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 14, 0),
+                        open_price="103.0",
+                        high_price="104.0",
+                        low_price="102.8",
+                        close_price="103.8",
+                        volume="1005",
+                    ),
+                ]
+            },
+            {
+                "pricebook": {
+                    "bids": [{"price": "103.70"}],
+                    "asks": [{"price": "103.80"}],
+                }
+            },
+        ]
+    )
+    adapter = CoinbaseSpotLiveMarketDataAdapter(
+        fetch_json=fetcher,
+        jwt_token_factory=lambda _method, _endpoint, _now: "test-token",
+    )
+    controls = default_live_control_config(
+        runtime_id="forward-live-coinbase-symbol-allowlist",
+        settings=settings,
+        updated_at=_ts(2026, 4, 5, 14, 1),
+    ).model_copy(update={"symbol_allowlist": ["BTC-USD"]})
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="forward-live-coinbase-symbol-allowlist",
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 5, 14, 1)],
+        market_source="coinbase_spot",
+        live_symbol="BTC-USD",
+        live_interval="1m",
+        live_lookback_candles=5,
+        feed_stale_after_seconds=120,
+        live_adapter=adapter,
+        live_control_config=controls,
+    )
+
+    session = result.session_summaries[0]
+    assert session.session_outcome == "executed"
+    assert session.control_action == "go"
