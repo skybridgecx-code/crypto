@@ -61,6 +61,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--regime-high-atr-pct-threshold", type=float, default=None)
     parser.add_argument("--regime-trend-return-threshold", type=float, default=None)
     parser.add_argument("--regime-trend-range-bps-threshold", type=float, default=None)
+    parser.add_argument("--mean-reversion-min-average-dollar-volume", type=float, default=None)
+    parser.add_argument("--breakout-min-average-dollar-volume", type=float, default=None)
     return parser
 
 
@@ -214,6 +216,20 @@ def _forward_paper_command(
                 str(args.regime_trend_range_bps_threshold),
             ]
         )
+    if args.mean_reversion_min_average_dollar_volume is not None:
+        command.extend(
+            [
+                "--mean-reversion-min-average-dollar-volume",
+                str(args.mean_reversion_min_average_dollar_volume),
+            ]
+        )
+    if args.breakout_min_average_dollar_volume is not None:
+        command.extend(
+            [
+                "--breakout-min-average-dollar-volume",
+                str(args.breakout_min_average_dollar_volume),
+            ]
+        )
     return command
 
 
@@ -270,6 +286,11 @@ def run_advisory_control_experiment(
     symbols = [symbol.strip().upper() for symbol in args.symbols if symbol.strip()]
     if not symbols:
         raise ValueError("forward_paper_experiment_empty_symbol_list")
+    if args.execution_mode != "paper" and (
+        args.mean_reversion_min_average_dollar_volume is not None
+        or args.breakout_min_average_dollar_volume is not None
+    ):
+        raise ValueError("forward_paper_experiment_strategy_overrides_require_execution_mode_paper")
     regime_config_override: dict[str, float] = {}
     if args.regime_liquidity_stress_dollar_volume_threshold is not None:
         regime_config_override["liquidity_stress_dollar_volume_threshold"] = (
@@ -283,6 +304,15 @@ def run_advisory_control_experiment(
         regime_config_override["trend_return_threshold"] = args.regime_trend_return_threshold
     if args.regime_trend_range_bps_threshold is not None:
         regime_config_override["trend_range_bps_threshold"] = args.regime_trend_range_bps_threshold
+    strategy_config_override: dict[str, dict[str, float]] = {}
+    if args.mean_reversion_min_average_dollar_volume is not None:
+        strategy_config_override["mean_reversion"] = {
+            "min_average_dollar_volume": args.mean_reversion_min_average_dollar_volume
+        }
+    if args.breakout_min_average_dollar_volume is not None:
+        strategy_config_override["breakout"] = {
+            "min_average_dollar_volume": args.breakout_min_average_dollar_volume
+        }
 
     rows: list[dict[str, Any]] = []
     for symbol in symbols:
@@ -403,6 +433,7 @@ def run_advisory_control_experiment(
         "live_lookback_candles": args.live_lookback_candles,
         "feed_stale_after_seconds": args.feed_stale_after_seconds,
         "regime_config_override": regime_config_override,
+        "strategy_config_override": strategy_config_override,
         "symbol_count": len(rows),
         "rows": rows,
     }
@@ -425,6 +456,10 @@ def _render_index_markdown(payload: dict[str, Any]) -> str:
         (
             "- regime_config_override: "
             f"`{json.dumps(payload['regime_config_override'], sort_keys=True)}`"
+        ),
+        (
+            "- strategy_config_override: "
+            f"`{json.dumps(payload['strategy_config_override'], sort_keys=True)}`"
         ),
         f"- symbol_count: {payload['symbol_count']}",
         "",

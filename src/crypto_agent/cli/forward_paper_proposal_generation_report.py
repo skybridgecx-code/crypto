@@ -65,6 +65,21 @@ def _safe_non_negative_int(value: object) -> int:
     return 0
 
 
+def _safe_float(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
 def _safe_string(value: object) -> str | None:
     if value is None:
         return None
@@ -75,6 +90,32 @@ def _safe_string(value: object) -> str | None:
 
 def _counter_to_sorted_dict(counter: Counter[str]) -> dict[str, int]:
     return {key: int(counter[key]) for key in sorted(counter)}
+
+
+class _NumericSummaryAccumulator:
+    def __init__(self) -> None:
+        self.count = 0
+        self.sum = 0.0
+        self.min: float | None = None
+        self.max: float | None = None
+
+    def add(self, value: float) -> None:
+        self.count += 1
+        self.sum += value
+        if self.min is None or value < self.min:
+            self.min = value
+        if self.max is None or value > self.max:
+            self.max = value
+
+    def to_summary(self) -> dict[str, float | int] | None:
+        if self.count == 0 or self.min is None or self.max is None:
+            return None
+        return {
+            "count": self.count,
+            "min": self.min,
+            "max": self.max,
+            "avg": self.sum / self.count,
+        }
 
 
 def _merge_count_map(counter: Counter[str], payload: object) -> None:
@@ -110,6 +151,10 @@ def _extract_strategy_payload(
         "non_emit_reason_counts": strategy_payload.get("non_emit_reason_counts"),
         "last_outcome_status": _safe_string(strategy_payload.get("last_outcome_status")),
         "last_outcome_reason": _safe_string(strategy_payload.get("last_outcome_reason")),
+        "strategy_config_source": _safe_string(strategy_payload.get("strategy_config_source"))
+        or "default",
+        "strategy_config": strategy_payload.get("strategy_config"),
+        "threshold_visibility": strategy_payload.get("threshold_visibility"),
     }
 
 
@@ -132,6 +177,62 @@ def _extract_pipeline_payload(*, pipeline_payload: object, session_id: str) -> d
         "allowed_for_execution_count": _safe_non_negative_int(
             pipeline_payload.get("allowed_for_execution_count")
         ),
+    }
+
+
+def _aggregate_strategy_threshold_visibility(
+    session_entries: list[dict[str, Any]],
+) -> dict[str, Any]:
+    threshold_values: dict[str, set[float]] = {}
+    observed_accumulators: dict[str, _NumericSummaryAccumulator] = {}
+    gap_accumulators: dict[str, _NumericSummaryAccumulator] = {}
+    session_snapshots: list[dict[str, Any]] = []
+
+    for entry in session_entries:
+        session_id = _safe_string(entry.get("session_id")) or "unknown"
+        threshold_visibility = entry.get("threshold_visibility")
+        if not isinstance(threshold_visibility, dict):
+            continue
+        session_snapshots.append(
+            {
+                "session_id": session_id,
+                "threshold_visibility": threshold_visibility,
+            }
+        )
+        for key, value in threshold_visibility.items():
+            numeric_value = _safe_float(value)
+            if numeric_value is None:
+                continue
+            if key.endswith("_threshold_used"):
+                threshold_values.setdefault(key, set()).add(numeric_value)
+            elif key.startswith("observed_") and key.endswith("_last"):
+                accumulator = observed_accumulators.setdefault(key, _NumericSummaryAccumulator())
+                accumulator.add(numeric_value)
+            elif key.startswith("gap_to_") and key.endswith("_last"):
+                accumulator = gap_accumulators.setdefault(key, _NumericSummaryAccumulator())
+                accumulator.add(numeric_value)
+
+    return {
+        "threshold_values_used": {
+            key: sorted(values) for key, values in sorted(threshold_values.items())
+        },
+        "observed_last_value_summaries": {
+            key: summary
+            for key, summary in (
+                (name, accumulator.to_summary())
+                for name, accumulator in sorted(observed_accumulators.items())
+            )
+            if summary is not None
+        },
+        "gap_last_value_summaries": {
+            key: summary
+            for key, summary in (
+                (name, accumulator.to_summary())
+                for name, accumulator in sorted(gap_accumulators.items())
+            )
+            if summary is not None
+        },
+        "session_threshold_snapshots": session_snapshots,
     }
 
 
@@ -188,7 +289,10 @@ def _aggregate_run(*, run_id: str, runs_dir: Path) -> dict[str, Any]:
             "total_emitted_proposal_count": 0,
             "emitted_side_counts": Counter(),
             "non_emit_reason_counts": Counter(),
+            "strategy_config_source_counts": Counter(),
+            "strategy_configs_used": set(),
             "session_last_outcomes": [],
+            "session_threshold_visibility": [],
         },
         "mean_reversion": {
             "strategy_id": None,
@@ -197,7 +301,10 @@ def _aggregate_run(*, run_id: str, runs_dir: Path) -> dict[str, Any]:
             "total_emitted_proposal_count": 0,
             "emitted_side_counts": Counter(),
             "non_emit_reason_counts": Counter(),
+            "strategy_config_source_counts": Counter(),
+            "strategy_configs_used": set(),
             "session_last_outcomes": [],
+            "session_threshold_visibility": [],
         },
     }
 
@@ -232,11 +339,24 @@ def _aggregate_run(*, run_id: str, runs_dir: Path) -> dict[str, Any]:
             _merge_count_map(
                 aggregate["non_emit_reason_counts"], strategy_payload["non_emit_reason_counts"]
             )
+            aggregate["strategy_config_source_counts"].update(
+                [strategy_payload["strategy_config_source"]]
+            )
+            if isinstance(strategy_payload["strategy_config"], dict):
+                aggregate["strategy_configs_used"].add(
+                    json.dumps(strategy_payload["strategy_config"], sort_keys=True)
+                )
             aggregate["session_last_outcomes"].append(
                 {
                     "session_id": session_id,
                     "last_outcome_status": strategy_payload["last_outcome_status"],
                     "last_outcome_reason": strategy_payload["last_outcome_reason"],
+                }
+            )
+            aggregate["session_threshold_visibility"].append(
+                {
+                    "session_id": session_id,
+                    "threshold_visibility": strategy_payload["threshold_visibility"],
                 }
             )
 
@@ -278,7 +398,16 @@ def _aggregate_run(*, run_id: str, runs_dir: Path) -> dict[str, Any]:
                 "non_emit_reason_counts": _counter_to_sorted_dict(
                     breakout_aggregate["non_emit_reason_counts"]
                 ),
+                "strategy_config_source_counts": _counter_to_sorted_dict(
+                    breakout_aggregate["strategy_config_source_counts"]
+                ),
+                "strategy_configs_used": [
+                    json.loads(item) for item in sorted(breakout_aggregate["strategy_configs_used"])
+                ],
                 "session_last_outcomes": breakout_aggregate["session_last_outcomes"],
+                "threshold_visibility": _aggregate_strategy_threshold_visibility(
+                    breakout_aggregate["session_threshold_visibility"]
+                ),
             },
             "mean_reversion": {
                 "strategy_id": mean_reversion_aggregate["strategy_id"] or "mean_reversion_v1",
@@ -297,7 +426,17 @@ def _aggregate_run(*, run_id: str, runs_dir: Path) -> dict[str, Any]:
                 "non_emit_reason_counts": _counter_to_sorted_dict(
                     mean_reversion_aggregate["non_emit_reason_counts"]
                 ),
+                "strategy_config_source_counts": _counter_to_sorted_dict(
+                    mean_reversion_aggregate["strategy_config_source_counts"]
+                ),
+                "strategy_configs_used": [
+                    json.loads(item)
+                    for item in sorted(mean_reversion_aggregate["strategy_configs_used"])
+                ],
                 "session_last_outcomes": mean_reversion_aggregate["session_last_outcomes"],
+                "threshold_visibility": _aggregate_strategy_threshold_visibility(
+                    mean_reversion_aggregate["session_threshold_visibility"]
+                ),
             },
         },
         "pipeline_aggregate": {
@@ -345,8 +484,20 @@ def _render_markdown(payload: dict[str, Any]) -> str:
                 f"- emitted_side_counts: `{_fmt_counts(breakout['emitted_side_counts'])}`",
                 f"- non_emit_reason_counts: `{_fmt_counts(breakout['non_emit_reason_counts'])}`",
                 (
+                    "- strategy_config_source_counts: "
+                    f"`{_fmt_counts(breakout['strategy_config_source_counts'])}`"
+                ),
+                (
+                    "- strategy_configs_used: "
+                    f"`{json.dumps(breakout['strategy_configs_used'], sort_keys=True)}`"
+                ),
+                (
                     "- session_last_outcomes: "
                     f"`{json.dumps(breakout['session_last_outcomes'], sort_keys=True)}`"
+                ),
+                (
+                    "- threshold_visibility: "
+                    f"`{json.dumps(breakout['threshold_visibility'], sort_keys=True)}`"
                 ),
                 "",
                 "### Mean Reversion",
@@ -372,8 +523,20 @@ def _render_markdown(payload: dict[str, Any]) -> str:
                     f"`{_fmt_counts(mean_reversion['non_emit_reason_counts'])}`"
                 ),
                 (
+                    "- strategy_config_source_counts: "
+                    f"`{_fmt_counts(mean_reversion['strategy_config_source_counts'])}`"
+                ),
+                (
+                    "- strategy_configs_used: "
+                    f"`{json.dumps(mean_reversion['strategy_configs_used'], sort_keys=True)}`"
+                ),
+                (
                     "- session_last_outcomes: "
                     f"`{json.dumps(mean_reversion['session_last_outcomes'], sort_keys=True)}`"
+                ),
+                (
+                    "- threshold_visibility: "
+                    f"`{json.dumps(mean_reversion['threshold_visibility'], sort_keys=True)}`"
                 ),
                 "",
                 "### Pipeline",

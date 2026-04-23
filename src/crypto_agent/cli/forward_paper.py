@@ -19,6 +19,7 @@ from crypto_agent.runtime.loop import (
     run_forward_paper_runtime,
     run_live_market_preflight_probe,
 )
+from crypto_agent.signals.base import BreakoutSignalConfig, MeanReversionSignalConfig
 
 
 def _symbol_cap(value: str) -> tuple[str, float]:
@@ -260,6 +261,24 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional paper-only override for regime trend_range_bps_threshold.",
     )
     parser.add_argument(
+        "--mean-reversion-min-average-dollar-volume",
+        type=float,
+        default=None,
+        help=(
+            "Optional paper-only override for mean_reversion min_average_dollar_volume. "
+            "Default behavior is unchanged when omitted."
+        ),
+    )
+    parser.add_argument(
+        "--breakout-min-average-dollar-volume",
+        type=float,
+        default=None,
+        help=(
+            "Optional paper-only override for breakout min_average_dollar_volume. "
+            "Default behavior is unchanged when omitted."
+        ),
+    )
+    parser.add_argument(
         "--live-market-poll-retry-count",
         type=int,
         default=2,
@@ -354,6 +373,22 @@ def _build_regime_config_override(args: argparse.Namespace) -> RegimeConfig | No
     return RegimeConfig.model_validate(override_values)
 
 
+def _build_strategy_config_overrides(
+    args: argparse.Namespace,
+) -> tuple[BreakoutSignalConfig | None, MeanReversionSignalConfig | None]:
+    breakout_override: BreakoutSignalConfig | None = None
+    mean_reversion_override: MeanReversionSignalConfig | None = None
+    if args.breakout_min_average_dollar_volume is not None:
+        breakout_override = BreakoutSignalConfig(
+            min_average_dollar_volume=args.breakout_min_average_dollar_volume
+        )
+    if args.mean_reversion_min_average_dollar_volume is not None:
+        mean_reversion_override = MeanReversionSignalConfig(
+            min_average_dollar_volume=args.mean_reversion_min_average_dollar_volume
+        )
+    return breakout_override, mean_reversion_override
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -384,6 +419,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     regime_config_override = _build_regime_config_override(args)
     if regime_config_override is not None and args.execution_mode != "paper":
         parser.error("Regime config overrides are paper-only and require --execution-mode=paper")
+    breakout_config_override, mean_reversion_config_override = _build_strategy_config_overrides(
+        args
+    )
+    if (
+        breakout_config_override is not None or mean_reversion_config_override is not None
+    ) and args.execution_mode != "paper":
+        parser.error("Strategy config overrides are paper-only and require --execution-mode=paper")
     market_source = cast(Literal["replay", "binance_spot"], args.market_source)
     settings = load_settings(args.config)
     runtime_control_id = args.runtime_id
@@ -508,6 +550,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         external_confirmation_path=args.external_confirmation_path,
         regime_config_override=regime_config_override,
+        breakout_config_override=breakout_config_override,
+        mean_reversion_config_override=mean_reversion_config_override,
     )
     print(
         json.dumps(

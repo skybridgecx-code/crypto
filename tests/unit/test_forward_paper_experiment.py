@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+import pytest
 from crypto_agent.cli.forward_paper_experiment import (
     _build_parser,
     _render_index_markdown,
@@ -83,6 +84,8 @@ def _build_args(
     shared_artifact: bool,
     symbol_advisory: list[str] | None = None,
     regime_liquidity_threshold: float | None = None,
+    mean_reversion_min_average_dollar_volume: float | None = None,
+    breakout_min_average_dollar_volume: float | None = None,
 ) -> argparse.Namespace:
     output_dir = tmp_path / "experiment-output"
     parser = _build_parser()
@@ -114,6 +117,20 @@ def _build_args(
             [
                 "--regime-liquidity-stress-dollar-volume-threshold",
                 str(regime_liquidity_threshold),
+            ]
+        )
+    if mean_reversion_min_average_dollar_volume is not None:
+        argv.extend(
+            [
+                "--mean-reversion-min-average-dollar-volume",
+                str(mean_reversion_min_average_dollar_volume),
+            ]
+        )
+    if breakout_min_average_dollar_volume is not None:
+        argv.extend(
+            [
+                "--breakout-min-average-dollar-volume",
+                str(breakout_min_average_dollar_volume),
             ]
         )
     return parser.parse_args(argv)
@@ -248,3 +265,68 @@ def test_regime_override_is_threaded_into_forward_paper_commands_and_index(tmp_p
 
     report = _render_index_markdown(payload)
     assert '"liquidity_stress_dollar_volume_threshold": 1000.0' in report
+
+
+def test_strategy_override_is_threaded_into_forward_paper_commands_and_index(
+    tmp_path: Path,
+) -> None:
+    args = _build_args(
+        tmp_path,
+        symbols=["BTCUSDT"],
+        shared_artifact=True,
+        mean_reversion_min_average_dollar_volume=2_500.0,
+        breakout_min_average_dollar_volume=3_000.0,
+    )
+    runner, commands = _fake_cli_runner_factory(tmp_path)
+
+    payload = run_advisory_control_experiment(args=args, cli_runner=runner)
+    assert payload["strategy_config_override"] == {
+        "breakout": {"min_average_dollar_volume": 3_000.0},
+        "mean_reversion": {"min_average_dollar_volume": 2_500.0},
+    }
+    forward_commands = _forward_commands(commands)
+    advisory_command = forward_commands[0]
+    control_command = forward_commands[1]
+    assert (
+        _value_for_flag(advisory_command, "--mean-reversion-min-average-dollar-volume") == "2500.0"
+    )
+    assert (
+        _value_for_flag(
+            advisory_command,
+            "--breakout-min-average-dollar-volume",
+        )
+        == "3000.0"
+    )
+    assert (
+        _value_for_flag(
+            control_command,
+            "--mean-reversion-min-average-dollar-volume",
+        )
+        == "2500.0"
+    )
+    assert (
+        _value_for_flag(
+            control_command,
+            "--breakout-min-average-dollar-volume",
+        )
+        == "3000.0"
+    )
+
+    report = _render_index_markdown(payload)
+    assert '"mean_reversion": {"min_average_dollar_volume": 2500.0}' in report
+
+
+def test_strategy_override_requires_paper_execution_mode(tmp_path: Path) -> None:
+    args = _build_args(
+        tmp_path,
+        symbols=["BTCUSDT"],
+        shared_artifact=True,
+        mean_reversion_min_average_dollar_volume=2_500.0,
+    )
+    args.execution_mode = "shadow"
+    runner, _ = _fake_cli_runner_factory(tmp_path)
+    with pytest.raises(
+        ValueError,
+        match="forward_paper_experiment_strategy_overrides_require_execution_mode_paper",
+    ):
+        run_advisory_control_experiment(args=args, cli_runner=runner)

@@ -18,6 +18,8 @@ def _write_session_proposal_summary(
     breakout_emitted: int = 0,
     mean_reversion_emitted: int = 0,
     allowed_count: int = 0,
+    breakout_min_average_dollar_volume_threshold: float = 5_000_000.0,
+    mean_reversion_min_average_dollar_volume_threshold: float = 5_000_000.0,
 ) -> None:
     session_id = f"session-{session_number:04d}"
     sessions_dir = run_dir / "sessions"
@@ -34,6 +36,16 @@ def _write_session_proposal_summary(
             "candle_count": 8,
             "breakout": {
                 "strategy_id": "breakout_v1",
+                "strategy_config_source": "default",
+                "strategy_config": {
+                    "strategy_id": "breakout_v1",
+                    "lookback_candles": 3,
+                    "min_momentum_return": 0.003,
+                    "stop_atr_multiple": 1.0,
+                    "take_profit_atr_multiple": 2.0,
+                    "min_average_dollar_volume": breakout_min_average_dollar_volume_threshold,
+                    "max_average_range_bps": 200.0,
+                },
                 "required_lookback_candles": 4,
                 "considered_window_count": 5,
                 "insufficient_lookback_count": 3,
@@ -42,9 +54,32 @@ def _write_session_proposal_summary(
                 "non_emit_reason_counts": {breakout_non_emit_reason: max(0, 5 - breakout_emitted)},
                 "last_outcome_status": "not_emitted",
                 "last_outcome_reason": breakout_non_emit_reason,
+                "threshold_visibility": {
+                    "min_average_dollar_volume_threshold_used": (
+                        breakout_min_average_dollar_volume_threshold
+                    ),
+                    "observed_average_dollar_volume_last": 2_000.0
+                    if session_number % 2 == 0
+                    else 6_000_000.0,
+                    "gap_to_min_average_dollar_volume_last": (
+                        2_000.0 - breakout_min_average_dollar_volume_threshold
+                    )
+                    if session_number % 2 == 0
+                    else (6_000_000.0 - breakout_min_average_dollar_volume_threshold),
+                },
             },
             "mean_reversion": {
                 "strategy_id": "mean_reversion_v1",
+                "strategy_config_source": "default",
+                "strategy_config": {
+                    "strategy_id": "mean_reversion_v1",
+                    "lookback_candles": 4,
+                    "zscore_entry_threshold": 2.0,
+                    "stop_atr_multiple": 1.0,
+                    "min_average_dollar_volume": mean_reversion_min_average_dollar_volume_threshold,
+                    "max_realized_volatility": 0.002,
+                    "max_atr_pct": 0.002,
+                },
                 "required_lookback_candles": 5,
                 "considered_window_count": 4,
                 "insufficient_lookback_count": 4,
@@ -57,6 +92,19 @@ def _write_session_proposal_summary(
                 },
                 "last_outcome_status": "not_emitted",
                 "last_outcome_reason": mean_reversion_non_emit_reason,
+                "threshold_visibility": {
+                    "min_average_dollar_volume_threshold_used": (
+                        mean_reversion_min_average_dollar_volume_threshold
+                    ),
+                    "observed_average_dollar_volume_last": 1_500.0
+                    if session_number % 2 == 0
+                    else 7_000_000.0,
+                    "gap_to_min_average_dollar_volume_last": (
+                        1_500.0 - mean_reversion_min_average_dollar_volume_threshold
+                    )
+                    if session_number % 2 == 0
+                    else (7_000_000.0 - mean_reversion_min_average_dollar_volume_threshold),
+                },
             },
             "proposal_pipeline": {
                 "emitted_proposal_count": breakout_emitted + mean_reversion_emitted,
@@ -129,6 +177,23 @@ def test_forward_paper_proposal_generation_report_aggregates_counts(tmp_path: Pa
         "session-0001",
         "session-0002",
     ]
+    assert breakout["threshold_visibility"]["threshold_values_used"] == {
+        "min_average_dollar_volume_threshold_used": [5000000.0]
+    }
+    assert breakout["strategy_config_source_counts"] == {"default": 2}
+    assert breakout["strategy_configs_used"][0]["min_average_dollar_volume"] == 5_000_000.0
+    assert (
+        breakout["threshold_visibility"]["gap_last_value_summaries"][
+            "gap_to_min_average_dollar_volume_last"
+        ]["min"]
+        < 0
+    )
+    assert (
+        breakout["threshold_visibility"]["gap_last_value_summaries"][
+            "gap_to_min_average_dollar_volume_last"
+        ]["max"]
+        > 0
+    )
 
     mean_reversion = run_payload["strategy_aggregates"]["mean_reversion"]
     assert mean_reversion["total_considered_window_count"] == 8
@@ -137,6 +202,11 @@ def test_forward_paper_proposal_generation_report_aggregates_counts(tmp_path: Pa
         "regime_not_range": 4,
         "zscore_below_entry_threshold": 4,
     }
+    assert mean_reversion["threshold_visibility"]["threshold_values_used"] == {
+        "min_average_dollar_volume_threshold_used": [5000000.0]
+    }
+    assert mean_reversion["strategy_config_source_counts"] == {"default": 2}
+    assert mean_reversion["strategy_configs_used"][0]["min_average_dollar_volume"] == 5_000_000.0
 
     pipeline = run_payload["pipeline_aggregate"]
     assert pipeline["emitted_proposal_count"] == 1
@@ -154,6 +224,36 @@ def test_forward_paper_proposal_generation_report_aggregates_counts(tmp_path: Pa
     assert "### Breakout" in report
     assert "### Mean Reversion" in report
     assert "### Pipeline" in report
+    assert "threshold_visibility" in report
+
+
+def test_forward_paper_proposal_generation_report_shows_overridden_threshold_value(
+    tmp_path: Path,
+) -> None:
+    runs_dir = tmp_path / "runs"
+    run_id = "omega-btc-5m-override-1-btcusdt-advisory"
+    run_dir = runs_dir / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    _write_session_proposal_summary(
+        run_dir,
+        session_number=1,
+        breakout_non_emit_reason="regime_not_trend",
+        mean_reversion_non_emit_reason="average_dollar_volume_below_min",
+        blocked_reason_counts={},
+        mean_reversion_min_average_dollar_volume_threshold=2_500.0,
+    )
+
+    assert main(["--run-id", run_id, "--runs-dir", str(runs_dir)]) == 0
+    aggregate_json_path = (
+        runs_dir / "proposal_generation_reports" / f"{run_id}.proposal_generation_aggregate.json"
+    )
+    payload = json.loads(aggregate_json_path.read_text(encoding="utf-8"))
+    mean_reversion = payload["runs"][0]["strategy_aggregates"]["mean_reversion"]
+    assert mean_reversion["threshold_visibility"]["threshold_values_used"] == {
+        "min_average_dollar_volume_threshold_used": [2500.0]
+    }
+    assert mean_reversion["strategy_configs_used"][0]["min_average_dollar_volume"] == 2500.0
 
 
 def test_forward_paper_proposal_generation_report_supports_multiple_run_ids(tmp_path: Path) -> None:

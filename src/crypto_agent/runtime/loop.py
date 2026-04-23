@@ -95,6 +95,7 @@ from crypto_agent.runtime.soak import (
     build_forward_paper_soak_evaluation,
     load_runtime_session_summaries,
 )
+from crypto_agent.signals.base import BreakoutSignalConfig, MeanReversionSignalConfig
 
 
 class RuntimeAlreadyActiveError(RuntimeError):
@@ -2655,6 +2656,8 @@ def run_forward_paper_runtime(
     manual_control_state: ManualControlState | None = None,
     external_confirmation_path: str | Path | None = None,
     regime_config_override: RegimeConfig | None = None,
+    breakout_config_override: BreakoutSignalConfig | None = None,
+    mean_reversion_config_override: MeanReversionSignalConfig | None = None,
 ) -> ForwardPaperRuntimeResult:
     replay_fixture_path = Path(replay_path) if replay_path is not None else None
     scheduled_ticks = (
@@ -2830,6 +2833,8 @@ def run_forward_paper_runtime(
                     starting_portfolio=account_state.to_portfolio_state(),
                     external_confirmation_path=external_confirmation_path,
                     regime_config_override=effective_regime_config,
+                    breakout_config_override=breakout_config_override,
+                    mean_reversion_config_override=mean_reversion_config_override,
                 )
                 proposal_generation_summary_path = (
                     _write_session_proposal_generation_summary_artifact(
@@ -3010,6 +3015,8 @@ def run_forward_paper_runtime(
                         starting_portfolio=account_state.to_portfolio_state(),
                         external_confirmation_path=external_confirmation_path,
                         regime_config_override=effective_regime_config,
+                        breakout_config_override=breakout_config_override,
+                        mean_reversion_config_override=mean_reversion_config_override,
                     )
                     proposal_generation_summary_path = (
                         _write_session_proposal_generation_summary_artifact(

@@ -540,6 +540,30 @@ def test_cli_forward_paper_runtime_runs_single_session_and_prints_status(
     assert output["session_ids"] == ["session-0001"]
 
 
+def test_cli_forward_paper_rejects_strategy_overrides_for_non_paper_mode(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _write_paper_config(tmp_path)
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                str(FIXTURES_DIR / "paper_candles_breakout_long.jsonl"),
+                "--config",
+                str(config_path),
+                "--runtime-id",
+                "forward-paper-cli-non-paper-strategy-override",
+                "--execution-mode",
+                "shadow",
+                "--mean-reversion-min-average-dollar-volume",
+                "2500",
+            ]
+        )
+    assert exc_info.value.code == 2
+    stderr = capsys.readouterr().err
+    assert "Strategy config overrides are paper-only" in stderr
+
+
 def test_forward_paper_runtime_persists_interrupted_state_on_keyboard_interrupt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

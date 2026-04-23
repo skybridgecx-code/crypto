@@ -202,8 +202,25 @@ Aggregate proposal-generation summaries across advisory/control run IDs:
 
 ```bash
 python -m crypto_agent.cli.forward_paper_proposal_generation_report \
-  --run-id omega-btc-evidence-4-btcusdt-advisory \
-  --run-id omega-btc-evidence-4-btcusdt-control \
+  --run-id omega-btc-5m-override-1-btcusdt-advisory \
+  --run-id omega-btc-5m-override-1-btcusdt-control \
+  --runs-dir runs
+```
+
+5m BTC paper probe with lowered mean-reversion liquidity gate (paper-only override):
+
+```bash
+python -m crypto_agent.cli.forward_paper_experiment \
+  --symbols BTCUSDT \
+  --symbol-advisory BTCUSDT=/absolute/path/btc_external_confirmation.json \
+  --binance-base-url https://api.binance.us \
+  --run-id-prefix omega-btc-5m-override-1 \
+  --execution-mode paper \
+  --live-interval 5m \
+  --session-interval-seconds 300 \
+  --max-sessions 2 \
+  --mean-reversion-min-average-dollar-volume 2500 \
+  --output-dir runs/experiments \
   --runs-dir runs
 ```
 
