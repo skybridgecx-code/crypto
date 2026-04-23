@@ -188,3 +188,12 @@ python -m crypto_agent.cli.forward_paper_proposal_generation_report \
   --run-id omega-btc-evidence-4-btcusdt-control \
   --runs-dir runs
 ```
+
+Aggregate live market-state regimes/features across advisory/control run IDs:
+
+```bash
+python -m crypto_agent.cli.forward_paper_market_state_report \
+  --run-id omega-btc-evidence-4-btcusdt-advisory \
+  --run-id omega-btc-evidence-4-btcusdt-control \
+  --runs-dir runs
+```
