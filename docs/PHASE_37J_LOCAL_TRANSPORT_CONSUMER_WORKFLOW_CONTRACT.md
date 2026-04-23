@@ -179,3 +179,12 @@ Inspect per-session proposal-generation diagnostics for an executed forward-pape
 ```bash
 cat runs/omega-btc-evidence-3-btcusdt-advisory/sessions/session-0001.proposal_generation_summary.json
 ```
+
+Aggregate proposal-generation summaries across advisory/control run IDs:
+
+```bash
+python -m crypto_agent.cli.forward_paper_proposal_generation_report \
+  --run-id omega-btc-evidence-4-btcusdt-advisory \
+  --run-id omega-btc-evidence-4-btcusdt-control \
+  --runs-dir runs
+```
