@@ -562,6 +562,43 @@ def test_forward_paper_runtime_unavailable_feed_non_451_enriches_message(
     assert "--binance-base-url" in status.feed_health.message
 
 
+def test_forward_paper_runtime_coinbase_unavailable_feed_uses_coinbase_context(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    fetcher = ScriptedFetcher([RuntimeError("HTTP Error 401: Unauthorized")])
+    adapter = CoinbaseSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="live-coinbase-unavail-test",
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 5, 14, 0)],
+        market_source="coinbase_spot",
+        live_symbol="BTC-USD",
+        live_interval="1m",
+        live_lookback_candles=2,
+        feed_stale_after_seconds=120,
+        live_adapter=adapter,
+        live_market_poll_retry_count=0,
+    )
+
+    session = result.session_summaries[0]
+    assert session.session_outcome == "skipped_unavailable_feed"
+
+    status = ForwardPaperRuntimeStatus.model_validate(
+        json.loads(result.status_path.read_text(encoding="utf-8"))
+    )
+    assert status.feed_health is not None
+    assert status.feed_health.status == "degraded"
+    assert status.feed_health.message is not None
+    assert "https://api.coinbase.com" in status.feed_health.message
+    assert "api.binance.com" not in status.feed_health.message
+    assert "--binance-base-url" not in status.feed_health.message
+
+
 def _healthy_klines_and_book(
     tick: datetime,
 ) -> list[object]:
@@ -922,6 +959,12 @@ def test_forward_paper_runtime_coinbase_live_mode_executes_healthy_session(
     assert session.market_source == "coinbase_spot"
     assert session.live_symbol == "BTC-USD"
     assert session.session_outcome == "executed"
+    assert session.market_input_path is not None
+    assert Path(str(session.market_input_path)).exists()
+    assert session.market_state_path is not None
+    assert Path(str(session.market_state_path)).exists()
+    assert session.summary_path is not None
+    assert Path(str(session.summary_path)).exists()
     assert market_state["venue"] == "coinbase_spot"
     assert market_state["symbol"] == "BTCUSD"
     assert status.venue_constraints_ready is True

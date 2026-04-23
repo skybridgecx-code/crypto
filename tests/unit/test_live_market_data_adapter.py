@@ -538,6 +538,18 @@ def test_coinbase_spot_live_adapter_returns_normalized_market_state() -> None:
     assert state.order_book.asks[0].price == 101.90
     assert state.feed_health.status == "healthy"
     assert state.feed_health.last_candle_close_time == _ts(2026, 4, 5, 12, 4)
+    assert fetcher.calls == [
+        ("/api/v3/brokerage/products/BTC-USD", {}),
+        (
+            "/api/v3/brokerage/products/BTC-USD/candles",
+            {
+                "start": str(_millis(2026, 4, 5, 12, 0)),
+                "end": str(_millis(2026, 4, 5, 12, 4)),
+                "granularity": "60",
+            },
+        ),
+        ("/api/v3/brokerage/product_book", {"product_id": "BTC-USD", "limit": "1"}),
+    ]
 
 
 def test_coinbase_spot_live_adapter_accepts_pair_symbol_and_px_book_shape() -> None:

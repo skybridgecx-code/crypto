@@ -1630,6 +1630,23 @@ def _build_failed_preflight_artifact(
     )
 
 
+def _resolve_live_endpoint_context(
+    *,
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"],
+    status: ForwardPaperRuntimeStatus,
+    live_adapter: _LiveMarketAdapter | None,
+) -> tuple[str, str | None]:
+    adapter_base_url = getattr(live_adapter, "base_url", None) if live_adapter is not None else None
+    if market_source == "coinbase_spot":
+        return adapter_base_url or "https://api.coinbase.com", None
+    if market_source == "binance_spot":
+        return (
+            status.binance_base_url or adapter_base_url or "https://api.binance.com",
+            "--binance-base-url",
+        )
+    return "n/a", None
+
+
 def _build_default_live_adapter(
     *,
     market_source: Literal["binance_spot", "coinbase_spot"],
@@ -3200,18 +3217,26 @@ def run_forward_paper_runtime(
         except LiveMarketDataUnavailableError as exc:
             completed_at = _normalize_datetime(now_fn())
             exc_msg = str(exc)
-            configured_base_url = status.binance_base_url or "https://api.binance.com"
+            configured_base_url, endpoint_override_flag = _resolve_live_endpoint_context(
+                market_source=market_source,
+                status=status,
+                live_adapter=resolved_live_adapter,
+            )
             if "451" in exc_msg:
                 feed_message = (
                     f"{exc_msg} | venue_access: feed unavailable — HTTP 451 indicates a "
                     f"legal/geo/IP restriction at the configured endpoint "
-                    f"({configured_base_url}); verify network path or set --binance-base-url"
+                    f"({configured_base_url}); verify network path"
                 )
             else:
+                override_hint = (
+                    f" or use {endpoint_override_flag} to override the endpoint"
+                    if endpoint_override_flag is not None
+                    else ""
+                )
                 feed_message = (
                     f"{exc_msg} | venue_access: feed unavailable on first call to "
-                    f"{configured_base_url}; check network access or use --binance-base-url "
-                    f"to override the endpoint"
+                    f"{configured_base_url}; check network access{override_hint}"
                 )
             unavailable_health = LiveFeedHealth(
                 status="degraded",
