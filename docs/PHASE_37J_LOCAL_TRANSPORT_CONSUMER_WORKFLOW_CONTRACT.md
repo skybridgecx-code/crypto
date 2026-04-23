@@ -192,6 +192,20 @@ python -m crypto_agent.cli.forward_paper \
   --binance-base-url https://api.binance.us
 ```
 
+Known-good Coinbase spot live-input probe (2 sessions, paper-only):
+
+```bash
+python -m crypto_agent.cli.forward_paper \
+  --runtime-id phase-37j-coinbase-btcusd-probe \
+  --market-source coinbase_spot \
+  --live-symbol BTC-USD \
+  --live-interval 1m \
+  --live-lookback-candles 8 \
+  --feed-stale-after-seconds 120 \
+  --max-sessions 2 \
+  --execution-mode paper
+```
+
 Inspect per-session proposal-generation diagnostics for an executed forward-paper session:
 
 ```bash

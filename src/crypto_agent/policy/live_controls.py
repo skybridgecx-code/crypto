@@ -124,7 +124,7 @@ class LiveControlStatusArtifact(BaseModel):
     runtime_id: str
     updated_at: datetime
     execution_mode: Literal["paper", "shadow", "sandbox"]
-    market_source: Literal["replay", "binance_spot"]
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"]
     readiness_status: Literal["ready", "not_ready"]
     limited_live_gate_status: Literal["not_ready", "ready_for_review"]
     allowed_execution_modes: list[Literal["paper", "shadow", "sandbox"]] = Field(
@@ -341,7 +341,7 @@ def build_live_control_status_artifact(
     *,
     runtime_id: str,
     execution_mode: Literal["paper", "shadow", "sandbox"],
-    market_source: Literal["replay", "binance_spot"],
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"],
     controls: LiveControlConfig,
     manual_controls: ManualControlState,
     readiness_status: Literal["ready", "not_ready"],

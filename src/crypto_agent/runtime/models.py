@@ -182,7 +182,7 @@ class ForwardPaperSessionSummary(BaseModel):
     session_number: int = Field(ge=1)
     mode: Mode = Mode.PAPER
     execution_mode: Literal["paper", "shadow", "sandbox"] = "paper"
-    market_source: Literal["replay", "binance_spot"] = "replay"
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"] = "replay"
     live_symbol: str | None = None
     live_interval: str | None = None
     status: Literal["running", "completed", "interrupted", "failed"]
@@ -403,7 +403,7 @@ class ForwardPaperShadowCanaryEvaluation(BaseModel):
     runtime_id: str
     generated_at: datetime
     execution_mode: Literal["paper", "shadow", "sandbox"]
-    market_source: Literal["replay", "binance_spot"]
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"]
     applicable: bool
     state: Literal["pass", "fail", "not_applicable"]
     summary: str
@@ -786,7 +786,7 @@ class ForwardPaperRuntimeStatus(BaseModel):
     runtime_id: str
     mode: Mode = Mode.PAPER
     execution_mode: Literal["paper", "shadow", "sandbox"] = "paper"
-    market_source: Literal["replay", "binance_spot"] = "replay"
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"] = "replay"
     replay_path: Path | None = None
     live_symbol: str | None = None
     live_interval: str | None = None
@@ -864,7 +864,7 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
     runtime_id: str
     mode: Mode = Mode.PAPER
     execution_mode: Literal["paper", "shadow", "sandbox"] = "paper"
-    market_source: Literal["replay", "binance_spot"] = "replay"
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"] = "replay"
     replay_path: Path | None = None
     live_symbol: str | None = None
     live_interval: str | None = None

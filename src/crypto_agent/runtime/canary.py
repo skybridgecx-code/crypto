@@ -19,7 +19,7 @@ def build_forward_paper_shadow_canary_evaluation(
     *,
     runtime_id: str,
     execution_mode: Literal["paper", "shadow", "sandbox"],
-    market_source: Literal["replay", "binance_spot"],
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"],
     sessions: list[ForwardPaperSessionSummary],
     generated_at: datetime,
 ) -> ForwardPaperShadowCanaryEvaluation:

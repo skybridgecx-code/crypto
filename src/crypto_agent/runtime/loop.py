@@ -32,6 +32,7 @@ from crypto_agent.execution.shadow import (
 )
 from crypto_agent.market_data.live_adapter import (
     BinanceSpotLiveMarketDataAdapter,
+    CoinbaseSpotLiveMarketDataAdapter,
     LiveMarketDataUnavailableError,
 )
 from crypto_agent.market_data.live_models import LiveFeedHealth, LiveMarketState
@@ -114,6 +115,9 @@ class _RehearsalGateEvaluation:
     scope_state: Literal["absent", "mismatched", "matched"]
     matched: bool
     reason_codes: tuple[str, ...]
+
+
+_LiveMarketAdapter = BinanceSpotLiveMarketDataAdapter | CoinbaseSpotLiveMarketDataAdapter
 
 
 def _utc_now() -> datetime:
@@ -888,7 +892,7 @@ def _initial_runtime_status(
     *,
     runtime_id: str,
     execution_mode: Literal["paper", "shadow", "sandbox"],
-    market_source: Literal["replay", "binance_spot"],
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"],
     replay_path: Path | None,
     live_symbol: str | None,
     live_interval: str | None,
@@ -955,7 +959,7 @@ def _ensure_runtime_status(
     *,
     settings: Settings,
     execution_mode: Literal["paper", "shadow", "sandbox"],
-    market_source: Literal["replay", "binance_spot"],
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"],
     sandbox_fixture_rehearsal: bool = False,
     replay_path: Path | None,
     live_symbol: str | None,
@@ -992,7 +996,7 @@ def _ensure_runtime_status(
 
     if market_source == "replay" and replay_path is None:
         raise ValueError("Replay market source requires replay_path")
-    if market_source == "binance_spot" and (
+    if market_source in {"binance_spot", "coinbase_spot"} and (
         live_symbol is None
         or live_interval is None
         or live_lookback_candles is None
@@ -1193,7 +1197,9 @@ def _recover_interrupted_session(
             status="interrupted",
             replay_path=status.replay_path,
             venue_constraints_path=(
-                status.venue_constraints_path if status.market_source == "binance_spot" else None
+                status.venue_constraints_path
+                if status.market_source in {"binance_spot", "coinbase_spot"}
+                else None
             ),
             scheduled_at=status.active_session_started_at or recovered_at,
             started_at=status.active_session_started_at or recovered_at,
@@ -1249,7 +1255,9 @@ def _start_session(
         status="running",
         replay_path=status.replay_path,
         venue_constraints_path=(
-            status.venue_constraints_path if status.market_source == "binance_spot" else None
+            status.venue_constraints_path
+            if status.market_source in {"binance_spot", "coinbase_spot"}
+            else None
         ),
         scheduled_at=scheduled_at,
         started_at=scheduled_at,
@@ -1486,7 +1494,7 @@ def _iter_scheduled_times(
 def _refresh_live_state(
     *,
     status: ForwardPaperRuntimeStatus,
-    adapter: BinanceSpotLiveMarketDataAdapter,
+    adapter: _LiveMarketAdapter,
     now: datetime,
 ) -> LiveMarketState:
     if (
@@ -1508,7 +1516,7 @@ def _refresh_live_state(
 def _poll_with_retry_result(
     *,
     status: ForwardPaperRuntimeStatus,
-    adapter: BinanceSpotLiveMarketDataAdapter,
+    adapter: _LiveMarketAdapter,
     now: datetime,
     retry_count: int,
     retry_delay_seconds: float,
@@ -1554,7 +1562,7 @@ def _poll_with_retry_result(
 def _poll_with_retry(
     *,
     status: ForwardPaperRuntimeStatus,
-    adapter: BinanceSpotLiveMarketDataAdapter,
+    adapter: _LiveMarketAdapter,
     now: datetime,
     retry_count: int,
     retry_delay_seconds: float,
@@ -1624,8 +1632,11 @@ def _build_failed_preflight_artifact(
 
 def _build_default_live_adapter(
     *,
+    market_source: Literal["binance_spot", "coinbase_spot"],
     binance_base_url: str | None,
-) -> BinanceSpotLiveMarketDataAdapter:
+) -> _LiveMarketAdapter:
+    if market_source == "coinbase_spot":
+        return CoinbaseSpotLiveMarketDataAdapter()
     if binance_base_url is not None:
         return BinanceSpotLiveMarketDataAdapter(base_url=binance_base_url)
     return BinanceSpotLiveMarketDataAdapter()
@@ -1643,8 +1654,8 @@ def run_live_market_preflight_probe(
     binance_base_url: str | None = None,
     live_market_poll_retry_count: int = 2,
     live_market_poll_retry_delay_seconds: float = 2.0,
-    live_adapter: BinanceSpotLiveMarketDataAdapter | None = None,
-    live_adapter_factory: Callable[[], BinanceSpotLiveMarketDataAdapter] | None = None,
+    live_adapter: _LiveMarketAdapter | None = None,
+    live_adapter_factory: Callable[[], _LiveMarketAdapter] | None = None,
     now_fn: Callable[[], datetime] = _utc_now,
     sleep_fn: Callable[[float], None] = time.sleep,
 ) -> LiveMarketPreflightResult:
@@ -1674,12 +1685,15 @@ def run_live_market_preflight_probe(
         paths=paths,
     )
 
-    def _make_probe_adapter() -> BinanceSpotLiveMarketDataAdapter:
+    def _make_probe_adapter() -> _LiveMarketAdapter:
         if live_adapter_factory is not None:
             return live_adapter_factory()
         if live_adapter is not None:
             return live_adapter
-        return _build_default_live_adapter(binance_base_url=binance_base_url)
+        return _build_default_live_adapter(
+            market_source=market_source,
+            binance_base_url=binance_base_url,
+        )
 
     initial_adapter = _make_probe_adapter()
     configured_base_url = binance_base_url or initial_adapter.base_url
@@ -2635,12 +2649,12 @@ def run_forward_paper_runtime(
     recover_interrupted: bool = True,
     now_fn: Callable[[], datetime] = _utc_now,
     sleep_fn: Callable[[float], None] = time.sleep,
-    market_source: Literal["replay", "binance_spot"] = "replay",
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"] = "replay",
     live_symbol: str | None = None,
     live_interval: str | None = None,
     live_lookback_candles: int | None = None,
     feed_stale_after_seconds: int | None = None,
-    live_adapter: BinanceSpotLiveMarketDataAdapter | None = None,
+    live_adapter: _LiveMarketAdapter | None = None,
     binance_base_url: str | None = None,
     live_market_poll_retry_count: int = 2,
     live_market_poll_retry_delay_seconds: float = 2.0,
@@ -2734,13 +2748,14 @@ def run_forward_paper_runtime(
     )
 
     completed_sessions: list[ForwardPaperSessionSummary] = []
-    if live_adapter is not None and market_source == "binance_spot":
-        resolved_live_adapter: BinanceSpotLiveMarketDataAdapter | None = live_adapter
-    elif market_source == "binance_spot":
-        resolved_live_adapter = (
-            BinanceSpotLiveMarketDataAdapter(base_url=binance_base_url)
-            if binance_base_url is not None
-            else BinanceSpotLiveMarketDataAdapter()
+    if live_adapter is not None and (
+        market_source == "binance_spot" or market_source == "coinbase_spot"
+    ):
+        resolved_live_adapter: _LiveMarketAdapter | None = live_adapter
+    elif market_source == "binance_spot" or market_source == "coinbase_spot":
+        resolved_live_adapter = _build_default_live_adapter(
+            market_source=market_source,
+            binance_base_url=binance_base_url,
         )
     else:
         resolved_live_adapter = None

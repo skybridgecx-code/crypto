@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from crypto_agent.market_data.live_adapter import (
     BinanceSpotLiveMarketDataAdapter,
+    CoinbaseSpotLiveMarketDataAdapter,
     LiveMarketDataUnavailableError,
 )
 
@@ -69,6 +70,38 @@ def _kline(
         "0",
         "0",
     ]
+
+
+def _coinbase_product(product_id: str = "BTC-USD") -> dict[str, object]:
+    return {
+        "product_id": product_id,
+        "base_currency_id": "BTC",
+        "quote_currency_id": "USD",
+        "base_increment": "0.00000001",
+        "quote_increment": "0.01",
+        "base_min_size": "0.0001",
+        "quote_min_size": "1",
+        "trading_disabled": False,
+    }
+
+
+def _coinbase_candle(
+    *,
+    open_time_ms: int,
+    open_price: str,
+    high_price: str,
+    low_price: str,
+    close_price: str,
+    volume: str,
+) -> dict[str, str]:
+    return {
+        "start": str(open_time_ms),
+        "open": open_price,
+        "high": high_price,
+        "low": low_price,
+        "close": close_price,
+        "volume": volume,
+    }
 
 
 class ScriptedFetcher:
@@ -435,3 +468,126 @@ def test_binance_spot_live_adapter_raises_when_not_enough_closed_1m_candles() ->
             stale_after_seconds=120,
             now=_ts(2026, 4, 5, 12, 3),
         )
+
+
+def test_coinbase_spot_live_adapter_returns_normalized_market_state() -> None:
+    fetcher = ScriptedFetcher(
+        [
+            _coinbase_product(),
+            {
+                "candles": [
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 12, 0),
+                        open_price="100.0",
+                        high_price="101.0",
+                        low_price="99.5",
+                        close_price="100.5",
+                        volume="1000",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 12, 1),
+                        open_price="100.5",
+                        high_price="101.5",
+                        low_price="100.2",
+                        close_price="101.0",
+                        volume="1001",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 12, 2),
+                        open_price="101.0",
+                        high_price="101.8",
+                        low_price="100.8",
+                        close_price="101.5",
+                        volume="1002",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 12, 3),
+                        open_price="101.5",
+                        high_price="102.0",
+                        low_price="101.2",
+                        close_price="101.9",
+                        volume="1003",
+                    ),
+                ]
+            },
+            {
+                "pricebook": {
+                    "bids": [{"price": "101.80"}],
+                    "asks": [{"price": "101.90"}],
+                }
+            },
+        ]
+    )
+    adapter = CoinbaseSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    state = adapter.poll_market_state(
+        symbol="BTC-USD",
+        interval="1m",
+        lookback_candles=3,
+        stale_after_seconds=120,
+        now=_ts(2026, 4, 5, 12, 4),
+    )
+
+    assert state.venue == "coinbase_spot"
+    assert state.symbol == "BTCUSD"
+    assert len(state.candles) == 3
+    assert state.constraints.tick_size == 0.01
+    assert state.constraints.step_size == 0.00000001
+    assert state.constraints.min_notional == 1.0
+    assert state.order_book.bids[0].price == 101.80
+    assert state.order_book.asks[0].price == 101.90
+    assert state.feed_health.status == "healthy"
+    assert state.feed_health.last_candle_close_time == _ts(2026, 4, 5, 12, 4)
+
+
+def test_coinbase_spot_live_adapter_accepts_pair_symbol_and_px_book_shape() -> None:
+    fetcher = ScriptedFetcher(
+        [
+            _coinbase_product(),
+            {
+                "candles": [
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 12, 0),
+                        open_price="100.0",
+                        high_price="101.0",
+                        low_price="99.5",
+                        close_price="100.5",
+                        volume="1000",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 12, 1),
+                        open_price="100.5",
+                        high_price="101.5",
+                        low_price="100.2",
+                        close_price="101.0",
+                        volume="1001",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 12, 2),
+                        open_price="101.0",
+                        high_price="101.8",
+                        low_price="100.8",
+                        close_price="101.5",
+                        volume="1002",
+                    ),
+                ]
+            },
+            {
+                "bids": [{"px": "101.45"}],
+                "asks": [{"px": "101.55"}],
+            },
+        ]
+    )
+    adapter = CoinbaseSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    state = adapter.poll_market_state(
+        symbol="BTCUSD",
+        interval="1m",
+        lookback_candles=2,
+        stale_after_seconds=120,
+        now=_ts(2026, 4, 5, 12, 3),
+    )
+
+    assert state.symbol == "BTCUSD"
+    assert state.order_book.bids[0].price == 101.45
+    assert state.order_book.asks[0].price == 101.55

@@ -54,7 +54,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--market-source",
-        choices=("replay", "binance_spot"),
+        choices=("replay", "binance_spot", "coinbase_spot"),
         default="replay",
         help="Paper runtime market input source.",
     )
@@ -90,12 +90,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--live-symbol",
         default=None,
-        help="Live market symbol when --market-source=binance_spot.",
+        help=(
+            "Live market symbol/product when --market-source is a live venue "
+            "(for example BTCUSDT or BTC-USD)."
+        ),
     )
     parser.add_argument(
         "--live-interval",
         default="1m",
-        help="Live candle interval when --market-source=binance_spot.",
+        help="Live candle interval when --market-source is a live venue.",
     )
     parser.add_argument(
         "--live-lookback-candles",
@@ -416,8 +419,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.market_source == "replay" and args.replay_path is None:
         parser.error("replay_path is required when --market-source=replay")
-    if args.market_source == "binance_spot" and args.live_symbol is None:
-        parser.error("--live-symbol is required when --market-source=binance_spot")
+    if args.market_source in {"binance_spot", "coinbase_spot"} and args.live_symbol is None:
+        parser.error("--live-symbol is required when using a live --market-source")
     if args.preflight_only and args.market_source != "binance_spot":
         parser.error("--preflight-only requires --market-source=binance_spot")
     if args.preflight_only and args.canary_only:
@@ -448,7 +451,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         breakout_config_override is not None or mean_reversion_config_override is not None
     ) and args.execution_mode != "paper":
         parser.error("Strategy config overrides are paper-only and require --execution-mode=paper")
-    market_source = cast(Literal["replay", "binance_spot"], args.market_source)
+    market_source = cast(Literal["replay", "binance_spot", "coinbase_spot"], args.market_source)
     settings = load_settings(args.config)
     runtime_control_id = args.runtime_id
     updated_at = datetime.now(UTC)
