@@ -158,3 +158,18 @@ python -m crypto_agent.cli.forward_paper_experiment \
   --output-dir runs/advisory_control_experiments \
   --runs-dir runs
 ```
+
+Known-good Binance US live-input path command:
+
+```bash
+python -m crypto_agent.cli.forward_paper \
+  --runtime-id phase-37j-binanceus-btcusdt \
+  --market-source binance_spot \
+  --live-symbol BTCUSDT \
+  --live-interval 1m \
+  --live-lookback-candles 8 \
+  --feed-stale-after-seconds 120 \
+  --max-sessions 1 \
+  --execution-mode paper \
+  --binance-base-url https://api.binance.us
+```

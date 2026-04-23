@@ -655,3 +655,54 @@ def test_forward_paper_runtime_retry_exhausted_skips_session_with_retries_note(
     assert "retries_exhausted" in status.feed_health.message
     assert "failed after 3 attempts" in status.feed_health.message
     assert "451" in status.feed_health.message
+
+
+def test_forward_paper_runtime_clamps_overdue_schedule_for_live_polling(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    runtime_id = "live-overdue-schedule-clamp"
+
+    first_tick = _ts(2026, 4, 5, 14, 1)
+    first_fetcher = ScriptedFetcher(_healthy_klines_and_book(first_tick))
+    first_adapter = BinanceSpotLiveMarketDataAdapter(fetch_json=first_fetcher)
+
+    first_result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id=runtime_id,
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[first_tick],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=2,
+        feed_stale_after_seconds=120,
+        live_adapter=first_adapter,
+    )
+    assert first_result.session_summaries[0].session_outcome == "executed"
+
+    resumed_now = _ts(2026, 4, 5, 14, 10)
+    second_fetcher = ScriptedFetcher(_healthy_klines_and_book(resumed_now))
+    second_adapter = BinanceSpotLiveMarketDataAdapter(fetch_json=second_fetcher)
+
+    second_result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id=runtime_id,
+        session_interval_seconds=60,
+        max_sessions=1,
+        now_fn=lambda: resumed_now,
+        sleep_fn=lambda _: None,
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=2,
+        feed_stale_after_seconds=120,
+        live_adapter=second_adapter,
+    )
+
+    resumed_session = second_result.session_summaries[0]
+    assert resumed_session.session_outcome == "executed"
+    assert resumed_session.scheduled_at == resumed_now

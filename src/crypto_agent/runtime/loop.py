@@ -1419,12 +1419,13 @@ def _iter_scheduled_times(
     scheduled_times: list[datetime] = []
     next_scheduled_at = initial_next_scheduled_at
     for _ in range(max_sessions):
-        due_at = (
-            _normalize_datetime(next_scheduled_at)
-            if next_scheduled_at is not None
-            else _normalize_datetime(now_fn())
-        )
         current_time = _normalize_datetime(now_fn())
+        if next_scheduled_at is not None:
+            candidate_due_at = _normalize_datetime(next_scheduled_at)
+            # If the persisted schedule is already in the past, poll at current time.
+            due_at = candidate_due_at if candidate_due_at >= current_time else current_time
+        else:
+            due_at = current_time
         delay_seconds = (due_at - current_time).total_seconds()
         if delay_seconds > 0:
             sleep_fn(delay_seconds)

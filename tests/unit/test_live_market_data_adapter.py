@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from crypto_agent.market_data.live_adapter import (
@@ -301,4 +301,137 @@ def test_binance_spot_live_adapter_raises_when_no_cached_state_exists() -> None:
             lookback_candles=3,
             stale_after_seconds=60,
             now=_ts(2026, 4, 5, 12, 0),
+        )
+
+
+def test_binance_spot_live_adapter_excludes_open_1m_candle_and_accepts_closed_set() -> None:
+    fetcher = ScriptedFetcher(
+        [
+            _exchange_info(),
+            [
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 0),
+                    close_time_ms=_millis(2026, 4, 5, 12, 1) - 1,
+                    open_price="100.0",
+                    high_price="101.0",
+                    low_price="99.5",
+                    close_price="100.4",
+                    volume="1000",
+                ),
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 1),
+                    close_time_ms=_millis(2026, 4, 5, 12, 2) - 1,
+                    open_price="100.4",
+                    high_price="101.2",
+                    low_price="100.1",
+                    close_price="100.9",
+                    volume="1001",
+                ),
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 2),
+                    close_time_ms=_millis(2026, 4, 5, 12, 3) - 1,
+                    open_price="100.9",
+                    high_price="101.8",
+                    low_price="100.8",
+                    close_price="101.5",
+                    volume="1002",
+                ),
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 3),
+                    close_time_ms=_millis(2026, 4, 5, 12, 4) - 1,
+                    open_price="101.5",
+                    high_price="102.0",
+                    low_price="101.4",
+                    close_price="101.8",
+                    volume="1003",
+                ),
+            ],
+            {
+                "symbol": "BTCUSDT",
+                "bidPrice": "101.70",
+                "bidQty": "1.0",
+                "askPrice": "101.80",
+                "askQty": "1.2",
+            },
+        ]
+    )
+    adapter = BinanceSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    state = adapter.poll_market_state(
+        symbol="BTCUSDT",
+        interval="1m",
+        lookback_candles=3,
+        stale_after_seconds=120,
+        now=_ts(2026, 4, 5, 12, 3),
+    )
+
+    assert len(state.candles) == 3
+    assert state.candles[0].open_time == _ts(2026, 4, 5, 12, 0)
+    assert state.candles[-1].close_time == _ts(2026, 4, 5, 12, 3) - timedelta(milliseconds=1)
+    assert state.feed_health.status == "healthy"
+
+
+def test_binance_spot_live_adapter_raises_when_not_enough_closed_1m_candles() -> None:
+    fetcher = ScriptedFetcher(
+        [
+            _exchange_info(),
+            [
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 0),
+                    close_time_ms=_millis(2026, 4, 5, 12, 1) - 1,
+                    open_price="100.0",
+                    high_price="101.0",
+                    low_price="99.5",
+                    close_price="100.4",
+                    volume="1000",
+                ),
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 1),
+                    close_time_ms=_millis(2026, 4, 5, 12, 2) - 1,
+                    open_price="100.4",
+                    high_price="101.2",
+                    low_price="100.1",
+                    close_price="100.9",
+                    volume="1001",
+                ),
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 2),
+                    close_time_ms=_millis(2026, 4, 5, 12, 3) - 1,
+                    open_price="100.9",
+                    high_price="101.8",
+                    low_price="100.8",
+                    close_price="101.5",
+                    volume="1002",
+                ),
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 3),
+                    close_time_ms=_millis(2026, 4, 5, 12, 4) - 1,
+                    open_price="101.5",
+                    high_price="102.0",
+                    low_price="101.4",
+                    close_price="101.8",
+                    volume="1003",
+                ),
+            ],
+            {
+                "symbol": "BTCUSDT",
+                "bidPrice": "101.70",
+                "bidQty": "1.0",
+                "askPrice": "101.80",
+                "askQty": "1.2",
+            },
+        ]
+    )
+    adapter = BinanceSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    with pytest.raises(
+        LiveMarketDataUnavailableError,
+        match="Not enough closed venue candles available",
+    ):
+        adapter.poll_market_state(
+            symbol="BTCUSDT",
+            interval="1m",
+            lookback_candles=4,
+            stale_after_seconds=120,
+            now=_ts(2026, 4, 5, 12, 3),
         )
