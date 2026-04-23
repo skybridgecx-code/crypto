@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from crypto_agent.config import load_settings
@@ -98,6 +98,55 @@ class ScriptedFetcher:
         if isinstance(response, Exception):
             raise response
         return response
+
+
+class _FakeClock:
+    def __init__(self, initial: datetime) -> None:
+        self.current = initial
+
+    def now(self) -> datetime:
+        return self.current
+
+    def sleep(self, seconds: float) -> None:
+        self.current = self.current + timedelta(seconds=seconds)
+
+
+class _DynamicBinanceUSFetcher:
+    def __init__(self, clock: _FakeClock) -> None:
+        self._clock = clock
+
+    def __call__(self, endpoint: str, params: dict[str, str]) -> object:
+        if endpoint == "/api/v3/exchangeInfo":
+            return _exchange_info()
+        if endpoint == "/api/v3/ticker/bookTicker":
+            return {
+                "symbol": str(params.get("symbol", "BTCUSDT")),
+                "bidPrice": "101.70",
+                "bidQty": "1.0",
+                "askPrice": "101.80",
+                "askQty": "1.2",
+            }
+        if endpoint == "/api/v3/klines":
+            limit = int(params.get("limit", "9"))
+            now = self._clock.now()
+            minute_start = now.replace(second=0, microsecond=0)
+            candles: list[list[object]] = []
+            for index in range(limit):
+                open_time = minute_start - timedelta(minutes=limit - 1 - index)
+                close_time = open_time + timedelta(minutes=1) - timedelta(milliseconds=1)
+                candles.append(
+                    _kline(
+                        open_time_ms=int(open_time.timestamp() * 1000),
+                        close_time_ms=int(close_time.timestamp() * 1000),
+                        open_price="100.0",
+                        high_price="101.0",
+                        low_price="99.5",
+                        close_price="100.5",
+                        volume="1000",
+                    )
+                )
+            return candles
+        raise AssertionError(f"unexpected endpoint {endpoint}")
 
 
 def test_forward_paper_runtime_live_mode_executes_healthy_session(
@@ -655,6 +704,36 @@ def test_forward_paper_runtime_retry_exhausted_skips_session_with_retries_note(
     assert "retries_exhausted" in status.feed_health.message
     assert "failed after 3 attempts" in status.feed_health.message
     assert "451" in status.feed_health.message
+
+
+def test_forward_paper_runtime_fresh_live_run_accepts_first_call_with_closed_candles(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    clock = _FakeClock(_ts(2026, 4, 5, 15, 0))
+    # Match operator-path semantics where polling happens mid-minute.
+    clock.current = clock.current + timedelta(seconds=15)
+    adapter = BinanceSpotLiveMarketDataAdapter(fetch_json=_DynamicBinanceUSFetcher(clock))
+
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="live-fresh-first-call-ready",
+        session_interval_seconds=60,
+        max_sessions=3,
+        now_fn=clock.now,
+        sleep_fn=clock.sleep,
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=8,
+        feed_stale_after_seconds=120,
+        live_adapter=adapter,
+        binance_base_url="https://api.binance.us",
+        live_market_poll_retry_count=5,
+    )
+
+    assert all(session.session_outcome == "executed" for session in result.session_summaries)
 
 
 def test_forward_paper_runtime_clamps_overdue_schedule_for_live_polling(

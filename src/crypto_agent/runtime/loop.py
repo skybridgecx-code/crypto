@@ -2824,10 +2824,15 @@ def run_forward_paper_runtime(
             else:
                 if resolved_live_adapter is None:
                     raise ValueError("Live market runtime requires a live market adapter")
+                poll_now = (
+                    scheduled_at
+                    if scheduled_ticks is not None
+                    else _normalize_datetime(now_fn())
+                )
                 market_state = _poll_with_retry(
                     status=status,
                     adapter=resolved_live_adapter,
-                    now=scheduled_at,
+                    now=poll_now,
                     retry_count=live_market_poll_retry_count,
                     retry_delay_seconds=live_market_poll_retry_delay_seconds,
                     sleep_fn=sleep_fn,
