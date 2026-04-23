@@ -106,6 +106,7 @@ def test_proposal_generation_diagnostics_threshold_visibility_is_surfaced(tmp_pa
     summary = json.loads(result.proposal_generation_summary_path.read_text(encoding="utf-8"))
     breakout_thresholds = summary["breakout"]["threshold_visibility"]
     mean_reversion_thresholds = summary["mean_reversion"]["threshold_visibility"]
+    mean_reversion_config = summary["mean_reversion"]["strategy_config"]
 
     assert breakout_thresholds["min_average_dollar_volume_threshold_used"] == 5_000_000.0
     assert breakout_thresholds["max_average_range_bps_threshold_used"] == 200.0
@@ -114,6 +115,7 @@ def test_proposal_generation_diagnostics_threshold_visibility_is_surfaced(tmp_pa
     assert mean_reversion_thresholds["max_realized_volatility_threshold_used"] == 0.002
     assert mean_reversion_thresholds["max_atr_pct_threshold_used"] == 0.002
     assert mean_reversion_thresholds["zscore_entry_threshold_used"] == 2.0
+    assert mean_reversion_config["zscore_entry_threshold"] == 2.0
 
 
 def test_proposal_generation_diagnostics_mean_reversion_override_is_applied(
@@ -134,6 +136,23 @@ def test_proposal_generation_diagnostics_mean_reversion_override_is_applied(
         mean_reversion["threshold_visibility"]["min_average_dollar_volume_threshold_used"]
         == 2_500.0
     )
+
+
+def test_proposal_generation_diagnostics_mean_reversion_zscore_override_is_applied(
+    tmp_path: Path,
+) -> None:
+    result = run_paper_replay(
+        FIXTURES_DIR / "paper_candles_high_volatility.jsonl",
+        settings=_paper_settings_for(tmp_path),
+        run_id="proposal-diagnostics-mean-reversion-zscore-override",
+        mean_reversion_config_override=MeanReversionSignalConfig(zscore_entry_threshold=1.5),
+    )
+    summary = json.loads(result.proposal_generation_summary_path.read_text(encoding="utf-8"))
+    mean_reversion = summary["mean_reversion"]
+
+    assert mean_reversion["strategy_config_source"] == "override"
+    assert mean_reversion["strategy_config"]["zscore_entry_threshold"] == 1.5
+    assert mean_reversion["threshold_visibility"]["zscore_entry_threshold_used"] == 1.5
 
 
 def test_proposal_generation_diagnostics_threshold_gap_signs(tmp_path: Path) -> None:

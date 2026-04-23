@@ -555,8 +555,8 @@ def test_cli_forward_paper_rejects_strategy_overrides_for_non_paper_mode(
                 "forward-paper-cli-non-paper-strategy-override",
                 "--execution-mode",
                 "shadow",
-                "--mean-reversion-min-average-dollar-volume",
-                "2500",
+                "--mean-reversion-zscore-entry-threshold",
+                "1.5",
             ]
         )
     assert exc_info.value.code == 2

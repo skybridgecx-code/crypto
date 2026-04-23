@@ -270,6 +270,15 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--mean-reversion-zscore-entry-threshold",
+        type=float,
+        default=None,
+        help=(
+            "Optional paper-only override for mean_reversion zscore_entry_threshold. "
+            "Default behavior is unchanged when omitted."
+        ),
+    )
+    parser.add_argument(
         "--breakout-min-average-dollar-volume",
         type=float,
         default=None,
@@ -382,9 +391,22 @@ def _build_strategy_config_overrides(
         breakout_override = BreakoutSignalConfig(
             min_average_dollar_volume=args.breakout_min_average_dollar_volume
         )
-    if args.mean_reversion_min_average_dollar_volume is not None:
+    if (
+        args.mean_reversion_min_average_dollar_volume is not None
+        or args.mean_reversion_zscore_entry_threshold is not None
+    ):
+        default_mean_reversion_config = MeanReversionSignalConfig()
         mean_reversion_override = MeanReversionSignalConfig(
-            min_average_dollar_volume=args.mean_reversion_min_average_dollar_volume
+            min_average_dollar_volume=(
+                args.mean_reversion_min_average_dollar_volume
+                if args.mean_reversion_min_average_dollar_volume is not None
+                else default_mean_reversion_config.min_average_dollar_volume
+            ),
+            zscore_entry_threshold=(
+                args.mean_reversion_zscore_entry_threshold
+                if args.mean_reversion_zscore_entry_threshold is not None
+                else default_mean_reversion_config.zscore_entry_threshold
+            ),
         )
     return breakout_override, mean_reversion_override
 

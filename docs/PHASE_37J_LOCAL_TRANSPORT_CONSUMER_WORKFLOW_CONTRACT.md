@@ -207,7 +207,7 @@ python -m crypto_agent.cli.forward_paper_proposal_generation_report \
   --runs-dir runs
 ```
 
-5m BTC paper probe with lowered mean-reversion liquidity gate (paper-only override):
+5m BTC paper probe with regime + mean-reversion liquidity + zscore overrides (paper-only):
 
 ```bash
 python -m crypto_agent.cli.forward_paper_experiment \
@@ -219,7 +219,9 @@ python -m crypto_agent.cli.forward_paper_experiment \
   --live-interval 5m \
   --session-interval-seconds 300 \
   --max-sessions 2 \
+  --regime-liquidity-stress-dollar-volume-threshold 1000 \
   --mean-reversion-min-average-dollar-volume 2500 \
+  --mean-reversion-zscore-entry-threshold 1.5 \
   --output-dir runs/experiments \
   --runs-dir runs
 ```
