@@ -195,6 +195,9 @@ python -m crypto_agent.cli.forward_paper \
 Known-good Coinbase spot live-input probe (2 sessions, paper-only):
 
 ```bash
+export COINBASE_API_KEY_NAME="organizations/<org_id>/apiKeys/<key_id>"
+export COINBASE_API_KEY_SECRET="-----BEGIN EC PRIVATE KEY-----\n...\n-----END EC PRIVATE KEY-----"
+
 python -m crypto_agent.cli.forward_paper \
   --runtime-id phase-37j-coinbase-btcusd-probe \
   --market-source coinbase_spot \

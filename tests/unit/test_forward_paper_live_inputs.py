@@ -129,7 +129,12 @@ class ScriptedFetcher:
     def __init__(self, responses: list[object]) -> None:
         self._responses = list(responses)
 
-    def __call__(self, endpoint: str, params: dict[str, str]) -> object:
+    def __call__(
+        self,
+        endpoint: str,
+        params: dict[str, str],
+        headers: dict[str, str] | None = None,
+    ) -> object:
         response = self._responses.pop(0)
         if isinstance(response, Exception):
             raise response
@@ -567,7 +572,10 @@ def test_forward_paper_runtime_coinbase_unavailable_feed_uses_coinbase_context(
 ) -> None:
     settings = _paper_settings_for(tmp_path)
     fetcher = ScriptedFetcher([RuntimeError("HTTP Error 401: Unauthorized")])
-    adapter = CoinbaseSpotLiveMarketDataAdapter(fetch_json=fetcher)
+    adapter = CoinbaseSpotLiveMarketDataAdapter(
+        fetch_json=fetcher,
+        jwt_token_factory=lambda _method, _endpoint, _now: "test-token",
+    )
 
     result = run_forward_paper_runtime(
         None,
@@ -927,7 +935,10 @@ def test_forward_paper_runtime_coinbase_live_mode_executes_healthy_session(
             },
         ]
     )
-    adapter = CoinbaseSpotLiveMarketDataAdapter(fetch_json=fetcher)
+    adapter = CoinbaseSpotLiveMarketDataAdapter(
+        fetch_json=fetcher,
+        jwt_token_factory=lambda _method, _endpoint, _now: "test-token",
+    )
     controls = default_live_control_config(
         runtime_id="forward-live-coinbase-demo",
         settings=settings,

@@ -107,10 +107,15 @@ def _coinbase_candle(
 class ScriptedFetcher:
     def __init__(self, responses: list[object]) -> None:
         self._responses = list(responses)
-        self.calls: list[tuple[str, dict[str, str]]] = []
+        self.calls: list[tuple[str, dict[str, str], dict[str, str] | None]] = []
 
-    def __call__(self, endpoint: str, params: dict[str, str]) -> object:
-        self.calls.append((endpoint, params))
+    def __call__(
+        self,
+        endpoint: str,
+        params: dict[str, str],
+        headers: dict[str, str] | None = None,
+    ) -> object:
+        self.calls.append((endpoint, params, headers))
         if not self._responses:
             raise AssertionError("No scripted responses left")
         response = self._responses.pop(0)
@@ -518,7 +523,10 @@ def test_coinbase_spot_live_adapter_returns_normalized_market_state() -> None:
             },
         ]
     )
-    adapter = CoinbaseSpotLiveMarketDataAdapter(fetch_json=fetcher)
+    adapter = CoinbaseSpotLiveMarketDataAdapter(
+        fetch_json=fetcher,
+        jwt_token_factory=lambda _method, _endpoint, _now: "test-token",
+    )
 
     state = adapter.poll_market_state(
         symbol="BTC-USD",
@@ -539,7 +547,14 @@ def test_coinbase_spot_live_adapter_returns_normalized_market_state() -> None:
     assert state.feed_health.status == "healthy"
     assert state.feed_health.last_candle_close_time == _ts(2026, 4, 5, 12, 4)
     assert fetcher.calls == [
-        ("/api/v3/brokerage/products/BTC-USD", {}),
+        (
+            "/api/v3/brokerage/products/BTC-USD",
+            {},
+            {
+                "Authorization": "Bearer test-token",
+                "Content-Type": "application/json",
+            },
+        ),
         (
             "/api/v3/brokerage/products/BTC-USD/candles",
             {
@@ -547,8 +562,19 @@ def test_coinbase_spot_live_adapter_returns_normalized_market_state() -> None:
                 "end": str(_millis(2026, 4, 5, 12, 4)),
                 "granularity": "60",
             },
+            {
+                "Authorization": "Bearer test-token",
+                "Content-Type": "application/json",
+            },
         ),
-        ("/api/v3/brokerage/product_book", {"product_id": "BTC-USD", "limit": "1"}),
+        (
+            "/api/v3/brokerage/product_book",
+            {"product_id": "BTC-USD", "limit": "1"},
+            {
+                "Authorization": "Bearer test-token",
+                "Content-Type": "application/json",
+            },
+        ),
     ]
 
 
@@ -590,7 +616,10 @@ def test_coinbase_spot_live_adapter_accepts_pair_symbol_and_px_book_shape() -> N
             },
         ]
     )
-    adapter = CoinbaseSpotLiveMarketDataAdapter(fetch_json=fetcher)
+    adapter = CoinbaseSpotLiveMarketDataAdapter(
+        fetch_json=fetcher,
+        jwt_token_factory=lambda _method, _endpoint, _now: "test-token",
+    )
 
     state = adapter.poll_market_state(
         symbol="BTCUSD",
@@ -603,3 +632,24 @@ def test_coinbase_spot_live_adapter_accepts_pair_symbol_and_px_book_shape() -> N
     assert state.symbol == "BTCUSD"
     assert state.order_book.bids[0].price == 101.45
     assert state.order_book.asks[0].price == 101.55
+
+
+def test_coinbase_spot_live_adapter_requires_auth_env_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("COINBASE_API_KEY_NAME", raising=False)
+    monkeypatch.delenv("COINBASE_API_KEY_SECRET", raising=False)
+    fetcher = ScriptedFetcher([])
+    adapter = CoinbaseSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    with pytest.raises(
+        LiveMarketDataUnavailableError,
+        match="coinbase_auth_config_error: COINBASE_API_KEY_NAME is required",
+    ):
+        adapter.poll_market_state(
+            symbol="BTC-USD",
+            interval="1m",
+            lookback_candles=2,
+            stale_after_seconds=120,
+            now=_ts(2026, 4, 5, 12, 3),
+        )
