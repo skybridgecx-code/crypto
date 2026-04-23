@@ -188,6 +188,10 @@ def _session_skip_evidence_path(sessions_dir: Path, session_id: str) -> Path:
     return sessions_dir / f"{session_id}.skip_evidence.json"
 
 
+def _session_proposal_generation_summary_path(sessions_dir: Path, session_id: str) -> Path:
+    return sessions_dir / f"{session_id}.proposal_generation_summary.json"
+
+
 def _write_session_summary(summary: ForwardPaperSessionSummary, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -1260,6 +1264,7 @@ def _completed_session_summary(
     session_summary: ForwardPaperSessionSummary,
     result: PaperRunResult,
     completed_at: datetime,
+    proposal_generation_summary_path: Path | None = None,
 ) -> ForwardPaperSessionSummary:
     path_exists = {
         "journal_path": result.journal_path.exists(),
@@ -1273,6 +1278,8 @@ def _completed_session_summary(
         path_exists["market_state_path"] = session_summary.market_state_path.exists()
     if session_summary.venue_constraints_path is not None:
         path_exists["venue_constraints_path"] = session_summary.venue_constraints_path.exists()
+    if proposal_generation_summary_path is not None:
+        path_exists["proposal_generation_summary_path"] = proposal_generation_summary_path.exists()
     return session_summary.model_copy(
         update={
             "status": "completed",
@@ -1292,6 +1299,25 @@ def _completed_session_summary(
             "all_artifact_paths_exist": all(path_exists.values()),
         }
     )
+
+
+def _write_session_proposal_generation_summary_artifact(
+    *,
+    session_id: str,
+    run_id: str,
+    sessions_dir: Path,
+    result: PaperRunResult,
+) -> Path:
+    path = _session_proposal_generation_summary_path(sessions_dir, session_id)
+    payload = {
+        "artifact_kind": "forward_paper_proposal_generation_summary_v1",
+        "session_id": session_id,
+        "run_id": run_id,
+        "proposal_generation": result.proposal_generation_summary.model_dump(mode="json"),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    return path
 
 
 def _skipped_session_summary(
@@ -2774,6 +2800,14 @@ def run_forward_paper_runtime(
                     starting_portfolio=account_state.to_portfolio_state(),
                     external_confirmation_path=external_confirmation_path,
                 )
+                proposal_generation_summary_path = (
+                    _write_session_proposal_generation_summary_artifact(
+                        session_id=running_session.session_id,
+                        run_id=run_id,
+                        sessions_dir=status.sessions_dir,
+                        result=result,
+                    )
+                )
                 replay_session = running_session
                 if sandbox_fixture_rehearsal and execution_mode == "sandbox":
                     fixture_market_state = _build_replay_fixture_market_state(
@@ -2820,14 +2854,13 @@ def run_forward_paper_runtime(
                     session_summary=replay_session,
                     result=result,
                     completed_at=completed_at,
+                    proposal_generation_summary_path=proposal_generation_summary_path,
                 )
             else:
                 if resolved_live_adapter is None:
                     raise ValueError("Live market runtime requires a live market adapter")
                 poll_now = (
-                    scheduled_at
-                    if scheduled_ticks is not None
-                    else _normalize_datetime(now_fn())
+                    scheduled_at if scheduled_ticks is not None else _normalize_datetime(now_fn())
                 )
                 market_state = _poll_with_retry(
                     status=status,
@@ -2946,11 +2979,20 @@ def run_forward_paper_runtime(
                         starting_portfolio=account_state.to_portfolio_state(),
                         external_confirmation_path=external_confirmation_path,
                     )
+                    proposal_generation_summary_path = (
+                        _write_session_proposal_generation_summary_artifact(
+                            session_id=running_session.session_id,
+                            run_id=run_id,
+                            sessions_dir=status.sessions_dir,
+                            result=result,
+                        )
+                    )
                     completed_at = _normalize_datetime(now_fn())
                     completed_session = _completed_session_summary(
                         session_summary=live_session,
                         result=result,
                         completed_at=completed_at,
+                        proposal_generation_summary_path=proposal_generation_summary_path,
                     )
                 else:
                     completed_at = _normalize_datetime(now_fn())

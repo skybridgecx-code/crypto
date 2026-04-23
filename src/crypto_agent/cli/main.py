@@ -5,7 +5,7 @@ import json
 from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,13 +26,16 @@ from crypto_agent.external_signals.loader import (
     load_external_confirmation_artifact,
 )
 from crypto_agent.external_signals.models import ExternalConfirmationDecision
+from crypto_agent.features.models import FeatureSnapshot
 from crypto_agent.features.pipeline import build_feature_snapshot
 from crypto_agent.ids import new_id
+from crypto_agent.market_data.models import Candle
 from crypto_agent.market_data.replay import assess_candle_quality, load_candle_replay
 from crypto_agent.monitoring.alerts import generate_execution_alerts, generate_kill_switch_alerts
 from crypto_agent.monitoring.models import AlertEvent
 from crypto_agent.policy.kill_switch import KillSwitchContext
 from crypto_agent.portfolio.positions import PortfolioState, Position
+from crypto_agent.regime.base import RegimeAssessment, RegimeLabel
 from crypto_agent.regime.rules import classify_regime
 from crypto_agent.risk.checks import RiskCheckResult, evaluate_trade_proposal
 from crypto_agent.signals import (
@@ -42,6 +45,42 @@ from crypto_agent.signals import (
     generate_mean_reversion_proposal,
 )
 from crypto_agent.types import FillEvent, TradeProposal
+
+
+class StrategyProposalGenerationDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_id: str
+    required_lookback_candles: int = Field(ge=1)
+    considered_window_count: int = Field(default=0, ge=0)
+    insufficient_lookback_count: int = Field(default=0, ge=0)
+    emitted_proposal_count: int = Field(default=0, ge=0)
+    emitted_side_counts: dict[str, int] = Field(default_factory=dict)
+    non_emit_reason_counts: dict[str, int] = Field(default_factory=dict)
+    last_outcome_status: Literal["insufficient_lookback", "not_emitted", "emitted"] | None = None
+    last_outcome_reason: str | None = None
+
+
+class ProposalPipelineDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    emitted_proposal_count: int = Field(default=0, ge=0)
+    dropped_by_external_confirmation_count: int = Field(default=0, ge=0)
+    blocked_by_risk_or_policy_count: int = Field(default=0, ge=0)
+    blocked_reason_counts: dict[str, int] = Field(default_factory=dict)
+    allowed_for_execution_count: int = Field(default=0, ge=0)
+
+
+class ProposalGenerationSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: Literal["proposal_generation_summary_v1"] = "proposal_generation_summary_v1"
+    run_id: str
+    replay_path: str
+    candle_count: int = Field(ge=0)
+    breakout: StrategyProposalGenerationDiagnostics
+    mean_reversion: StrategyProposalGenerationDiagnostics
+    proposal_pipeline: ProposalPipelineDiagnostics
 
 
 class PaperRunResult(BaseModel):
@@ -58,6 +97,8 @@ class PaperRunResult(BaseModel):
     trade_ledger: TradeLedger
     review_packet: dict[str, object]
     operator_summary: dict[str, object]
+    proposal_generation_summary_path: Path
+    proposal_generation_summary: ProposalGenerationSummary
     quality_issue_count: int = Field(ge=0)
 
 
@@ -252,6 +293,78 @@ def _operator_summary(
         "first_event_type": event_types[0] if event_types else None,
         "last_event_type": event_types[-1] if event_types else None,
     }
+
+
+def _sorted_counter(counter: Counter[str]) -> dict[str, int]:
+    return {key: int(counter[key]) for key in sorted(counter)}
+
+
+def _evaluate_breakout_proposal_with_reason(
+    *,
+    candles: list[Candle],
+    features: FeatureSnapshot,
+    regime: RegimeAssessment,
+    config: BreakoutSignalConfig,
+) -> tuple[TradeProposal | None, str]:
+    proposal = generate_breakout_proposal(candles, features, regime, config)
+    if proposal is not None:
+        return proposal, f"emitted_{proposal.side.value.lower()}"
+    if regime.label is not RegimeLabel.TREND:
+        return None, "regime_not_trend"
+    if features.average_dollar_volume < config.min_average_dollar_volume:
+        return None, "average_dollar_volume_below_min"
+    if features.average_range_bps > config.max_average_range_bps:
+        return None, "average_range_bps_above_max"
+
+    trigger_candle = candles[-1]
+    reference_window = candles[-(config.lookback_candles + 1) : -1]
+    reference_high = max(candle.high for candle in reference_window)
+    reference_low = min(candle.low for candle in reference_window)
+    if (
+        trigger_candle.close > reference_high
+        and features.momentum_return < config.min_momentum_return
+    ):
+        return None, "upside_breakout_without_momentum"
+    if (
+        trigger_candle.close < reference_low
+        and features.momentum_return > -config.min_momentum_return
+    ):
+        return None, "downside_breakout_without_momentum"
+    if reference_low <= trigger_candle.close <= reference_high:
+        return None, "price_within_reference_range"
+    return None, "no_breakout_trigger"
+
+
+def _evaluate_mean_reversion_proposal_with_reason(
+    *,
+    candles: list[Candle],
+    features: FeatureSnapshot,
+    regime: RegimeAssessment,
+    config: MeanReversionSignalConfig,
+) -> tuple[TradeProposal | None, str]:
+    proposal = generate_mean_reversion_proposal(candles, features, regime, config)
+    if proposal is not None:
+        return proposal, f"emitted_{proposal.side.value.lower()}"
+    if regime.label is not RegimeLabel.RANGE:
+        return None, "regime_not_range"
+    if features.average_dollar_volume < config.min_average_dollar_volume:
+        return None, "average_dollar_volume_below_min"
+    if features.realized_volatility > config.max_realized_volatility:
+        return None, "realized_volatility_above_max"
+    if features.atr_pct > config.max_atr_pct:
+        return None, "atr_pct_above_max"
+
+    reference_window = candles[-(config.lookback_candles + 1) : -1]
+    reference_closes = [candle.close for candle in reference_window]
+    mean_close = sum(reference_closes) / len(reference_closes)
+    variance = sum((value - mean_close) ** 2 for value in reference_closes) / len(reference_closes)
+    stddev_close = variance**0.5
+    if stddev_close == 0:
+        return None, "reference_stddev_zero"
+    zscore = (candles[-1].close - mean_close) / stddev_close
+    if abs(zscore) < config.zscore_entry_threshold:
+        return None, "zscore_below_entry_threshold"
+    return None, "no_mean_reversion_trigger"
 
 
 def _format_float(value: float) -> str:
@@ -525,6 +638,7 @@ def run_paper_replay(
     summary_path = resolved_run_dir / "summary.json"
     report_path = resolved_run_dir / "report.md"
     trade_ledger_path = resolved_run_dir / "trade_ledger.json"
+    proposal_generation_summary_path = resolved_run_dir / "proposal_generation_summary.json"
 
     if resolved_journal_path.exists():
         raise FileExistsError(f"Journal path already exists: {resolved_journal_path}")
@@ -551,44 +665,90 @@ def run_paper_replay(
     mean_reversion_config = MeanReversionSignalConfig()
     external_confirmation = load_external_confirmation_artifact(external_confirmation_path)
     external_confirmation_decisions: list[ExternalConfirmationDecision] = []
+    breakout_feature_lookback = breakout_config.lookback_candles + 1
+    mean_reversion_feature_lookback = mean_reversion_config.lookback_candles + 1
+    breakout_emitted_side_counts: Counter[str] = Counter()
+    breakout_non_emit_reason_counts: Counter[str] = Counter()
+    mean_reversion_emitted_side_counts: Counter[str] = Counter()
+    mean_reversion_non_emit_reason_counts: Counter[str] = Counter()
+    breakout_considered_window_count = 0
+    mean_reversion_considered_window_count = 0
+    breakout_insufficient_lookback_count = 0
+    mean_reversion_insufficient_lookback_count = 0
+    breakout_last_outcome_status: (
+        Literal["insufficient_lookback", "not_emitted", "emitted"] | None
+    ) = None
+    mean_reversion_last_outcome_status: (
+        Literal["insufficient_lookback", "not_emitted", "emitted"] | None
+    ) = None
+    breakout_last_outcome_reason: str | None = None
+    mean_reversion_last_outcome_reason: str | None = None
+    emitted_proposal_count = 0
+    dropped_by_external_confirmation_count = 0
+    blocked_by_risk_or_policy_count = 0
+    allowed_for_execution_count = 0
+    blocked_reason_counts: Counter[str] = Counter()
 
     for candle_index in range(1, len(candles) + 1):
         candle_window = candles[:candle_index]
         proposals: list[TradeProposal] = []
 
-        breakout_feature_lookback = breakout_config.lookback_candles + 1
         if len(candle_window) >= breakout_feature_lookback:
+            breakout_considered_window_count += 1
             breakout_features = build_feature_snapshot(
                 candle_window,
                 lookback_periods=breakout_feature_lookback,
             )
             breakout_regime = classify_regime(breakout_features)
-            breakout_proposal = generate_breakout_proposal(
-                candle_window,
-                breakout_features,
-                breakout_regime,
-                breakout_config,
+            breakout_proposal, breakout_reason = _evaluate_breakout_proposal_with_reason(
+                candles=candle_window,
+                features=breakout_features,
+                regime=breakout_regime,
+                config=breakout_config,
             )
             if breakout_proposal is not None:
                 proposals.append(breakout_proposal)
+                breakout_emitted_side_counts[breakout_proposal.side.value.lower()] += 1
+                breakout_last_outcome_status = "emitted"
+            else:
+                breakout_non_emit_reason_counts[breakout_reason] += 1
+                breakout_last_outcome_status = "not_emitted"
+            breakout_last_outcome_reason = breakout_reason
+        else:
+            breakout_insufficient_lookback_count += 1
+            breakout_last_outcome_status = "insufficient_lookback"
+            breakout_last_outcome_reason = "insufficient_lookback"
 
-        mean_reversion_feature_lookback = mean_reversion_config.lookback_candles + 1
         if len(candle_window) >= mean_reversion_feature_lookback:
+            mean_reversion_considered_window_count += 1
             mean_reversion_features = build_feature_snapshot(
                 candle_window,
                 lookback_periods=mean_reversion_feature_lookback,
             )
             mean_reversion_regime = classify_regime(mean_reversion_features)
-            mean_reversion_proposal = generate_mean_reversion_proposal(
-                candle_window,
-                mean_reversion_features,
-                mean_reversion_regime,
-                mean_reversion_config,
+            mean_reversion_proposal, mean_reversion_reason = (
+                _evaluate_mean_reversion_proposal_with_reason(
+                    candles=candle_window,
+                    features=mean_reversion_features,
+                    regime=mean_reversion_regime,
+                    config=mean_reversion_config,
+                )
             )
             if mean_reversion_proposal is not None:
                 proposals.append(mean_reversion_proposal)
+                mean_reversion_emitted_side_counts[mean_reversion_proposal.side.value.lower()] += 1
+                mean_reversion_last_outcome_status = "emitted"
+            else:
+                mean_reversion_non_emit_reason_counts[mean_reversion_reason] += 1
+                mean_reversion_last_outcome_status = "not_emitted"
+            mean_reversion_last_outcome_reason = mean_reversion_reason
+        else:
+            mean_reversion_insufficient_lookback_count += 1
+            mean_reversion_last_outcome_status = "insufficient_lookback"
+            mean_reversion_last_outcome_reason = "insufficient_lookback"
 
         for proposal in proposals:
+            emitted_proposal_count += 1
             proposal_for_evaluation: TradeProposal | None = proposal
             if external_confirmation is not None:
                 proposal_for_evaluation, confirmation_decision = (
@@ -607,6 +767,7 @@ def run_paper_replay(
                     )
                 )
                 if proposal_for_evaluation is None:
+                    dropped_by_external_confirmation_count += 1
                     continue
             if proposal_for_evaluation is None:
                 continue
@@ -620,6 +781,7 @@ def run_paper_replay(
             )
 
             if risk_result.decision.action is PolicyAction.ALLOW:
+                allowed_for_execution_count += 1
                 report = execution_router.execute(risk_result)
                 journal.append_many(
                     build_execution_events(resolved_run_id, evaluated_proposal, risk_result, report)
@@ -644,6 +806,8 @@ def run_paper_replay(
                     portfolio = _apply_execution_to_portfolio(portfolio, report.fills)
                 continue
 
+            blocked_by_risk_or_policy_count += 1
+            blocked_reason_counts.update(risk_result.decision.reason_codes)
             journal.append_many(
                 build_execution_events(resolved_run_id, evaluated_proposal, risk_result)
             )
@@ -699,6 +863,40 @@ def run_paper_replay(
         scorecard=scorecard,
         review_packet=review_packet,
     )
+    proposal_generation_summary = ProposalGenerationSummary(
+        run_id=resolved_run_id,
+        replay_path=str(replay_fixture_path),
+        candle_count=len(candles),
+        breakout=StrategyProposalGenerationDiagnostics(
+            strategy_id=breakout_config.strategy_id,
+            required_lookback_candles=breakout_feature_lookback,
+            considered_window_count=breakout_considered_window_count,
+            insufficient_lookback_count=breakout_insufficient_lookback_count,
+            emitted_proposal_count=sum(breakout_emitted_side_counts.values()),
+            emitted_side_counts=_sorted_counter(breakout_emitted_side_counts),
+            non_emit_reason_counts=_sorted_counter(breakout_non_emit_reason_counts),
+            last_outcome_status=breakout_last_outcome_status,
+            last_outcome_reason=breakout_last_outcome_reason,
+        ),
+        mean_reversion=StrategyProposalGenerationDiagnostics(
+            strategy_id=mean_reversion_config.strategy_id,
+            required_lookback_candles=mean_reversion_feature_lookback,
+            considered_window_count=mean_reversion_considered_window_count,
+            insufficient_lookback_count=mean_reversion_insufficient_lookback_count,
+            emitted_proposal_count=sum(mean_reversion_emitted_side_counts.values()),
+            emitted_side_counts=_sorted_counter(mean_reversion_emitted_side_counts),
+            non_emit_reason_counts=_sorted_counter(mean_reversion_non_emit_reason_counts),
+            last_outcome_status=mean_reversion_last_outcome_status,
+            last_outcome_reason=mean_reversion_last_outcome_reason,
+        ),
+        proposal_pipeline=ProposalPipelineDiagnostics(
+            emitted_proposal_count=emitted_proposal_count,
+            dropped_by_external_confirmation_count=dropped_by_external_confirmation_count,
+            blocked_by_risk_or_policy_count=blocked_by_risk_or_policy_count,
+            blocked_reason_counts=_sorted_counter(blocked_reason_counts),
+            allowed_for_execution_count=allowed_for_execution_count,
+        ),
+    )
 
     summary = {
         "run_id": resolved_run_id,
@@ -726,6 +924,10 @@ def run_paper_replay(
             ),
         }
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+    proposal_generation_summary_path.write_text(
+        json.dumps(proposal_generation_summary.model_dump(mode="json"), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     trade_ledger_path.write_text(
         json.dumps(trade_ledger.model_dump(mode="json"), indent=2, sort_keys=True),
         encoding="utf-8",
@@ -755,6 +957,8 @@ def run_paper_replay(
         trade_ledger=trade_ledger,
         review_packet=review_packet,
         operator_summary=operator_summary,
+        proposal_generation_summary_path=proposal_generation_summary_path,
+        proposal_generation_summary=proposal_generation_summary,
         quality_issue_count=len(quality_issues),
     )
 

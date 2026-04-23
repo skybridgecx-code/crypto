@@ -181,7 +181,9 @@ def test_omega_fixture_loader_to_proposal_seam_proof() -> None:
     assert decision.veto_trade is False
     assert decision.source_system == "omega_fusion_engine"
     assert decision.supporting_tags == artifact.supporting_tags
-    assert adjusted.supporting_features["external_confirmation_source_system"] == "omega_fusion_engine"
+    assert (
+        adjusted.supporting_features["external_confirmation_source_system"] == "omega_fusion_engine"
+    )
     assert adjusted.supporting_features["external_confirmation_supporting_tags"] == ",".join(
         artifact.supporting_tags
     )

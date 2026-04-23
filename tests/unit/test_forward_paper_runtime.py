@@ -244,18 +244,31 @@ def test_forward_paper_runtime_runs_repeated_sessions_and_persists_status(
 
     for session in result.session_summaries:
         session_path = result.sessions_dir / f"{session.session_id}.json"
+        proposal_generation_path = (
+            result.sessions_dir / f"{session.session_id}.proposal_generation_summary.json"
+        )
         summary = ForwardPaperSessionSummary.model_validate(
             json.loads(session_path.read_text(encoding="utf-8"))
         )
         linked_run_summary = json.loads(Path(summary.summary_path).read_text(encoding="utf-8"))
+        proposal_generation_summary = json.loads(
+            proposal_generation_path.read_text(encoding="utf-8")
+        )
         assert summary.status == "completed"
         assert summary.run_id == f"{runtime_id}-{summary.session_id}"
         assert summary.all_artifact_paths_exist is True
+        assert summary.artifact_paths_exist["proposal_generation_summary_path"] is True
         assert summary.scorecard == session.scorecard
         assert summary.pnl == session.pnl
         assert linked_run_summary["run_id"] == summary.run_id
         assert linked_run_summary["scorecard"] == summary.scorecard.model_dump(mode="json")
         assert linked_run_summary["pnl"] == summary.pnl.model_dump(mode="json")
+        assert proposal_generation_summary["artifact_kind"] == (
+            "forward_paper_proposal_generation_summary_v1"
+        )
+        assert proposal_generation_summary["session_id"] == session.session_id
+        assert proposal_generation_summary["run_id"] == summary.run_id
+        assert proposal_generation_summary["proposal_generation"]["run_id"] == summary.run_id
 
     assert result.session_summaries[1].pnl.starting_equity_usd == pytest.approx(
         result.session_summaries[0].pnl.ending_equity_usd

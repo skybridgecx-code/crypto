@@ -173,3 +173,9 @@ python -m crypto_agent.cli.forward_paper \
   --execution-mode paper \
   --binance-base-url https://api.binance.us
 ```
+
+Inspect per-session proposal-generation diagnostics for an executed forward-paper session:
+
+```bash
+cat runs/omega-btc-evidence-3-btcusdt-advisory/sessions/session-0001.proposal_generation_summary.json
+```
