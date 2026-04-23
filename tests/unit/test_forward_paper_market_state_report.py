@@ -95,6 +95,23 @@ def _write_market_state(
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def _write_runtime_status(
+    run_dir: Path,
+    *,
+    regime_config_source: str,
+    regime_config: dict[str, float],
+) -> None:
+    payload = {
+        "runtime_id": run_dir.name,
+        "regime_config_source": regime_config_source,
+        "regime_config": regime_config,
+    }
+    (run_dir / "forward_paper_status.json").write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
 def test_forward_paper_market_state_report_aggregates_regimes_and_features(tmp_path: Path) -> None:
     runs_dir = tmp_path / "runs"
     run_id = "omega-btc-evidence-4-btcusdt-advisory"
@@ -137,10 +154,21 @@ def test_forward_paper_market_state_report_aggregates_regimes_and_features(tmp_p
     assert payload["run_count"] == 1
 
     run_payload = payload["runs"][0]
+    threshold_visibility = run_payload["threshold_visibility"]
     assert run_payload["run_id"] == run_id
     assert run_payload["session_count"] == 2
     assert run_payload["feed_health_status_counts"] == {"healthy": 1, "stale": 1}
     assert run_payload["feature_unavailable_session_count"] == 1
+    assert threshold_visibility["regime_config_source"] == "default"
+    assert (
+        threshold_visibility["regime_config"]["liquidity_stress_dollar_volume_threshold"]
+        == 5000000.0
+    )
+    assert threshold_visibility["liquidity_stress_dollar_volume_threshold"] == 5000000.0
+    assert threshold_visibility["sessions_with_features"] == 1
+    assert threshold_visibility["sessions_below_liquidity_threshold"] == 0
+    assert threshold_visibility["sessions_at_or_above_liquidity_threshold"] == 1
+    assert threshold_visibility["liquidity_gap_summary"]["count"] == 1
     assert run_payload["regime_label_counts"]
     assert run_payload["feature_summaries"]["average_dollar_volume"]["count"] == 1
     assert len(run_payload["session_snapshots"]) == 2
@@ -155,6 +183,87 @@ def test_forward_paper_market_state_report_aggregates_regimes_and_features(tmp_p
     assert "# Forward-Paper Market-State Aggregate Report" in report
     assert f"## {run_id}" in report
     assert "regime_label_counts" in report
+    assert "threshold_visibility" in report
+
+
+def test_forward_paper_market_state_report_liquidity_threshold_gap_signs(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    run_id = "omega-btc-evidence-5-btcusdt-advisory"
+    run_dir = runs_dir / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    # Below liquidity threshold: very low dollar volume.
+    _write_market_state(
+        run_dir,
+        session_number=1,
+        candles=[
+            _build_candle(minute=0, close=100000.0, high=100010.0, low=99990.0, volume=5.0),
+            _build_candle(minute=1, close=100100.0, high=100110.0, low=100090.0, volume=4.0),
+        ],
+        feed_health_status="healthy",
+    )
+    # Above liquidity threshold: large dollar volume.
+    _write_market_state(
+        run_dir,
+        session_number=2,
+        candles=[
+            _build_candle(minute=0, close=100000.0, high=100200.0, low=99800.0, volume=60.0),
+            _build_candle(minute=1, close=100400.0, high=100700.0, low=100100.0, volume=70.0),
+        ],
+        feed_health_status="healthy",
+    )
+
+    assert main(["--run-id", run_id, "--runs-dir", str(runs_dir)]) == 0
+    payload = json.loads(
+        (runs_dir / "market_state_reports" / f"{run_id}.market_state_aggregate.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    run_payload = payload["runs"][0]
+    snapshots = run_payload["session_snapshots"]
+    below_gap = snapshots[0]["gap_to_liquidity_threshold"]
+    above_gap = snapshots[1]["gap_to_liquidity_threshold"]
+    assert below_gap < 0
+    assert above_gap > 0
+    assert run_payload["threshold_visibility"]["sessions_with_features"] == 2
+    assert run_payload["threshold_visibility"]["sessions_below_liquidity_threshold"] == 1
+    assert run_payload["threshold_visibility"]["sessions_at_or_above_liquidity_threshold"] == 1
+    assert run_payload["threshold_visibility"]["liquidity_gap_summary"]["count"] == 2
+
+
+def test_forward_paper_market_state_report_uses_override_threshold_from_runtime_status(
+    tmp_path: Path,
+) -> None:
+    runs_dir = tmp_path / "runs"
+    run_id = "omega-btc-evidence-5-btcusdt-advisory"
+    run_dir = runs_dir / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    _write_runtime_status(
+        run_dir,
+        regime_config_source="override",
+        regime_config={"liquidity_stress_dollar_volume_threshold": 1_000.0},
+    )
+    _write_market_state(
+        run_dir,
+        session_number=1,
+        candles=[
+            _build_candle(minute=0, close=100000.0, high=100010.0, low=99990.0, volume=5.0),
+            _build_candle(minute=1, close=100100.0, high=100110.0, low=100090.0, volume=4.0),
+        ],
+        feed_health_status="healthy",
+    )
+
+    assert main(["--run-id", run_id, "--runs-dir", str(runs_dir)]) == 0
+    payload = json.loads(
+        (runs_dir / "market_state_reports" / f"{run_id}.market_state_aggregate.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    threshold_visibility = payload["runs"][0]["threshold_visibility"]
+    snapshot = payload["runs"][0]["session_snapshots"][0]
+    assert threshold_visibility["regime_config_source"] == "override"
+    assert threshold_visibility["liquidity_stress_dollar_volume_threshold"] == 1_000.0
+    assert snapshot["liquidity_stress_threshold_used"] == 1_000.0
 
 
 def test_forward_paper_market_state_report_supports_multiple_run_ids(tmp_path: Path) -> None:

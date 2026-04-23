@@ -159,6 +159,24 @@ python -m crypto_agent.cli.forward_paper_experiment \
   --runs-dir runs
 ```
 
+Paper-only lower-liquidity regime override example (diagnostic, defaults unchanged):
+
+```bash
+python -m crypto_agent.cli.forward_paper_experiment \
+  --symbols BTCUSDT ETHUSDT SOLUSDT \
+  --symbol-advisory BTCUSDT=/absolute/path/btc_external_confirmation.json \
+  --symbol-advisory ETHUSDT=/absolute/path/eth_external_confirmation.json \
+  --symbol-advisory SOLUSDT=/absolute/path/sol_external_confirmation.json \
+  --binance-base-url https://api.binance.us \
+  --run-id-prefix omega-btc-evidence-5 \
+  --session-interval-seconds 60 \
+  --max-sessions 10 \
+  --execution-mode paper \
+  --regime-liquidity-stress-dollar-volume-threshold 1000 \
+  --output-dir runs/experiments \
+  --runs-dir runs
+```
+
 Known-good Binance US live-input path command:
 
 ```bash
@@ -193,7 +211,7 @@ Aggregate live market-state regimes/features across advisory/control run IDs:
 
 ```bash
 python -m crypto_agent.cli.forward_paper_market_state_report \
-  --run-id omega-btc-evidence-4-btcusdt-advisory \
-  --run-id omega-btc-evidence-4-btcusdt-control \
+  --run-id omega-btc-evidence-5-btcusdt-advisory \
+  --run-id omega-btc-evidence-5-btcusdt-control \
   --runs-dir runs
 ```

@@ -60,6 +60,7 @@ from crypto_agent.policy.live_gate import (
     default_live_gate_config,
 )
 from crypto_agent.policy.readiness import LiveReadinessStatus, default_live_readiness_status
+from crypto_agent.regime.base import RegimeConfig
 from crypto_agent.runtime.canary import build_forward_paper_shadow_canary_evaluation
 from crypto_agent.runtime.history import append_forward_paper_history
 from crypto_agent.runtime.launch_verdict import build_live_launch_verdict
@@ -873,6 +874,15 @@ def _clear_live_market_state_artifacts(paths: ForwardPaperRuntimePaths) -> None:
             path.unlink()
 
 
+def _effective_regime_config_payload(
+    regime_config_override: RegimeConfig | None,
+) -> tuple[Literal["default", "override"], dict[str, float], RegimeConfig]:
+    if regime_config_override is None:
+        config = RegimeConfig()
+        return "default", config.model_dump(mode="json"), config
+    return "override", regime_config_override.model_dump(mode="json"), regime_config_override
+
+
 def _initial_runtime_status(
     *,
     runtime_id: str,
@@ -884,6 +894,8 @@ def _initial_runtime_status(
     live_lookback_candles: int | None,
     feed_stale_after_seconds: int | None,
     binance_base_url: str | None,
+    regime_config_source: Literal["default", "override"],
+    regime_config: dict[str, float],
     starting_equity_usd: float,
     session_interval_seconds: int,
     now: datetime,
@@ -900,6 +912,8 @@ def _initial_runtime_status(
         live_lookback_candles=live_lookback_candles,
         feed_stale_after_seconds=feed_stale_after_seconds,
         binance_base_url=binance_base_url,
+        regime_config_source=regime_config_source,
+        regime_config=regime_config,
         starting_equity_usd=starting_equity_usd,
         session_interval_seconds=session_interval_seconds,
         status="idle",
@@ -948,6 +962,8 @@ def _ensure_runtime_status(
     live_lookback_candles: int | None,
     feed_stale_after_seconds: int | None,
     binance_base_url: str | None,
+    regime_config_source: Literal["default", "override"],
+    regime_config: dict[str, float],
     runtime_id: str,
     starting_equity_usd: float,
     session_interval_seconds: int,
@@ -1003,6 +1019,8 @@ def _ensure_runtime_status(
             live_lookback_candles=live_lookback_candles,
             feed_stale_after_seconds=feed_stale_after_seconds,
             binance_base_url=binance_base_url,
+            regime_config_source=regime_config_source,
+            regime_config=regime_config,
             starting_equity_usd=starting_equity_usd,
             session_interval_seconds=session_interval_seconds,
             now=now,
@@ -1043,6 +1061,10 @@ def _ensure_runtime_status(
         raise ValueError("Existing runtime lookback does not match requested value")
     if status.feed_stale_after_seconds != feed_stale_after_seconds:
         raise ValueError("Existing runtime stale-feed threshold does not match requested value")
+    if status.regime_config_source != regime_config_source:
+        raise ValueError("Existing runtime regime_config_source does not match requested value")
+    if status.regime_config != regime_config:
+        raise ValueError("Existing runtime regime_config does not match requested value")
     if status.starting_equity_usd != starting_equity_usd:
         raise ValueError("Existing runtime starting_equity_usd does not match requested value")
     if status.session_interval_seconds != session_interval_seconds:
@@ -1643,6 +1665,8 @@ def run_live_market_preflight_probe(
         live_lookback_candles=live_lookback_candles,
         feed_stale_after_seconds=feed_stale_after_seconds,
         binance_base_url=binance_base_url,
+        regime_config_source="default",
+        regime_config=RegimeConfig().model_dump(mode="json"),
         starting_equity_usd=1.0,
         session_interval_seconds=1,
         now=observed_at,
@@ -2630,6 +2654,7 @@ def run_forward_paper_runtime(
     readiness_status: LiveReadinessStatus | None = None,
     manual_control_state: ManualControlState | None = None,
     external_confirmation_path: str | Path | None = None,
+    regime_config_override: RegimeConfig | None = None,
 ) -> ForwardPaperRuntimeResult:
     replay_fixture_path = Path(replay_path) if replay_path is not None else None
     scheduled_ticks = (
@@ -2646,6 +2671,9 @@ def run_forward_paper_runtime(
         if live_launch_window_ends_at is not None
         else None
     )
+    regime_config_source, regime_config_payload, effective_regime_config = (
+        _effective_regime_config_payload(regime_config_override)
+    )
     status, account_state, recovered_session_id, recovery_note = _ensure_runtime_status(
         settings=settings,
         execution_mode=execution_mode,
@@ -2657,6 +2685,8 @@ def run_forward_paper_runtime(
         live_lookback_candles=live_lookback_candles,
         feed_stale_after_seconds=feed_stale_after_seconds,
         binance_base_url=binance_base_url,
+        regime_config_source=regime_config_source,
+        regime_config=regime_config_payload,
         runtime_id=runtime_id,
         starting_equity_usd=equity_usd,
         session_interval_seconds=session_interval_seconds,
@@ -2799,6 +2829,7 @@ def run_forward_paper_runtime(
                     equity_usd=account_state.ending_equity_usd,
                     starting_portfolio=account_state.to_portfolio_state(),
                     external_confirmation_path=external_confirmation_path,
+                    regime_config_override=effective_regime_config,
                 )
                 proposal_generation_summary_path = (
                     _write_session_proposal_generation_summary_artifact(
@@ -2978,6 +3009,7 @@ def run_forward_paper_runtime(
                         equity_usd=account_state.ending_equity_usd,
                         starting_portfolio=account_state.to_portfolio_state(),
                         external_confirmation_path=external_confirmation_path,
+                        regime_config_override=effective_regime_config,
                     )
                     proposal_generation_summary_path = (
                         _write_session_proposal_generation_summary_artifact(

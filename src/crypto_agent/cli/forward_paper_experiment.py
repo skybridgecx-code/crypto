@@ -52,6 +52,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--feed-stale-after-seconds", type=int, default=120)
     parser.add_argument("--live-market-poll-retry-count", type=int, default=2)
     parser.add_argument("--live-market-poll-retry-delay-seconds", type=float, default=2.0)
+    parser.add_argument(
+        "--regime-liquidity-stress-dollar-volume-threshold",
+        type=float,
+        default=None,
+    )
+    parser.add_argument("--regime-high-volatility-threshold", type=float, default=None)
+    parser.add_argument("--regime-high-atr-pct-threshold", type=float, default=None)
+    parser.add_argument("--regime-trend-return-threshold", type=float, default=None)
+    parser.add_argument("--regime-trend-range-bps-threshold", type=float, default=None)
     return parser
 
 
@@ -83,9 +92,7 @@ def _run_cli_command(command: list[str]) -> dict[str, Any]:
         stderr = completed.stderr.strip()
         stdout = completed.stdout.strip()
         detail = stderr or stdout or "no_output"
-        raise ValueError(
-            f"forward_paper_experiment_command_failed:{' '.join(command)}:{detail}"
-        )
+        raise ValueError(f"forward_paper_experiment_command_failed:{' '.join(command)}:{detail}")
     return _extract_json_object(completed.stdout)
 
 
@@ -172,6 +179,41 @@ def _forward_paper_command(
                 external_confirmation_path,
             ]
         )
+    if args.regime_liquidity_stress_dollar_volume_threshold is not None:
+        command.extend(
+            [
+                "--regime-liquidity-stress-dollar-volume-threshold",
+                str(args.regime_liquidity_stress_dollar_volume_threshold),
+            ]
+        )
+    if args.regime_high_volatility_threshold is not None:
+        command.extend(
+            [
+                "--regime-high-volatility-threshold",
+                str(args.regime_high_volatility_threshold),
+            ]
+        )
+    if args.regime_high_atr_pct_threshold is not None:
+        command.extend(
+            [
+                "--regime-high-atr-pct-threshold",
+                str(args.regime_high_atr_pct_threshold),
+            ]
+        )
+    if args.regime_trend_return_threshold is not None:
+        command.extend(
+            [
+                "--regime-trend-return-threshold",
+                str(args.regime_trend_return_threshold),
+            ]
+        )
+    if args.regime_trend_range_bps_threshold is not None:
+        command.extend(
+            [
+                "--regime-trend-range-bps-threshold",
+                str(args.regime_trend_range_bps_threshold),
+            ]
+        )
     return command
 
 
@@ -228,6 +270,19 @@ def run_advisory_control_experiment(
     symbols = [symbol.strip().upper() for symbol in args.symbols if symbol.strip()]
     if not symbols:
         raise ValueError("forward_paper_experiment_empty_symbol_list")
+    regime_config_override: dict[str, float] = {}
+    if args.regime_liquidity_stress_dollar_volume_threshold is not None:
+        regime_config_override["liquidity_stress_dollar_volume_threshold"] = (
+            args.regime_liquidity_stress_dollar_volume_threshold
+        )
+    if args.regime_high_volatility_threshold is not None:
+        regime_config_override["high_volatility_threshold"] = args.regime_high_volatility_threshold
+    if args.regime_high_atr_pct_threshold is not None:
+        regime_config_override["high_atr_pct_threshold"] = args.regime_high_atr_pct_threshold
+    if args.regime_trend_return_threshold is not None:
+        regime_config_override["trend_return_threshold"] = args.regime_trend_return_threshold
+    if args.regime_trend_range_bps_threshold is not None:
+        regime_config_override["trend_range_bps_threshold"] = args.regime_trend_range_bps_threshold
 
     rows: list[dict[str, Any]] = []
     for symbol in symbols:
@@ -347,6 +402,7 @@ def run_advisory_control_experiment(
         "live_interval": args.live_interval,
         "live_lookback_candles": args.live_lookback_candles,
         "feed_stale_after_seconds": args.feed_stale_after_seconds,
+        "regime_config_override": regime_config_override,
         "symbol_count": len(rows),
         "rows": rows,
     }
@@ -366,6 +422,10 @@ def _render_index_markdown(payload: dict[str, Any]) -> str:
         f"- execution_mode: `{payload['execution_mode']}`",
         f"- session_interval_seconds: {payload['session_interval_seconds']}",
         f"- max_sessions: {payload['max_sessions']}",
+        (
+            "- regime_config_override: "
+            f"`{json.dumps(payload['regime_config_override'], sort_keys=True)}`"
+        ),
         f"- symbol_count: {payload['symbol_count']}",
         "",
     ]

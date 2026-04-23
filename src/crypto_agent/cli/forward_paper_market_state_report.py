@@ -11,6 +11,7 @@ from typing import Any
 
 from crypto_agent.features.pipeline import build_feature_snapshot
 from crypto_agent.market_data.live_models import LiveMarketState
+from crypto_agent.regime.base import RegimeConfig
 from crypto_agent.regime.rules import classify_regime
 
 _SESSION_MARKET_STATE_RE = re.compile(r"^session-([0-9]{4})\.live_market_state\.json$")
@@ -76,34 +77,6 @@ def _read_json_object(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _safe_float(value: object) -> float | None:
-    if isinstance(value, bool):
-        return float(value)
-    if isinstance(value, int | float):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return None
-    return None
-
-
-def _safe_non_negative_int(value: object) -> int:
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return max(0, value)
-    if isinstance(value, float):
-        return max(0, int(value))
-    if isinstance(value, str):
-        try:
-            return max(0, int(value))
-        except ValueError:
-            return 0
-    return 0
-
-
 def _counter_to_sorted_dict(counter: Counter[str]) -> dict[str, int]:
     return {key: int(counter[key]) for key in sorted(counter)}
 
@@ -141,15 +114,33 @@ def _load_session_market_states(run_dir: Path) -> list[tuple[int, str, LiveMarke
     return records
 
 
+def _load_run_regime_config(run_dir: Path) -> tuple[str, RegimeConfig]:
+    status_path = run_dir / "forward_paper_status.json"
+    if not status_path.is_file():
+        return "default", RegimeConfig()
+    payload = _read_json_object(status_path)
+    source_raw = payload.get("regime_config_source")
+    source = "override" if source_raw == "override" else "default"
+    config_payload = payload.get("regime_config", {})
+    if not isinstance(config_payload, dict):
+        config_payload = {}
+    if source == "override":
+        return source, RegimeConfig.model_validate(config_payload)
+    return source, RegimeConfig()
+
+
 def _aggregate_run(*, run_id: str, runs_dir: Path) -> dict[str, Any]:
     run_dir = runs_dir / run_id
     if not run_dir.is_dir():
         raise ValueError(f"forward_paper_market_state_missing_run_dir:{run_dir}")
 
     records = _load_session_market_states(run_dir)
+    regime_config_source, regime_thresholds = _load_run_regime_config(run_dir)
     regime_label_counts: Counter[str] = Counter()
     feature_unavailable_session_count = 0
     feed_health_counts: Counter[str] = Counter()
+    sessions_with_features = 0
+    sessions_below_liquidity_threshold = 0
 
     feature_accumulators = {
         "momentum_return": _FeatureAccumulator(),
@@ -160,6 +151,7 @@ def _aggregate_run(*, run_id: str, runs_dir: Path) -> dict[str, Any]:
         "average_dollar_volume": _FeatureAccumulator(),
         "average_range_bps": _FeatureAccumulator(),
     }
+    liquidity_gap_accumulator = _FeatureAccumulator()
 
     session_snapshots: list[dict[str, Any]] = []
     for _, session_id, state in records:
@@ -177,13 +169,48 @@ def _aggregate_run(*, run_id: str, runs_dir: Path) -> dict[str, Any]:
         regime_label: str | None = None
         regime_confidence: float | None = None
         regime_reasons: list[str] = []
+        observed_average_dollar_volume: float | None = None
+        liquidity_threshold_used: float | None = None
+        gap_to_liquidity_threshold: float | None = None
+        observed_realized_volatility: float | None = None
+        observed_atr_pct: float | None = None
+        observed_abs_momentum_return: float | None = None
+        observed_average_range_bps: float | None = None
+        gap_to_high_volatility_threshold: float | None = None
+        gap_to_high_atr_pct_threshold: float | None = None
+        gap_to_trend_return_threshold: float | None = None
+        gap_to_trend_range_bps_threshold: float | None = None
         if len(candles) >= 2:
             features = build_feature_snapshot(candles, lookback_periods=len(candles))
-            regime = classify_regime(features)
+            regime = classify_regime(features, regime_thresholds)
+            sessions_with_features += 1
             regime_label = regime.label.value
             regime_confidence = regime.confidence
             regime_reasons = list(regime.reasons)
             regime_label_counts.update([regime_label])
+
+            observed_average_dollar_volume = features.average_dollar_volume
+            liquidity_threshold_used = regime_thresholds.liquidity_stress_dollar_volume_threshold
+            gap_to_liquidity_threshold = observed_average_dollar_volume - liquidity_threshold_used
+            observed_realized_volatility = features.realized_volatility
+            observed_atr_pct = features.atr_pct
+            observed_abs_momentum_return = abs(features.momentum_return)
+            observed_average_range_bps = features.average_range_bps
+            gap_to_high_volatility_threshold = (
+                observed_realized_volatility - regime_thresholds.high_volatility_threshold
+            )
+            gap_to_high_atr_pct_threshold = (
+                observed_atr_pct - regime_thresholds.high_atr_pct_threshold
+            )
+            gap_to_trend_return_threshold = (
+                observed_abs_momentum_return - regime_thresholds.trend_return_threshold
+            )
+            gap_to_trend_range_bps_threshold = (
+                observed_average_range_bps - regime_thresholds.trend_range_bps_threshold
+            )
+            liquidity_gap_accumulator.add(gap_to_liquidity_threshold)
+            if gap_to_liquidity_threshold < 0:
+                sessions_below_liquidity_threshold += 1
 
             feature_accumulators["momentum_return"].add(features.momentum_return)
             feature_accumulators["realized_volatility"].add(features.realized_volatility)
@@ -215,6 +242,21 @@ def _aggregate_run(*, run_id: str, runs_dir: Path) -> dict[str, Any]:
                 "regime_label": regime_label,
                 "regime_confidence": regime_confidence,
                 "regime_reasons": regime_reasons,
+                "observed_average_dollar_volume": observed_average_dollar_volume,
+                "liquidity_stress_threshold_used": liquidity_threshold_used,
+                "gap_to_liquidity_threshold": gap_to_liquidity_threshold,
+                "observed_realized_volatility": observed_realized_volatility,
+                "observed_atr_pct": observed_atr_pct,
+                "observed_abs_momentum_return": observed_abs_momentum_return,
+                "observed_average_range_bps": observed_average_range_bps,
+                "high_volatility_threshold_used": regime_thresholds.high_volatility_threshold,
+                "high_atr_pct_threshold_used": regime_thresholds.high_atr_pct_threshold,
+                "trend_return_threshold_used": regime_thresholds.trend_return_threshold,
+                "trend_range_bps_threshold_used": regime_thresholds.trend_range_bps_threshold,
+                "gap_to_high_volatility_threshold": gap_to_high_volatility_threshold,
+                "gap_to_high_atr_pct_threshold": gap_to_high_atr_pct_threshold,
+                "gap_to_trend_return_threshold": gap_to_trend_return_threshold,
+                "gap_to_trend_range_bps_threshold": gap_to_trend_range_bps_threshold,
             }
         )
 
@@ -224,12 +266,34 @@ def _aggregate_run(*, run_id: str, runs_dir: Path) -> dict[str, Any]:
         if summary is not None:
             feature_summaries[key] = summary
 
+    liquidity_gap_summary = liquidity_gap_accumulator.to_summary()
+    observed_average_dollar_volume_summary = feature_summaries.get("average_dollar_volume")
+    threshold_visibility = {
+        "regime_config_source": regime_config_source,
+        "regime_config": regime_thresholds.model_dump(mode="json"),
+        "liquidity_stress_dollar_volume_threshold": (
+            regime_thresholds.liquidity_stress_dollar_volume_threshold
+        ),
+        "high_volatility_threshold": regime_thresholds.high_volatility_threshold,
+        "high_atr_pct_threshold": regime_thresholds.high_atr_pct_threshold,
+        "trend_return_threshold": regime_thresholds.trend_return_threshold,
+        "trend_range_bps_threshold": regime_thresholds.trend_range_bps_threshold,
+        "sessions_with_features": sessions_with_features,
+        "sessions_below_liquidity_threshold": sessions_below_liquidity_threshold,
+        "sessions_at_or_above_liquidity_threshold": (
+            sessions_with_features - sessions_below_liquidity_threshold
+        ),
+        "observed_average_dollar_volume_summary": observed_average_dollar_volume_summary,
+        "liquidity_gap_summary": liquidity_gap_summary,
+    }
+
     return {
         "run_id": run_id,
         "session_count": len(records),
         "feed_health_status_counts": _counter_to_sorted_dict(feed_health_counts),
         "regime_label_counts": _counter_to_sorted_dict(regime_label_counts),
         "feature_unavailable_session_count": feature_unavailable_session_count,
+        "threshold_visibility": threshold_visibility,
         "feature_summaries": feature_summaries,
         "session_snapshots": session_snapshots,
     }
@@ -254,6 +318,10 @@ def _render_markdown(payload: dict[str, Any]) -> str:
                 (
                     "- feature_unavailable_session_count: "
                     f"{run['feature_unavailable_session_count']}"
+                ),
+                (
+                    "- threshold_visibility: "
+                    f"`{json.dumps(run['threshold_visibility'], sort_keys=True)}`"
                 ),
                 (
                     "- feature_summaries: "

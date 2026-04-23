@@ -82,6 +82,7 @@ def _build_args(
     symbols: list[str],
     shared_artifact: bool,
     symbol_advisory: list[str] | None = None,
+    regime_liquidity_threshold: float | None = None,
 ) -> argparse.Namespace:
     output_dir = tmp_path / "experiment-output"
     parser = _build_parser()
@@ -108,6 +109,13 @@ def _build_args(
     if symbol_advisory:
         for entry in symbol_advisory:
             argv.extend(["--symbol-advisory", entry])
+    if regime_liquidity_threshold is not None:
+        argv.extend(
+            [
+                "--regime-liquidity-stress-dollar-volume-threshold",
+                str(regime_liquidity_threshold),
+            ]
+        )
     return parser.parse_args(argv)
 
 
@@ -204,3 +212,39 @@ def test_missing_mapping_behavior_skips_advisory_lane(tmp_path: Path) -> None:
     assert len(commands) == 1
     assert commands[0][2] == "crypto_agent.cli.forward_paper"
     assert "--external-confirmation-path" not in commands[0]
+
+
+def test_regime_override_is_threaded_into_forward_paper_commands_and_index(tmp_path: Path) -> None:
+    args = _build_args(
+        tmp_path,
+        symbols=["BTCUSDT"],
+        shared_artifact=True,
+        regime_liquidity_threshold=1_000.0,
+    )
+    runner, commands = _fake_cli_runner_factory(tmp_path)
+
+    payload = run_advisory_control_experiment(args=args, cli_runner=runner)
+
+    assert payload["regime_config_override"] == {
+        "liquidity_stress_dollar_volume_threshold": 1_000.0
+    }
+    forward_commands = _forward_commands(commands)
+    advisory_command = forward_commands[0]
+    control_command = forward_commands[1]
+    assert (
+        _value_for_flag(
+            advisory_command,
+            "--regime-liquidity-stress-dollar-volume-threshold",
+        )
+        == "1000.0"
+    )
+    assert (
+        _value_for_flag(
+            control_command,
+            "--regime-liquidity-stress-dollar-volume-threshold",
+        )
+        == "1000.0"
+    )
+
+    report = _render_index_markdown(payload)
+    assert '"liquidity_stress_dollar_volume_threshold": 1000.0' in report

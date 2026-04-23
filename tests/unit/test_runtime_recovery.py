@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from crypto_agent.config import load_settings
+from crypto_agent.regime.base import RegimeConfig
 from crypto_agent.runtime.history import append_forward_paper_history
 from crypto_agent.runtime.loop import build_forward_paper_runtime_paths, run_forward_paper_runtime
 from crypto_agent.runtime.models import (
@@ -88,6 +89,8 @@ def test_runtime_recovery_writes_recovery_status_and_preserves_continuity(
         live_gate_threshold_summary_path=paths.live_gate_threshold_summary_path,
         live_gate_report_path=paths.live_gate_report_path,
         live_launch_verdict_path=paths.live_launch_verdict_path,
+        regime_config_source="default",
+        regime_config=RegimeConfig().model_dump(mode="json"),
     )
     paths.status_path.write_text(
         json.dumps(status.model_dump(mode="json"), indent=2, sort_keys=True),

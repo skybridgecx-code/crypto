@@ -55,6 +55,8 @@ def registry_entry_from_status(
         replay_path=status.replay_path,
         live_symbol=status.live_symbol,
         live_interval=status.live_interval,
+        regime_config_source=status.regime_config_source,
+        regime_config=status.regime_config,
         runtime_dir=status.status_path.parent,
         status_path=status.status_path,
         history_path=status.history_path,

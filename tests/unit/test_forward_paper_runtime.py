@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from crypto_agent.cli.forward_paper import main
 from crypto_agent.config import load_settings
+from crypto_agent.regime.base import RegimeConfig
 from crypto_agent.runtime.history import append_forward_paper_history
 from crypto_agent.runtime.loop import (
     RuntimeAlreadyActiveError,
@@ -22,6 +23,7 @@ from crypto_agent.runtime.session_registry import upsert_forward_paper_registry_
 
 FIXTURES_DIR = Path("tests/fixtures")
 SNAPSHOTS_DIR = FIXTURES_DIR / "snapshots"
+_DEFAULT_REGIME_CONFIG = RegimeConfig().model_dump(mode="json")
 _FORWARD_RUNTIME_INDEX_FIELDS: tuple[str, ...] = (
     "runtime_id",
     "status_path",
@@ -226,6 +228,8 @@ def test_forward_paper_runtime_runs_repeated_sessions_and_persists_status(
     assert status.interrupted_session_count == 0
     assert status.reconciliation_status == "clean"
     assert status.mismatch_detected is False
+    assert status.regime_config_source == "default"
+    assert status.regime_config == _DEFAULT_REGIME_CONFIG
     assert status.next_session_number == 3
     assert status.last_session_id == "session-0002"
     assert status.next_scheduled_at == _tick(2026, 4, 5, 9, 2)
@@ -314,6 +318,31 @@ def test_forward_runtime_registry_entry_snapshot(tmp_path: Path) -> None:
     assert normalized_entry == _load_snapshot("forward_runtime_registry_entry.snapshot.json")
 
 
+def test_forward_paper_runtime_persists_regime_config_override_metadata(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    runtime_id = "forward-paper-regime-override"
+    result = run_forward_paper_runtime(
+        FIXTURES_DIR / "paper_candles_breakout_long.jsonl",
+        settings=settings,
+        runtime_id=runtime_id,
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[_tick(2026, 4, 5, 15, 2)],
+        regime_config_override=RegimeConfig(liquidity_stress_dollar_volume_threshold=1_000.0),
+    )
+    status_payload = json.loads(result.status_path.read_text(encoding="utf-8"))
+    registry_payload = json.loads(result.registry_path.read_text(encoding="utf-8"))
+    assert status_payload["regime_config_source"] == "override"
+    assert status_payload["regime_config"] == RegimeConfig(
+        liquidity_stress_dollar_volume_threshold=1_000.0
+    ).model_dump(mode="json")
+    assert registry_payload["runtimes"][0]["regime_config_source"] == "override"
+    assert (
+        registry_payload["runtimes"][0]["regime_config"]["liquidity_stress_dollar_volume_threshold"]
+        == 1_000.0
+    )
+
+
 def test_forward_paper_runtime_recovers_interrupted_session_on_restart(
     tmp_path: Path,
 ) -> None:
@@ -367,6 +396,8 @@ def test_forward_paper_runtime_recovers_interrupted_session_on_restart(
         live_gate_threshold_summary_path=paths.live_gate_threshold_summary_path,
         live_gate_report_path=paths.live_gate_report_path,
         live_launch_verdict_path=paths.live_launch_verdict_path,
+        regime_config_source="default",
+        regime_config=_DEFAULT_REGIME_CONFIG,
     )
     paths.status_path.write_text(
         json.dumps(status.model_dump(mode="json"), indent=2, sort_keys=True),
@@ -450,6 +481,8 @@ def test_forward_paper_runtime_prevents_duplicate_active_session_without_recover
         live_gate_threshold_summary_path=paths.live_gate_threshold_summary_path,
         live_gate_report_path=paths.live_gate_report_path,
         live_launch_verdict_path=paths.live_launch_verdict_path,
+        regime_config_source="default",
+        regime_config=_DEFAULT_REGIME_CONFIG,
     )
     paths.status_path.write_text(
         json.dumps(status.model_dump(mode="json"), indent=2, sort_keys=True),

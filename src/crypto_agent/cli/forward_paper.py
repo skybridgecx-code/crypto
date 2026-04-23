@@ -14,6 +14,7 @@ from crypto_agent.policy.live_controls import (
     default_manual_control_state,
 )
 from crypto_agent.policy.readiness import default_live_readiness_status
+from crypto_agent.regime.base import RegimeConfig
 from crypto_agent.runtime.loop import (
     run_forward_paper_runtime,
     run_live_market_preflight_probe,
@@ -226,6 +227,39 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--regime-liquidity-stress-dollar-volume-threshold",
+        type=float,
+        default=None,
+        help=(
+            "Optional paper-only override for regime liquidity_stress_dollar_volume_threshold. "
+            "Default behavior is unchanged when omitted."
+        ),
+    )
+    parser.add_argument(
+        "--regime-high-volatility-threshold",
+        type=float,
+        default=None,
+        help="Optional paper-only override for regime high_volatility_threshold.",
+    )
+    parser.add_argument(
+        "--regime-high-atr-pct-threshold",
+        type=float,
+        default=None,
+        help="Optional paper-only override for regime high_atr_pct_threshold.",
+    )
+    parser.add_argument(
+        "--regime-trend-return-threshold",
+        type=float,
+        default=None,
+        help="Optional paper-only override for regime trend_return_threshold.",
+    )
+    parser.add_argument(
+        "--regime-trend-range-bps-threshold",
+        type=float,
+        default=None,
+        help="Optional paper-only override for regime trend_range_bps_threshold.",
+    )
+    parser.add_argument(
         "--live-market-poll-retry-count",
         type=int,
         default=2,
@@ -301,6 +335,25 @@ def _build_cli_sandbox_execution_adapter() -> ScriptedSandboxExecutionAdapter:
     )
 
 
+def _build_regime_config_override(args: argparse.Namespace) -> RegimeConfig | None:
+    override_values: dict[str, float] = {}
+    if args.regime_liquidity_stress_dollar_volume_threshold is not None:
+        override_values["liquidity_stress_dollar_volume_threshold"] = (
+            args.regime_liquidity_stress_dollar_volume_threshold
+        )
+    if args.regime_high_volatility_threshold is not None:
+        override_values["high_volatility_threshold"] = args.regime_high_volatility_threshold
+    if args.regime_high_atr_pct_threshold is not None:
+        override_values["high_atr_pct_threshold"] = args.regime_high_atr_pct_threshold
+    if args.regime_trend_return_threshold is not None:
+        override_values["trend_return_threshold"] = args.regime_trend_return_threshold
+    if args.regime_trend_range_bps_threshold is not None:
+        override_values["trend_range_bps_threshold"] = args.regime_trend_range_bps_threshold
+    if not override_values:
+        return None
+    return RegimeConfig.model_validate(override_values)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -328,6 +381,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--sandbox-fixture-rehearsal cannot be used with --canary-only")
     if args.manual_halt and args.manual_resume:
         parser.error("--manual-halt and --manual-resume are mutually exclusive")
+    regime_config_override = _build_regime_config_override(args)
+    if regime_config_override is not None and args.execution_mode != "paper":
+        parser.error("Regime config overrides are paper-only and require --execution-mode=paper")
     market_source = cast(Literal["replay", "binance_spot"], args.market_source)
     settings = load_settings(args.config)
     runtime_control_id = args.runtime_id
@@ -451,6 +507,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             _build_cli_sandbox_execution_adapter() if args.execution_mode == "sandbox" else None
         ),
         external_confirmation_path=args.external_confirmation_path,
+        regime_config_override=regime_config_override,
     )
     print(
         json.dumps(

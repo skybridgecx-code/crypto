@@ -793,6 +793,8 @@ class ForwardPaperRuntimeStatus(BaseModel):
     live_lookback_candles: int | None = Field(default=None, ge=2)
     feed_stale_after_seconds: int | None = Field(default=None, gt=0)
     binance_base_url: str | None = None
+    regime_config_source: Literal["default", "override"] = "default"
+    regime_config: dict[str, float] = Field(default_factory=dict)
     starting_equity_usd: float = Field(gt=0)
     session_interval_seconds: int = Field(gt=0)
     status: Literal["idle", "running"] = "idle"
@@ -866,6 +868,8 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
     replay_path: Path | None = None
     live_symbol: str | None = None
     live_interval: str | None = None
+    regime_config_source: Literal["default", "override"] = "default"
+    regime_config: dict[str, float] = Field(default_factory=dict)
     runtime_dir: Path
     status_path: Path
     history_path: Path

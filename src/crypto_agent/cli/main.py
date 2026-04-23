@@ -35,7 +35,7 @@ from crypto_agent.monitoring.alerts import generate_execution_alerts, generate_k
 from crypto_agent.monitoring.models import AlertEvent
 from crypto_agent.policy.kill_switch import KillSwitchContext
 from crypto_agent.portfolio.positions import PortfolioState, Position
-from crypto_agent.regime.base import RegimeAssessment, RegimeLabel
+from crypto_agent.regime.base import RegimeAssessment, RegimeConfig, RegimeLabel
 from crypto_agent.regime.rules import classify_regime
 from crypto_agent.risk.checks import RiskCheckResult, evaluate_trade_proposal
 from crypto_agent.signals import (
@@ -610,6 +610,7 @@ def run_paper_replay(
     journal_path: str | Path | None = None,
     run_dir: str | Path | None = None,
     external_confirmation_path: str | Path | None = None,
+    regime_config_override: RegimeConfig | None = None,
 ) -> PaperRunResult:
     if settings.mode is not Mode.PAPER:
         raise ValueError("Paper replay harness requires settings.mode to be paper.")
@@ -699,7 +700,7 @@ def run_paper_replay(
                 candle_window,
                 lookback_periods=breakout_feature_lookback,
             )
-            breakout_regime = classify_regime(breakout_features)
+            breakout_regime = classify_regime(breakout_features, regime_config_override)
             breakout_proposal, breakout_reason = _evaluate_breakout_proposal_with_reason(
                 candles=candle_window,
                 features=breakout_features,
@@ -725,7 +726,10 @@ def run_paper_replay(
                 candle_window,
                 lookback_periods=mean_reversion_feature_lookback,
             )
-            mean_reversion_regime = classify_regime(mean_reversion_features)
+            mean_reversion_regime = classify_regime(
+                mean_reversion_features,
+                regime_config_override,
+            )
             mean_reversion_proposal, mean_reversion_reason = (
                 _evaluate_mean_reversion_proposal_with_reason(
                     candles=candle_window,
