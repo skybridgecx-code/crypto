@@ -21,6 +21,7 @@ def _write_session_proposal_summary(
     breakout_min_average_dollar_volume_threshold: float = 5_000_000.0,
     mean_reversion_min_average_dollar_volume_threshold: float = 5_000_000.0,
     mean_reversion_zscore_entry_threshold: float = 2.0,
+    mean_reversion_max_atr_pct_threshold: float = 0.002,
 ) -> None:
     session_id = f"session-{session_number:04d}"
     sessions_dir = run_dir / "sessions"
@@ -79,7 +80,7 @@ def _write_session_proposal_summary(
                     "stop_atr_multiple": 1.0,
                     "min_average_dollar_volume": mean_reversion_min_average_dollar_volume_threshold,
                     "max_realized_volatility": 0.002,
-                    "max_atr_pct": 0.002,
+                    "max_atr_pct": mean_reversion_max_atr_pct_threshold,
                 },
                 "required_lookback_candles": 5,
                 "considered_window_count": 4,
@@ -106,6 +107,7 @@ def _write_session_proposal_summary(
                     if session_number % 2 == 0
                     else (7_000_000.0 - mean_reversion_min_average_dollar_volume_threshold),
                     "zscore_entry_threshold_used": mean_reversion_zscore_entry_threshold,
+                    "max_atr_pct_threshold_used": mean_reversion_max_atr_pct_threshold,
                 },
             },
             "proposal_pipeline": {
@@ -206,6 +208,7 @@ def test_forward_paper_proposal_generation_report_aggregates_counts(tmp_path: Pa
     }
     assert mean_reversion["threshold_visibility"]["threshold_values_used"] == {
         "min_average_dollar_volume_threshold_used": [5000000.0],
+        "max_atr_pct_threshold_used": [0.002],
         "zscore_entry_threshold_used": [2.0],
     }
     assert mean_reversion["strategy_config_source_counts"] == {"default": 2}
@@ -247,6 +250,7 @@ def test_forward_paper_proposal_generation_report_shows_overridden_threshold_val
         blocked_reason_counts={},
         mean_reversion_min_average_dollar_volume_threshold=2_500.0,
         mean_reversion_zscore_entry_threshold=1.5,
+        mean_reversion_max_atr_pct_threshold=0.0025,
     )
 
     assert main(["--run-id", run_id, "--runs-dir", str(runs_dir)]) == 0
@@ -257,9 +261,11 @@ def test_forward_paper_proposal_generation_report_shows_overridden_threshold_val
     mean_reversion = payload["runs"][0]["strategy_aggregates"]["mean_reversion"]
     assert mean_reversion["threshold_visibility"]["threshold_values_used"] == {
         "min_average_dollar_volume_threshold_used": [2500.0],
+        "max_atr_pct_threshold_used": [0.0025],
         "zscore_entry_threshold_used": [1.5],
     }
     assert mean_reversion["strategy_configs_used"][0]["min_average_dollar_volume"] == 2500.0
+    assert mean_reversion["strategy_configs_used"][0]["max_atr_pct"] == 0.0025
     assert mean_reversion["strategy_configs_used"][0]["zscore_entry_threshold"] == 1.5
 
 

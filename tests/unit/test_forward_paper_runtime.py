@@ -564,6 +564,62 @@ def test_cli_forward_paper_rejects_strategy_overrides_for_non_paper_mode(
     assert "Strategy config overrides are paper-only" in stderr
 
 
+def test_cli_forward_paper_rejects_mean_reversion_max_atr_override_for_non_paper_mode(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _write_paper_config(tmp_path)
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                str(FIXTURES_DIR / "paper_candles_breakout_long.jsonl"),
+                "--config",
+                str(config_path),
+                "--runtime-id",
+                "forward-paper-cli-non-paper-atr-override",
+                "--execution-mode",
+                "shadow",
+                "--mean-reversion-max-atr-pct",
+                "0.0025",
+            ]
+        )
+    assert exc_info.value.code == 2
+    stderr = capsys.readouterr().err
+    assert "Strategy config overrides are paper-only" in stderr
+
+
+def test_cli_forward_paper_applies_mean_reversion_max_atr_override_to_diagnostics(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _write_paper_config(tmp_path)
+    exit_code = main(
+        [
+            str(FIXTURES_DIR / "paper_candles_high_volatility.jsonl"),
+            "--config",
+            str(config_path),
+            "--runtime-id",
+            "forward-paper-cli-mean-reversion-max-atr-override",
+            "--execution-mode",
+            "paper",
+            "--mean-reversion-max-atr-pct",
+            "0.0025",
+            "--max-sessions",
+            "1",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+
+    sessions_dir = Path(output["sessions_dir"])
+    proposal_generation_path = sessions_dir / "session-0001.proposal_generation_summary.json"
+    proposal_generation_summary = json.loads(proposal_generation_path.read_text(encoding="utf-8"))
+    mean_reversion = proposal_generation_summary["proposal_generation"]["mean_reversion"]
+
+    assert mean_reversion["strategy_config"]["max_atr_pct"] == 0.0025
+    assert mean_reversion["threshold_visibility"]["max_atr_pct_threshold_used"] == 0.0025
+
+
 def test_forward_paper_runtime_persists_interrupted_state_on_keyboard_interrupt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -86,6 +86,7 @@ def _build_args(
     regime_liquidity_threshold: float | None = None,
     mean_reversion_min_average_dollar_volume: float | None = None,
     mean_reversion_zscore_entry_threshold: float | None = None,
+    mean_reversion_max_atr_pct: float | None = None,
     breakout_min_average_dollar_volume: float | None = None,
 ) -> argparse.Namespace:
     output_dir = tmp_path / "experiment-output"
@@ -132,6 +133,13 @@ def _build_args(
             [
                 "--mean-reversion-zscore-entry-threshold",
                 str(mean_reversion_zscore_entry_threshold),
+            ]
+        )
+    if mean_reversion_max_atr_pct is not None:
+        argv.extend(
+            [
+                "--mean-reversion-max-atr-pct",
+                str(mean_reversion_max_atr_pct),
             ]
         )
     if breakout_min_average_dollar_volume is not None:
@@ -284,6 +292,7 @@ def test_strategy_override_is_threaded_into_forward_paper_commands_and_index(
         shared_artifact=True,
         mean_reversion_min_average_dollar_volume=2_500.0,
         mean_reversion_zscore_entry_threshold=1.5,
+        mean_reversion_max_atr_pct=0.0025,
         breakout_min_average_dollar_volume=3_000.0,
     )
     runner, commands = _fake_cli_runner_factory(tmp_path)
@@ -293,6 +302,7 @@ def test_strategy_override_is_threaded_into_forward_paper_commands_and_index(
         "breakout": {"min_average_dollar_volume": 3_000.0},
         "mean_reversion": {
             "min_average_dollar_volume": 2_500.0,
+            "max_atr_pct": 0.0025,
             "zscore_entry_threshold": 1.5,
         },
     }
@@ -310,6 +320,7 @@ def test_strategy_override_is_threaded_into_forward_paper_commands_and_index(
         == "3000.0"
     )
     assert _value_for_flag(advisory_command, "--mean-reversion-zscore-entry-threshold") == "1.5"
+    assert _value_for_flag(advisory_command, "--mean-reversion-max-atr-pct") == "0.0025"
     assert (
         _value_for_flag(
             control_command,
@@ -325,6 +336,7 @@ def test_strategy_override_is_threaded_into_forward_paper_commands_and_index(
         == "3000.0"
     )
     assert _value_for_flag(control_command, "--mean-reversion-zscore-entry-threshold") == "1.5"
+    assert _value_for_flag(control_command, "--mean-reversion-max-atr-pct") == "0.0025"
 
     report = _render_index_markdown(payload)
     assert '"zscore_entry_threshold": 1.5' in report
@@ -335,8 +347,7 @@ def test_strategy_override_requires_paper_execution_mode(tmp_path: Path) -> None
         tmp_path,
         symbols=["BTCUSDT"],
         shared_artifact=True,
-        mean_reversion_min_average_dollar_volume=2_500.0,
-        mean_reversion_zscore_entry_threshold=1.5,
+        mean_reversion_max_atr_pct=0.0025,
     )
     args.execution_mode = "shadow"
     runner, _ = _fake_cli_runner_factory(tmp_path)

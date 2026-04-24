@@ -282,6 +282,15 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--mean-reversion-max-atr-pct",
+        type=float,
+        default=None,
+        help=(
+            "Optional paper-only override for mean_reversion max_atr_pct. "
+            "Default behavior is unchanged when omitted."
+        ),
+    )
+    parser.add_argument(
         "--breakout-min-average-dollar-volume",
         type=float,
         default=None,
@@ -397,6 +406,7 @@ def _build_strategy_config_overrides(
     if (
         args.mean_reversion_min_average_dollar_volume is not None
         or args.mean_reversion_zscore_entry_threshold is not None
+        or args.mean_reversion_max_atr_pct is not None
     ):
         default_mean_reversion_config = MeanReversionSignalConfig()
         mean_reversion_override = MeanReversionSignalConfig(
@@ -409,6 +419,11 @@ def _build_strategy_config_overrides(
                 args.mean_reversion_zscore_entry_threshold
                 if args.mean_reversion_zscore_entry_threshold is not None
                 else default_mean_reversion_config.zscore_entry_threshold
+            ),
+            max_atr_pct=(
+                args.mean_reversion_max_atr_pct
+                if args.mean_reversion_max_atr_pct is not None
+                else default_mean_reversion_config.max_atr_pct
             ),
         )
     return breakout_override, mean_reversion_override

@@ -155,6 +155,23 @@ def test_proposal_generation_diagnostics_mean_reversion_zscore_override_is_appli
     assert mean_reversion["threshold_visibility"]["zscore_entry_threshold_used"] == 1.5
 
 
+def test_proposal_generation_diagnostics_mean_reversion_max_atr_override_is_applied(
+    tmp_path: Path,
+) -> None:
+    result = run_paper_replay(
+        FIXTURES_DIR / "paper_candles_high_volatility.jsonl",
+        settings=_paper_settings_for(tmp_path),
+        run_id="proposal-diagnostics-mean-reversion-max-atr-override",
+        mean_reversion_config_override=MeanReversionSignalConfig(max_atr_pct=0.0025),
+    )
+    summary = json.loads(result.proposal_generation_summary_path.read_text(encoding="utf-8"))
+    mean_reversion = summary["mean_reversion"]
+
+    assert mean_reversion["strategy_config_source"] == "override"
+    assert mean_reversion["strategy_config"]["max_atr_pct"] == 0.0025
+    assert mean_reversion["threshold_visibility"]["max_atr_pct_threshold_used"] == 0.0025
+
+
 def test_proposal_generation_diagnostics_threshold_gap_signs(tmp_path: Path) -> None:
     result = run_paper_replay(
         FIXTURES_DIR / "paper_candles_high_volatility.jsonl",

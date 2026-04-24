@@ -63,6 +63,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--regime-trend-range-bps-threshold", type=float, default=None)
     parser.add_argument("--mean-reversion-min-average-dollar-volume", type=float, default=None)
     parser.add_argument("--mean-reversion-zscore-entry-threshold", type=float, default=None)
+    parser.add_argument("--mean-reversion-max-atr-pct", type=float, default=None)
     parser.add_argument("--breakout-min-average-dollar-volume", type=float, default=None)
     return parser
 
@@ -231,6 +232,13 @@ def _forward_paper_command(
                 str(args.mean_reversion_zscore_entry_threshold),
             ]
         )
+    if args.mean_reversion_max_atr_pct is not None:
+        command.extend(
+            [
+                "--mean-reversion-max-atr-pct",
+                str(args.mean_reversion_max_atr_pct),
+            ]
+        )
     if args.breakout_min_average_dollar_volume is not None:
         command.extend(
             [
@@ -297,6 +305,7 @@ def run_advisory_control_experiment(
     if args.execution_mode != "paper" and (
         args.mean_reversion_min_average_dollar_volume is not None
         or args.mean_reversion_zscore_entry_threshold is not None
+        or args.mean_reversion_max_atr_pct is not None
         or args.breakout_min_average_dollar_volume is not None
     ):
         raise ValueError("forward_paper_experiment_strategy_overrides_require_execution_mode_paper")
@@ -324,6 +333,9 @@ def run_advisory_control_experiment(
         strategy_config_override["mean_reversion"]["zscore_entry_threshold"] = (
             args.mean_reversion_zscore_entry_threshold
         )
+    if args.mean_reversion_max_atr_pct is not None:
+        strategy_config_override.setdefault("mean_reversion", {})
+        strategy_config_override["mean_reversion"]["max_atr_pct"] = args.mean_reversion_max_atr_pct
     if args.breakout_min_average_dollar_volume is not None:
         strategy_config_override["breakout"] = {
             "min_average_dollar_volume": args.breakout_min_average_dollar_volume
