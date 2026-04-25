@@ -228,6 +228,28 @@ python -m crypto_agent.cli.forward_paper \
   --mean-reversion-max-atr-pct 0.00225
 ```
 
+Tuned XRP discovery control candidate (paper-only, no advisory): use the same checked-in
+baseline and lower only `mean_reversion.zscore_entry_threshold` from `2.0` to `1.75`.
+This targets the repeated `zscore_below_entry_threshold` non-emit blocker without changing
+liquidity thresholds, default strategy behavior, or execution authority.
+
+```bash
+python -m crypto_agent.cli.forward_paper \
+  --config config/paper_coinbase_xrp_discovery.yaml \
+  --runtime-id coinbase-xrp-5m-control-tuned-zscore \
+  --market-source coinbase_spot \
+  --live-symbol XRP-USD \
+  --live-interval 5m \
+  --session-interval-seconds 300 \
+  --max-sessions 12 \
+  --execution-mode paper \
+  --regime-liquidity-stress-dollar-volume-threshold 150000 \
+  --breakout-min-average-dollar-volume 150000 \
+  --mean-reversion-min-average-dollar-volume 150000 \
+  --mean-reversion-max-atr-pct 0.00225 \
+  --mean-reversion-zscore-entry-threshold 1.75
+```
+
 Advisory for XRP discovery is optional/experimental (not default); only add when running an explicit A/B check:
 
 ```bash

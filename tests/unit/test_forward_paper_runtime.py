@@ -182,6 +182,18 @@ def _write_paper_config(tmp_path: Path) -> Path:
     return config_path
 
 
+def _write_xrp_discovery_config(tmp_path: Path) -> Path:
+    config_payload = (
+        Path("config/paper_coinbase_xrp_discovery.yaml")
+        .read_text(encoding="utf-8")
+        .replace("runs_dir: runs", f"runs_dir: {tmp_path / 'runs'}")
+        .replace("journals_dir: journals", f"journals_dir: {tmp_path / 'journals'}")
+    )
+    config_path = tmp_path / "paper_coinbase_xrp_discovery.yaml"
+    config_path.write_text(config_payload, encoding="utf-8")
+    return config_path
+
+
 def _tick(year: int, month: int, day: int, hour: int, minute: int) -> datetime:
     return datetime(year, month, day, hour, minute, tzinfo=UTC)
 
@@ -624,14 +636,7 @@ def test_cli_forward_paper_xrp_discovery_baseline_profile_resolves_effective_thr
     tmp_path: Path,
     capsys,
 ) -> None:
-    config_payload = (
-        Path("config/paper_coinbase_xrp_discovery.yaml")
-        .read_text(encoding="utf-8")
-        .replace("runs_dir: runs", f"runs_dir: {tmp_path / 'runs'}")
-        .replace("journals_dir: journals", f"journals_dir: {tmp_path / 'journals'}")
-    )
-    config_path = tmp_path / "paper_coinbase_xrp_discovery.yaml"
-    config_path.write_text(config_payload, encoding="utf-8")
+    config_path = _write_xrp_discovery_config(tmp_path)
     exit_code = main(
         [
             str(FIXTURES_DIR / "paper_candles_high_volatility.jsonl"),
@@ -672,11 +677,77 @@ def test_cli_forward_paper_xrp_discovery_baseline_profile_resolves_effective_thr
     assert breakout["threshold_visibility"]["min_average_dollar_volume_threshold_used"] == 150_000.0
     assert mean_reversion["strategy_config"]["min_average_dollar_volume"] == 150_000.0
     assert mean_reversion["strategy_config"]["max_atr_pct"] == 0.00225
+    assert mean_reversion["strategy_config"]["zscore_entry_threshold"] == 2.0
     assert (
         mean_reversion["threshold_visibility"]["min_average_dollar_volume_threshold_used"]
         == 150_000.0
     )
     assert mean_reversion["threshold_visibility"]["max_atr_pct_threshold_used"] == 0.00225
+    assert mean_reversion["threshold_visibility"]["zscore_entry_threshold_used"] == 2.0
+    assert status_payload["regime_config_source"] == "override"
+    assert status_payload["regime_config"]["liquidity_stress_dollar_volume_threshold"] == 150_000.0
+    assert "external_confirmation" not in summary_payload
+
+
+def test_cli_forward_paper_xrp_discovery_tuned_profile_resolves_zscore_threshold(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _write_xrp_discovery_config(tmp_path)
+    exit_code = main(
+        [
+            str(FIXTURES_DIR / "paper_candles_high_volatility.jsonl"),
+            "--config",
+            str(config_path),
+            "--runtime-id",
+            "xrp-discovery-tuned-zscore-threshold-proof",
+            "--execution-mode",
+            "paper",
+            "--max-sessions",
+            "1",
+            "--regime-liquidity-stress-dollar-volume-threshold",
+            "150000",
+            "--breakout-min-average-dollar-volume",
+            "150000",
+            "--mean-reversion-min-average-dollar-volume",
+            "150000",
+            "--mean-reversion-max-atr-pct",
+            "0.00225",
+            "--mean-reversion-zscore-entry-threshold",
+            "1.75",
+            # Fixture symbol is BTCUSDT; keep deterministic replay path unblocked.
+            "--allowed-symbol",
+            "BTCUSDT",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+
+    sessions_dir = Path(output["sessions_dir"])
+    proposal_generation_path = sessions_dir / "session-0001.proposal_generation_summary.json"
+    proposal_generation_summary = json.loads(proposal_generation_path.read_text(encoding="utf-8"))
+    session_payload = json.loads((sessions_dir / "session-0001.json").read_text(encoding="utf-8"))
+    summary_payload = json.loads(Path(session_payload["summary_path"]).read_text(encoding="utf-8"))
+    status_payload = json.loads(Path(output["status_path"]).read_text(encoding="utf-8"))
+
+    breakout = proposal_generation_summary["proposal_generation"]["breakout"]
+    mean_reversion = proposal_generation_summary["proposal_generation"]["mean_reversion"]
+    assert breakout["strategy_config"]["min_average_dollar_volume"] == 150_000.0
+    assert mean_reversion["strategy_config"] == {
+        "lookback_candles": 4,
+        "max_atr_pct": 0.00225,
+        "max_realized_volatility": 0.002,
+        "min_average_dollar_volume": 150_000.0,
+        "stop_atr_multiple": 1.0,
+        "strategy_id": "mean_reversion_v1",
+        "zscore_entry_threshold": 1.75,
+    }
+    assert (
+        mean_reversion["threshold_visibility"]["min_average_dollar_volume_threshold_used"]
+        == 150_000.0
+    )
+    assert mean_reversion["threshold_visibility"]["max_atr_pct_threshold_used"] == 0.00225
+    assert mean_reversion["threshold_visibility"]["zscore_entry_threshold_used"] == 1.75
     assert status_payload["regime_config_source"] == "override"
     assert status_payload["regime_config"]["liquidity_stress_dollar_volume_threshold"] == 150_000.0
     assert "external_confirmation" not in summary_payload

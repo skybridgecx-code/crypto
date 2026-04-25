@@ -238,7 +238,7 @@ def test_forward_paper_proposal_generation_report_shows_overridden_threshold_val
     tmp_path: Path,
 ) -> None:
     runs_dir = tmp_path / "runs"
-    run_id = "omega-btc-5m-override-1-btcusdt-advisory"
+    run_id = "coinbase-xrp-5m-control-tuned-zscore"
     run_dir = runs_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -246,11 +246,11 @@ def test_forward_paper_proposal_generation_report_shows_overridden_threshold_val
         run_dir,
         session_number=1,
         breakout_non_emit_reason="regime_not_trend",
-        mean_reversion_non_emit_reason="average_dollar_volume_below_min",
+        mean_reversion_non_emit_reason="zscore_below_entry_threshold",
         blocked_reason_counts={},
-        mean_reversion_min_average_dollar_volume_threshold=2_500.0,
-        mean_reversion_zscore_entry_threshold=1.5,
-        mean_reversion_max_atr_pct_threshold=0.0025,
+        mean_reversion_min_average_dollar_volume_threshold=150_000.0,
+        mean_reversion_zscore_entry_threshold=1.75,
+        mean_reversion_max_atr_pct_threshold=0.00225,
     )
 
     assert main(["--run-id", run_id, "--runs-dir", str(runs_dir)]) == 0
@@ -260,13 +260,13 @@ def test_forward_paper_proposal_generation_report_shows_overridden_threshold_val
     payload = json.loads(aggregate_json_path.read_text(encoding="utf-8"))
     mean_reversion = payload["runs"][0]["strategy_aggregates"]["mean_reversion"]
     assert mean_reversion["threshold_visibility"]["threshold_values_used"] == {
-        "min_average_dollar_volume_threshold_used": [2500.0],
-        "max_atr_pct_threshold_used": [0.0025],
-        "zscore_entry_threshold_used": [1.5],
+        "min_average_dollar_volume_threshold_used": [150000.0],
+        "max_atr_pct_threshold_used": [0.00225],
+        "zscore_entry_threshold_used": [1.75],
     }
-    assert mean_reversion["strategy_configs_used"][0]["min_average_dollar_volume"] == 2500.0
-    assert mean_reversion["strategy_configs_used"][0]["max_atr_pct"] == 0.0025
-    assert mean_reversion["strategy_configs_used"][0]["zscore_entry_threshold"] == 1.5
+    assert mean_reversion["strategy_configs_used"][0]["min_average_dollar_volume"] == 150_000.0
+    assert mean_reversion["strategy_configs_used"][0]["max_atr_pct"] == 0.00225
+    assert mean_reversion["strategy_configs_used"][0]["zscore_entry_threshold"] == 1.75
 
 
 def test_forward_paper_proposal_generation_report_supports_multiple_run_ids(tmp_path: Path) -> None:
