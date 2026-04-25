@@ -21,6 +21,8 @@ from crypto_agent.runtime.loop import (
 )
 from crypto_agent.signals.base import BreakoutSignalConfig, MeanReversionSignalConfig
 
+_XRP_DISCOVERY_LIQUIDITY_TUNING_THRESHOLD = 50_000.0
+
 
 def _symbol_cap(value: str) -> tuple[str, float]:
     symbol, separator, raw_cap = value.partition("=")
@@ -231,6 +233,14 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--xrp-discovery-liquidity-tuning",
+        action="store_true",
+        help=(
+            "Paper-only Coinbase XRP discovery preset that lowers only liquidity "
+            "thresholds to 50000.0. It does not change zscore or advisory behavior."
+        ),
+    )
+    parser.add_argument(
         "--regime-liquidity-stress-dollar-volume-threshold",
         type=float,
         default=None,
@@ -315,6 +325,46 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Seconds to wait between live-market fetch retry attempts (default: 2.0).",
     )
     return parser
+
+
+def _normalize_symbol_token(value: str) -> str:
+    return value.strip().upper().replace("-", "").replace("_", "").replace("/", "")
+
+
+def _apply_xrp_discovery_liquidity_tuning(
+    *,
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    settings_allowed_symbols: Sequence[str],
+) -> None:
+    if not args.xrp_discovery_liquidity_tuning:
+        return
+    if args.execution_mode != "paper":
+        parser.error("--xrp-discovery-liquidity-tuning is paper-only")
+    if args.mean_reversion_zscore_entry_threshold is not None:
+        parser.error("--xrp-discovery-liquidity-tuning cannot be combined with zscore tuning")
+    if args.regime_liquidity_stress_dollar_volume_threshold is not None:
+        parser.error(
+            "--xrp-discovery-liquidity-tuning owns "
+            "--regime-liquidity-stress-dollar-volume-threshold"
+        )
+    if args.breakout_min_average_dollar_volume is not None:
+        parser.error("--xrp-discovery-liquidity-tuning owns --breakout-min-average-dollar-volume")
+    if args.mean_reversion_min_average_dollar_volume is not None:
+        parser.error(
+            "--xrp-discovery-liquidity-tuning owns "
+            "--mean-reversion-min-average-dollar-volume"
+        )
+
+    allowed = {_normalize_symbol_token(symbol) for symbol in settings_allowed_symbols}
+    if "XRPUSD" not in allowed:
+        parser.error("--xrp-discovery-liquidity-tuning requires an XRPUSD config profile")
+
+    args.regime_liquidity_stress_dollar_volume_threshold = (
+        _XRP_DISCOVERY_LIQUIDITY_TUNING_THRESHOLD
+    )
+    args.breakout_min_average_dollar_volume = _XRP_DISCOVERY_LIQUIDITY_TUNING_THRESHOLD
+    args.mean_reversion_min_average_dollar_volume = _XRP_DISCOVERY_LIQUIDITY_TUNING_THRESHOLD
 
 
 def _build_cli_sandbox_execution_adapter() -> ScriptedSandboxExecutionAdapter:
@@ -456,6 +506,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--sandbox-fixture-rehearsal cannot be used with --canary-only")
     if args.manual_halt and args.manual_resume:
         parser.error("--manual-halt and --manual-resume are mutually exclusive")
+    settings = load_settings(args.config)
+    _apply_xrp_discovery_liquidity_tuning(
+        args=args,
+        parser=parser,
+        settings_allowed_symbols=settings.venue.allowed_symbols,
+    )
     regime_config_override = _build_regime_config_override(args)
     if regime_config_override is not None and args.execution_mode != "paper":
         parser.error("Regime config overrides are paper-only and require --execution-mode=paper")
@@ -467,7 +523,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     ) and args.execution_mode != "paper":
         parser.error("Strategy config overrides are paper-only and require --execution-mode=paper")
     market_source = cast(Literal["replay", "binance_spot", "coinbase_spot"], args.market_source)
-    settings = load_settings(args.config)
     runtime_control_id = args.runtime_id
     updated_at = datetime.now(UTC)
     controls = default_live_control_config(

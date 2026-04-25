@@ -5,7 +5,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+
 from crypto_agent.cli.forward_paper import main
+from crypto_agent.cli.forward_paper_proposal_generation_report import (
+    main as proposal_generation_report_main,
+)
 from crypto_agent.config import load_settings
 from crypto_agent.regime.base import RegimeConfig
 from crypto_agent.runtime.history import append_forward_paper_history
@@ -751,6 +755,163 @@ def test_cli_forward_paper_xrp_discovery_tuned_profile_resolves_zscore_threshold
     assert status_payload["regime_config_source"] == "override"
     assert status_payload["regime_config"]["liquidity_stress_dollar_volume_threshold"] == 150_000.0
     assert "external_confirmation" not in summary_payload
+
+
+def test_cli_forward_paper_xrp_discovery_liquidity_tuning_resolves_effective_thresholds(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _write_xrp_discovery_config(tmp_path)
+    exit_code = main(
+        [
+            str(FIXTURES_DIR / "paper_candles_high_volatility.jsonl"),
+            "--config",
+            str(config_path),
+            "--runtime-id",
+            "xrp-discovery-tuned-liquidity-threshold-proof",
+            "--execution-mode",
+            "paper",
+            "--max-sessions",
+            "1",
+            "--xrp-discovery-liquidity-tuning",
+            # Fixture symbol is BTCUSDT; keep deterministic replay path unblocked.
+            "--allowed-symbol",
+            "BTCUSDT",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+
+    sessions_dir = Path(output["sessions_dir"])
+    proposal_generation_path = sessions_dir / "session-0001.proposal_generation_summary.json"
+    proposal_generation_summary = json.loads(proposal_generation_path.read_text(encoding="utf-8"))
+    session_payload = json.loads((sessions_dir / "session-0001.json").read_text(encoding="utf-8"))
+    summary_payload = json.loads(Path(session_payload["summary_path"]).read_text(encoding="utf-8"))
+    status_payload = json.loads(Path(output["status_path"]).read_text(encoding="utf-8"))
+
+    breakout = proposal_generation_summary["proposal_generation"]["breakout"]
+    mean_reversion = proposal_generation_summary["proposal_generation"]["mean_reversion"]
+    assert breakout["strategy_config_source"] == "override"
+    assert breakout["strategy_config"]["min_average_dollar_volume"] == 50_000.0
+    assert breakout["threshold_visibility"]["min_average_dollar_volume_threshold_used"] == 50_000.0
+    assert mean_reversion["strategy_config_source"] == "override"
+    assert mean_reversion["strategy_config"] == {
+        "lookback_candles": 4,
+        "max_atr_pct": 0.002,
+        "max_realized_volatility": 0.002,
+        "min_average_dollar_volume": 50_000.0,
+        "stop_atr_multiple": 1.0,
+        "strategy_id": "mean_reversion_v1",
+        "zscore_entry_threshold": 2.0,
+    }
+    assert (
+        mean_reversion["threshold_visibility"]["min_average_dollar_volume_threshold_used"]
+        == 50_000.0
+    )
+    assert mean_reversion["threshold_visibility"]["zscore_entry_threshold_used"] == 2.0
+    assert status_payload["regime_config_source"] == "override"
+    assert status_payload["regime_config"]["liquidity_stress_dollar_volume_threshold"] == 50_000.0
+    assert "external_confirmation" not in summary_payload
+
+    assert (
+        proposal_generation_report_main(
+            [
+                "--run-id",
+                "xrp-discovery-tuned-liquidity-threshold-proof",
+                "--runs-dir",
+                str(tmp_path / "runs"),
+            ]
+        )
+        == 0
+    )
+    report_output = json.loads(capsys.readouterr().out)
+    aggregate_payload = json.loads(Path(report_output["json_path"]).read_text(encoding="utf-8"))
+    report = Path(report_output["report_path"]).read_text(encoding="utf-8")
+    run_payload = aggregate_payload["runs"][0]
+    assert run_payload["strategy_aggregates"]["breakout"]["threshold_visibility"][
+        "threshold_values_used"
+    ]["min_average_dollar_volume_threshold_used"] == [50_000.0]
+    assert run_payload["strategy_aggregates"]["mean_reversion"]["threshold_visibility"][
+        "threshold_values_used"
+    ] == {
+        "max_atr_pct_threshold_used": [0.002],
+        "max_realized_volatility_threshold_used": [0.002],
+        "min_average_dollar_volume_threshold_used": [50_000.0],
+        "zscore_entry_threshold_used": [2.0],
+    }
+    assert '"min_average_dollar_volume_threshold_used": [50000.0]' in report
+    assert '"zscore_entry_threshold_used": [2.0]' in report
+
+
+def test_cli_forward_paper_xrp_discovery_liquidity_tuning_is_not_default(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _write_xrp_discovery_config(tmp_path)
+    exit_code = main(
+        [
+            str(FIXTURES_DIR / "paper_candles_high_volatility.jsonl"),
+            "--config",
+            str(config_path),
+            "--runtime-id",
+            "xrp-discovery-default-threshold-proof",
+            "--execution-mode",
+            "paper",
+            "--max-sessions",
+            "1",
+            # Fixture symbol is BTCUSDT; keep deterministic replay path unblocked.
+            "--allowed-symbol",
+            "BTCUSDT",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+
+    proposal_generation_path = (
+        Path(output["sessions_dir"]) / "session-0001.proposal_generation_summary.json"
+    )
+    proposal_generation_summary = json.loads(proposal_generation_path.read_text(encoding="utf-8"))
+    status_payload = json.loads(Path(output["status_path"]).read_text(encoding="utf-8"))
+    breakout = proposal_generation_summary["proposal_generation"]["breakout"]
+    mean_reversion = proposal_generation_summary["proposal_generation"]["mean_reversion"]
+
+    assert breakout["strategy_config_source"] == "default"
+    assert breakout["strategy_config"]["min_average_dollar_volume"] == 5_000_000.0
+    assert mean_reversion["strategy_config_source"] == "default"
+    assert mean_reversion["strategy_config"]["min_average_dollar_volume"] == 5_000_000.0
+    assert mean_reversion["strategy_config"]["zscore_entry_threshold"] == 2.0
+    assert status_payload["regime_config_source"] == "default"
+    assert (
+        status_payload["regime_config"]["liquidity_stress_dollar_volume_threshold"] == 5_000_000.0
+    )
+
+
+def test_cli_forward_paper_xrp_discovery_liquidity_tuning_rejects_zscore_combo(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _write_xrp_discovery_config(tmp_path)
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                str(FIXTURES_DIR / "paper_candles_high_volatility.jsonl"),
+                "--config",
+                str(config_path),
+                "--runtime-id",
+                "xrp-discovery-invalid-combo",
+                "--execution-mode",
+                "paper",
+                "--xrp-discovery-liquidity-tuning",
+                "--mean-reversion-zscore-entry-threshold",
+                "1.75",
+                "--allowed-symbol",
+                "BTCUSDT",
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    stderr = capsys.readouterr().err
+    assert "--xrp-discovery-liquidity-tuning cannot be combined with zscore tuning" in stderr
 
 
 def test_forward_paper_runtime_persists_interrupted_state_on_keyboard_interrupt(
