@@ -620,6 +620,68 @@ def test_cli_forward_paper_applies_mean_reversion_max_atr_override_to_diagnostic
     assert mean_reversion["threshold_visibility"]["max_atr_pct_threshold_used"] == 0.0025
 
 
+def test_cli_forward_paper_xrp_discovery_baseline_profile_resolves_effective_thresholds(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_payload = (
+        Path("config/paper_coinbase_xrp_discovery.yaml")
+        .read_text(encoding="utf-8")
+        .replace("runs_dir: runs", f"runs_dir: {tmp_path / 'runs'}")
+        .replace("journals_dir: journals", f"journals_dir: {tmp_path / 'journals'}")
+    )
+    config_path = tmp_path / "paper_coinbase_xrp_discovery.yaml"
+    config_path.write_text(config_payload, encoding="utf-8")
+    exit_code = main(
+        [
+            str(FIXTURES_DIR / "paper_candles_high_volatility.jsonl"),
+            "--config",
+            str(config_path),
+            "--runtime-id",
+            "xrp-discovery-baseline-threshold-proof",
+            "--execution-mode",
+            "paper",
+            "--max-sessions",
+            "1",
+            "--regime-liquidity-stress-dollar-volume-threshold",
+            "150000",
+            "--breakout-min-average-dollar-volume",
+            "150000",
+            "--mean-reversion-min-average-dollar-volume",
+            "150000",
+            "--mean-reversion-max-atr-pct",
+            "0.00225",
+            # Fixture symbol is BTCUSDT; keep deterministic replay path unblocked.
+            "--allowed-symbol",
+            "BTCUSDT",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+
+    sessions_dir = Path(output["sessions_dir"])
+    proposal_generation_path = sessions_dir / "session-0001.proposal_generation_summary.json"
+    proposal_generation_summary = json.loads(proposal_generation_path.read_text(encoding="utf-8"))
+    session_payload = json.loads((sessions_dir / "session-0001.json").read_text(encoding="utf-8"))
+    summary_payload = json.loads(Path(session_payload["summary_path"]).read_text(encoding="utf-8"))
+    status_payload = json.loads(Path(output["status_path"]).read_text(encoding="utf-8"))
+
+    breakout = proposal_generation_summary["proposal_generation"]["breakout"]
+    mean_reversion = proposal_generation_summary["proposal_generation"]["mean_reversion"]
+    assert breakout["strategy_config"]["min_average_dollar_volume"] == 150_000.0
+    assert breakout["threshold_visibility"]["min_average_dollar_volume_threshold_used"] == 150_000.0
+    assert mean_reversion["strategy_config"]["min_average_dollar_volume"] == 150_000.0
+    assert mean_reversion["strategy_config"]["max_atr_pct"] == 0.00225
+    assert (
+        mean_reversion["threshold_visibility"]["min_average_dollar_volume_threshold_used"]
+        == 150_000.0
+    )
+    assert mean_reversion["threshold_visibility"]["max_atr_pct_threshold_used"] == 0.00225
+    assert status_payload["regime_config_source"] == "override"
+    assert status_payload["regime_config"]["liquidity_stress_dollar_volume_threshold"] == 150_000.0
+    assert "external_confirmation" not in summary_payload
+
+
 def test_forward_paper_runtime_persists_interrupted_state_on_keyboard_interrupt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

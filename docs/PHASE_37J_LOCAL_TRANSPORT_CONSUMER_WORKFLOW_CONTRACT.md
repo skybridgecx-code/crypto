@@ -195,6 +195,7 @@ python -m crypto_agent.cli.forward_paper \
 Known-good Coinbase spot live-input probe (2 sessions, paper-only):
 
 ```bash
+# Coinbase JWT auth for coinbase_spot uses coinbase-advanced-py official JWT helpers.
 export COINBASE_API_KEY_NAME="organizations/<org_id>/apiKeys/<key_id>"
 export COINBASE_API_KEY_SECRET="-----BEGIN EC PRIVATE KEY-----\n...\n-----END EC PRIVATE KEY-----"
 
@@ -207,6 +208,43 @@ python -m crypto_agent.cli.forward_paper \
   --feed-stale-after-seconds 120 \
   --max-sessions 2 \
   --execution-mode paper
+```
+
+Checked-in XRP discovery control baseline (default path, no advisory):
+
+```bash
+python -m crypto_agent.cli.forward_paper \
+  --config config/paper_coinbase_xrp_discovery.yaml \
+  --runtime-id coinbase-xrp-5m-control-baseline \
+  --market-source coinbase_spot \
+  --live-symbol XRP-USD \
+  --live-interval 5m \
+  --session-interval-seconds 300 \
+  --max-sessions 4 \
+  --execution-mode paper \
+  --regime-liquidity-stress-dollar-volume-threshold 150000 \
+  --breakout-min-average-dollar-volume 150000 \
+  --mean-reversion-min-average-dollar-volume 150000 \
+  --mean-reversion-max-atr-pct 0.00225
+```
+
+Advisory for XRP discovery is optional/experimental (not default); only add when running an explicit A/B check:
+
+```bash
+python -m crypto_agent.cli.forward_paper \
+  --config config/paper_coinbase_xrp_discovery.yaml \
+  --runtime-id coinbase-xrp-5m-advisory-experiment \
+  --market-source coinbase_spot \
+  --live-symbol XRP-USD \
+  --live-interval 5m \
+  --session-interval-seconds 300 \
+  --max-sessions 4 \
+  --execution-mode paper \
+  --regime-liquidity-stress-dollar-volume-threshold 150000 \
+  --breakout-min-average-dollar-volume 150000 \
+  --mean-reversion-min-average-dollar-volume 150000 \
+  --mean-reversion-max-atr-pct 0.00225 \
+  --external-confirmation-path /absolute/path/xrp_external_confirmation.json
 ```
 
 Inspect per-session proposal-generation diagnostics for an executed forward-paper session:
