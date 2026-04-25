@@ -6,7 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from crypto_agent.cli.forward_paper import main
+from crypto_agent.cli.forward_paper import (
+    _settings_with_xrp_discovery_liquidity_tuning,
+    main,
+)
 from crypto_agent.cli.forward_paper_proposal_generation_report import (
     main as proposal_generation_report_main,
 )
@@ -762,6 +765,9 @@ def test_cli_forward_paper_xrp_discovery_liquidity_tuning_resolves_effective_thr
     capsys,
 ) -> None:
     config_path = _write_xrp_discovery_config(tmp_path)
+    tuned_settings = _settings_with_xrp_discovery_liquidity_tuning(load_settings(config_path))
+    assert tuned_settings.risk.min_average_dollar_volume_usd == 50_000.0
+
     exit_code = main(
         [
             str(FIXTURES_DIR / "paper_candles_high_volatility.jsonl"),

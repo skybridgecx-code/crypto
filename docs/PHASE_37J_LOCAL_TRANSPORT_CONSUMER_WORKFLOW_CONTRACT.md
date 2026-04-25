@@ -251,13 +251,50 @@ python -m crypto_agent.cli.forward_paper \
 ```
 
 Tuned XRP discovery liquidity candidate (paper-only, no advisory): use the same
-checked-in baseline and lower only discovery liquidity thresholds through the named
-XRP liquidity preset. This keeps `mean_reversion.zscore_entry_threshold` at `2.0`.
+checked-in baseline and lower discovery liquidity thresholds through the named
+XRP liquidity preset. This aligns regime, proposal-generation, and downstream
+`risk.min_average_dollar_volume_usd` to `50000.0` for this invocation only, while
+keeping `mean_reversion.zscore_entry_threshold` at `2.0`.
 
 ```bash
 python -m crypto_agent.cli.forward_paper \
   --config config/paper_coinbase_xrp_discovery.yaml \
   --runtime-id coinbase-xrp-5m-control-tuned-liquidity \
+  --market-source coinbase_spot \
+  --live-symbol XRP-USD \
+  --live-interval 5m \
+  --session-interval-seconds 300 \
+  --max-sessions 12 \
+  --execution-mode paper \
+  --xrp-discovery-liquidity-tuning
+```
+
+Historical aligned-risk temp-config experiment (only needed when reproducing runs from
+before `--xrp-discovery-liquidity-tuning` aligned the risk floor): copy the checked-in
+XRP config to a temp file and change only `risk.min_average_dollar_volume_usd` from
+`150000.0` to `50000.0`, then run the same liquidity-tuning command against that temp
+config. Do not commit the temp config.
+
+```bash
+tmp_config="$(mktemp /tmp/paper_coinbase_xrp_discovery_aligned_risk.XXXXXX.yaml)"
+cp config/paper_coinbase_xrp_discovery.yaml "$tmp_config"
+python - <<'PY' "$tmp_config"
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+path.write_text(
+    path.read_text(encoding="utf-8").replace(
+        "min_average_dollar_volume_usd: 150000.0",
+        "min_average_dollar_volume_usd: 50000.0",
+    ),
+    encoding="utf-8",
+)
+PY
+
+python -m crypto_agent.cli.forward_paper \
+  --config "$tmp_config" \
+  --runtime-id coinbase-xrp-5m-control-tuned-liquidity-aligned-risk \
   --market-source coinbase_spot \
   --live-symbol XRP-USD \
   --live-interval 5m \

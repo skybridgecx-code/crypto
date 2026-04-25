@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Literal, cast
 
-from crypto_agent.config import load_settings
+from crypto_agent.config import Settings, load_settings
 from crypto_agent.execution.live_adapter import ScriptedSandboxExecutionAdapter
 from crypto_agent.execution.models import VenueExecutionAck, VenueOrderRequest, VenueOrderState
 from crypto_agent.policy.live_controls import (
@@ -236,8 +236,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "--xrp-discovery-liquidity-tuning",
         action="store_true",
         help=(
-            "Paper-only Coinbase XRP discovery preset that lowers only liquidity "
-            "thresholds to 50000.0. It does not change zscore or advisory behavior."
+            "Paper-only Coinbase XRP discovery preset that lowers proposal-generation, "
+            "regime, and risk liquidity thresholds to 50000.0. It does not change "
+            "zscore or advisory behavior."
         ),
     )
     parser.add_argument(
@@ -365,6 +366,20 @@ def _apply_xrp_discovery_liquidity_tuning(
     )
     args.breakout_min_average_dollar_volume = _XRP_DISCOVERY_LIQUIDITY_TUNING_THRESHOLD
     args.mean_reversion_min_average_dollar_volume = _XRP_DISCOVERY_LIQUIDITY_TUNING_THRESHOLD
+
+
+def _settings_with_xrp_discovery_liquidity_tuning(settings: Settings) -> Settings:
+    return settings.model_copy(
+        update={
+            "risk": settings.risk.model_copy(
+                update={
+                    "min_average_dollar_volume_usd": (
+                        _XRP_DISCOVERY_LIQUIDITY_TUNING_THRESHOLD
+                    )
+                }
+            )
+        }
+    )
 
 
 def _build_cli_sandbox_execution_adapter() -> ScriptedSandboxExecutionAdapter:
@@ -512,6 +527,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser=parser,
         settings_allowed_symbols=settings.venue.allowed_symbols,
     )
+    if args.xrp_discovery_liquidity_tuning:
+        settings = _settings_with_xrp_discovery_liquidity_tuning(settings)
     regime_config_override = _build_regime_config_override(args)
     if regime_config_override is not None and args.execution_mode != "paper":
         parser.error("Regime config overrides are paper-only and require --execution-mode=paper")
