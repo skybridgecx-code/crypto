@@ -201,6 +201,36 @@ def _write_xrp_discovery_config(tmp_path: Path) -> Path:
     return config_path
 
 
+def _write_external_confirmation(
+    tmp_path: Path,
+    *,
+    asset: str = "BTCUSDT",
+    directional_bias: str = "sell",
+    confidence_adjustment: float = 0.12,
+    veto_trade: bool = False,
+) -> Path:
+    path = tmp_path / "external_confirmation.json"
+    path.write_text(
+        json.dumps(
+            {
+                "artifact_kind": "external_confirmation_advisory_v1",
+                "asset": asset,
+                "confidence_adjustment": confidence_adjustment,
+                "directional_bias": directional_bias,
+                "observed_at_epoch_ns": 1700000000000000123,
+                "rationale": "Deterministic forward-paper advisory policy test.",
+                "source_system": "polymarket-arb",
+                "supporting_tags": ["test", "external_confirmation"],
+                "veto_trade": veto_trade,
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
 def _tick(year: int, month: int, day: int, hour: int, minute: int) -> datetime:
     return datetime(year, month, day, hour, minute, tzinfo=UTC)
 
@@ -847,6 +877,59 @@ def test_cli_forward_paper_xrp_discovery_liquidity_tuning_resolves_effective_thr
     }
     assert '"min_average_dollar_volume_threshold_used": [50000.0]' in report
     assert '"zscore_entry_threshold_used": [2.0]' in report
+
+
+def test_cli_forward_paper_conservative_external_confirmation_policy_blocks_conflict(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _write_paper_config(tmp_path)
+    artifact_path = _write_external_confirmation(tmp_path)
+
+    exit_code = main(
+        [
+            str(FIXTURES_DIR / "paper_candles_breakout_long.jsonl"),
+            "--config",
+            str(config_path),
+            "--runtime-id",
+            "external-confirmation-conservative-policy-proof",
+            "--execution-mode",
+            "paper",
+            "--max-sessions",
+            "1",
+            "--external-confirmation-path",
+            str(artifact_path),
+            "--external-confirmation-impact-policy",
+            "conservative",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+
+    sessions_dir = Path(output["sessions_dir"])
+    session_payload = json.loads((sessions_dir / "session-0001.json").read_text(encoding="utf-8"))
+    summary_payload = json.loads(Path(session_payload["summary_path"]).read_text(encoding="utf-8"))
+    report = Path(session_payload["report_path"]).read_text(encoding="utf-8")
+    proposal_generation_summary = json.loads(
+        (sessions_dir / "session-0001.proposal_generation_summary.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    pipeline = proposal_generation_summary["proposal_generation"]["proposal_pipeline"]
+
+    assert summary_payload["external_confirmation"]["artifact_loaded"] is True
+    assert summary_payload["external_confirmation"]["asset"] == "BTCUSDT"
+    assert summary_payload["external_confirmation"]["source_system"] == "polymarket-arb"
+    assert summary_payload["external_confirmation"]["impact_policy"] == "conservative"
+    assert summary_payload["external_confirmation"]["decision_status_counts"] == {
+        "penalized_conflict": 1
+    }
+    assert summary_payload["scorecard"]["proposal_count"] == 0
+    assert summary_payload["scorecard"]["orders_submitted_count"] == 0
+    assert pipeline["external_confirmation_impact_policy"] == "conservative"
+    assert pipeline["emitted_proposal_count"] == 1
+    assert pipeline["dropped_by_external_confirmation_count"] == 1
+    assert "impact_policy: conservative" in report
 
 
 def test_cli_forward_paper_xrp_discovery_liquidity_tuning_is_not_default(

@@ -46,6 +46,8 @@ from crypto_agent.signals import (
 )
 from crypto_agent.types import FillEvent, TradeProposal
 
+ExternalConfirmationImpactPolicy = Literal["conservative"]
+
 
 class StrategyProposalGenerationDiagnostics(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -67,6 +69,7 @@ class StrategyProposalGenerationDiagnostics(BaseModel):
 class ProposalPipelineDiagnostics(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    external_confirmation_impact_policy: ExternalConfirmationImpactPolicy | None = None
     emitted_proposal_count: int = Field(default=0, ge=0)
     dropped_by_external_confirmation_count: int = Field(default=0, ge=0)
     blocked_by_risk_or_policy_count: int = Field(default=0, ge=0)
@@ -536,6 +539,7 @@ def _build_operator_report(
     pnl: ReplayPnLSummary,
     review_packet: dict[str, Any],
     operator_summary: dict[str, object],
+    external_confirmation_summary: dict[str, object] | None = None,
 ) -> str:
     lines = [
         "# Paper Run Operator Report",
@@ -614,6 +618,21 @@ def _build_operator_report(
         f"first_event_type: {operator_summary['first_event_type']}",
         f"last_event_type: {operator_summary['last_event_type']}",
     ]
+    if external_confirmation_summary is not None:
+        lines.extend(
+            [
+                "",
+                "## External Confirmation",
+                f"artifact_loaded: {external_confirmation_summary['artifact_loaded']}",
+                f"asset: {external_confirmation_summary['asset']}",
+                f"source_system: {external_confirmation_summary['source_system']}",
+                f"decision_count: {external_confirmation_summary['decision_count']}",
+                "decision_status_counts: "
+                f"{external_confirmation_summary['decision_status_counts']}",
+            ]
+        )
+        if external_confirmation_summary.get("impact_policy") is not None:
+            lines.append(f"impact_policy: {external_confirmation_summary['impact_policy']}")
     return "\n".join(lines)
 
 
@@ -628,6 +647,7 @@ def _write_operator_report(
     pnl: ReplayPnLSummary,
     review_packet: dict[str, Any],
     operator_summary: dict[str, object],
+    external_confirmation_summary: dict[str, object] | None = None,
 ) -> None:
     report_path.write_text(
         _build_operator_report(
@@ -639,6 +659,7 @@ def _write_operator_report(
             pnl=pnl,
             review_packet=review_packet,
             operator_summary=operator_summary,
+            external_confirmation_summary=external_confirmation_summary,
         ),
         encoding="utf-8",
     )
@@ -654,6 +675,7 @@ def run_paper_replay(
     journal_path: str | Path | None = None,
     run_dir: str | Path | None = None,
     external_confirmation_path: str | Path | None = None,
+    external_confirmation_impact_policy: ExternalConfirmationImpactPolicy | None = None,
     regime_config_override: RegimeConfig | None = None,
     breakout_config_override: BreakoutSignalConfig | None = None,
     mean_reversion_config_override: MeanReversionSignalConfig | None = None,
@@ -918,6 +940,12 @@ def run_paper_replay(
                 if proposal_for_evaluation is None:
                     dropped_by_external_confirmation_count += 1
                     continue
+                if (
+                    external_confirmation_impact_policy == "conservative"
+                    and confirmation_decision.status == "penalized_conflict"
+                ):
+                    dropped_by_external_confirmation_count += 1
+                    continue
             if proposal_for_evaluation is None:
                 continue
             evaluated_proposal = proposal_for_evaluation
@@ -1124,6 +1152,7 @@ def run_paper_replay(
             },
         ),
         proposal_pipeline=ProposalPipelineDiagnostics(
+            external_confirmation_impact_policy=external_confirmation_impact_policy,
             emitted_proposal_count=emitted_proposal_count,
             dropped_by_external_confirmation_count=dropped_by_external_confirmation_count,
             blocked_by_risk_or_policy_count=blocked_by_risk_or_policy_count,
@@ -1132,6 +1161,7 @@ def run_paper_replay(
         ),
     )
 
+    external_confirmation_summary: dict[str, object] | None = None
     summary = {
         "run_id": resolved_run_id,
         "mode": settings.mode.value,
@@ -1145,7 +1175,7 @@ def run_paper_replay(
         "operator_summary": operator_summary,
     }
     if external_confirmation_path is not None:
-        summary["external_confirmation"] = {
+        external_confirmation_summary = {
             "artifact_path": str(Path(external_confirmation_path).resolve()),
             "artifact_loaded": external_confirmation is not None,
             "source_system": external_confirmation.source_system
@@ -1157,6 +1187,9 @@ def run_paper_replay(
                 Counter(decision.status for decision in external_confirmation_decisions)
             ),
         }
+        if external_confirmation_impact_policy is not None:
+            external_confirmation_summary["impact_policy"] = external_confirmation_impact_policy
+        summary["external_confirmation"] = external_confirmation_summary
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
     proposal_generation_summary_path.write_text(
         json.dumps(proposal_generation_summary.model_dump(mode="json"), indent=2, sort_keys=True),
@@ -1176,6 +1209,7 @@ def run_paper_replay(
         pnl=pnl,
         review_packet=review_packet,
         operator_summary=operator_summary,
+        external_confirmation_summary=external_confirmation_summary,
     )
     write_operator_run_index(settings.paths.runs_dir)
 

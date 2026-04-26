@@ -321,6 +321,37 @@ Advisory for XRP discovery is optional/experimental (not default); only add when
   --external-confirmation-path /Users/muhammadaatif/polymarket-arb/.tmp/cryp-xrp-bridge-demo/exports/xrp_external_confirmation.json
 ```
 
+By default, the bridge loads and annotates emitted proposals with external confirmation
+metadata. `boosted_confirmation` and `penalized_conflict` adjust proposal confidence, and
+`vetoed_*` remains a hard advisory veto. Confidence is advisory metadata by default:
+risk checks, sizing, and paper order approval do not otherwise size from confidence.
+
+Optional conservative advisory-impact policy (paper-only, no live authority):
+
+```bash
+.venv/bin/python -m crypto_agent.cli.forward_paper \
+  --config config/paper_coinbase_xrp_discovery.yaml \
+  --runtime-id poly-xrp-bridge-test-1-conservative \
+  --market-source coinbase_spot \
+  --live-symbol XRP-USD \
+  --live-interval 5m \
+  --session-interval-seconds 300 \
+  --max-sessions 4 \
+  --execution-mode paper \
+  --xrp-discovery-liquidity-tuning \
+  --mean-reversion-max-atr-pct 0.00225 \
+  --external-confirmation-path /Users/muhammadaatif/polymarket-arb/.tmp/cryp-xrp-bridge-demo/exports/xrp_external_confirmation.json \
+  --external-confirmation-impact-policy conservative
+```
+
+The conservative policy changes only paper replay/runtime behavior when the flag is
+present:
+
+- `penalized_conflict` blocks the proposal before risk/sizing/order submission.
+- `boosted_confirmation` does not increase size; it continues through the normal flow.
+- `ignored_asset_mismatch` does not affect the proposal.
+- `vetoed_conflict` or `vetoed_neutral` still hard-block the proposal.
+
 The paired producer-side export command is:
 
 ```bash
@@ -344,7 +375,6 @@ Status interpretation:
 - `ignored_asset_mismatch`: the advisory asset differs from the proposal asset.
 - `vetoed_conflict` or `vetoed_neutral`: `veto_trade=true` blocks the proposal.
 - no decision statuses with `artifact_loaded=true`: bridge loaded, but the session emitted no proposals.
-```
 
 Inspect per-session proposal-generation diagnostics for an executed forward-paper session:
 

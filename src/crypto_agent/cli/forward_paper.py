@@ -233,6 +233,15 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--external-confirmation-impact-policy",
+        choices=("conservative",),
+        default=None,
+        help=(
+            "Optional paper-only advisory impact policy. conservative blocks "
+            "penalized_conflict proposals before risk/sizing and does not boost size."
+        ),
+    )
+    parser.add_argument(
         "--xrp-discovery-liquidity-tuning",
         action="store_true",
         help=(
@@ -521,6 +530,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--sandbox-fixture-rehearsal cannot be used with --canary-only")
     if args.manual_halt and args.manual_resume:
         parser.error("--manual-halt and --manual-resume are mutually exclusive")
+    if (
+        args.external_confirmation_impact_policy is not None
+        and args.execution_mode != "paper"
+    ):
+        parser.error("--external-confirmation-impact-policy is paper-only")
     settings = load_settings(args.config)
     _apply_xrp_discovery_liquidity_tuning(
         args=args,
@@ -661,6 +675,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             _build_cli_sandbox_execution_adapter() if args.execution_mode == "sandbox" else None
         ),
         external_confirmation_path=args.external_confirmation_path,
+        external_confirmation_impact_policy=args.external_confirmation_impact_policy,
         regime_config_override=regime_config_override,
         breakout_config_override=breakout_config_override,
         mean_reversion_config_override=mean_reversion_config_override,
