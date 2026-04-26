@@ -341,16 +341,23 @@ Optional conservative advisory-impact policy (paper-only, no live authority):
   --xrp-discovery-liquidity-tuning \
   --mean-reversion-max-atr-pct 0.00225 \
   --external-confirmation-path /Users/muhammadaatif/polymarket-arb/.tmp/cryp-xrp-bridge-demo/exports/xrp_external_confirmation.json \
-  --external-confirmation-impact-policy conservative
+  --external-confirmation-impact-policy conservative \
+  --external-confirmation-boosted-size-multiplier 1.25
 ```
 
 The conservative policy changes only paper replay/runtime behavior when the flag is
 present:
 
 - `penalized_conflict` blocks the proposal before risk/sizing/order submission.
-- `boosted_confirmation` does not increase size; it continues through the normal flow.
+- `boosted_confirmation` continues through the normal flow.
 - `ignored_asset_mismatch` does not affect the proposal.
 - `vetoed_conflict` or `vetoed_neutral` still hard-block the proposal.
+
+The optional boosted sizing multiplier is also paper-only. It applies only to surviving
+aligned proposals with `external_confirmation_applied=true` and
+`external_confirmation_status=boosted_confirmation`. It does not apply to conflicts,
+asset mismatches, vetoed proposals, or proposals without an external confirmation marker.
+Existing risk, cash, exposure, and policy limits still cap the approved order notional.
 
 The paired producer-side export command is:
 

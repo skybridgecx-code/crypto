@@ -242,6 +242,16 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--external-confirmation-boosted-size-multiplier",
+        type=float,
+        default=None,
+        help=(
+            "Optional paper-only boosted_confirmation sizing multiplier in [1.0, 1.5]. "
+            "Applies only to externally confirmed aligned proposals before existing "
+            "risk/exposure caps."
+        ),
+    )
+    parser.add_argument(
         "--xrp-discovery-liquidity-tuning",
         action="store_true",
         help=(
@@ -535,6 +545,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         and args.execution_mode != "paper"
     ):
         parser.error("--external-confirmation-impact-policy is paper-only")
+    if (
+        args.external_confirmation_boosted_size_multiplier is not None
+        and args.execution_mode != "paper"
+    ):
+        parser.error("--external-confirmation-boosted-size-multiplier is paper-only")
+    if args.external_confirmation_boosted_size_multiplier is not None and not (
+        1.0 <= args.external_confirmation_boosted_size_multiplier <= 1.5
+    ):
+        parser.error("--external-confirmation-boosted-size-multiplier must be between 1.0 and 1.5")
     settings = load_settings(args.config)
     _apply_xrp_discovery_liquidity_tuning(
         args=args,
@@ -676,6 +695,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         external_confirmation_path=args.external_confirmation_path,
         external_confirmation_impact_policy=args.external_confirmation_impact_policy,
+        external_confirmation_boosted_size_multiplier=(
+            args.external_confirmation_boosted_size_multiplier
+        ),
         regime_config_override=regime_config_override,
         breakout_config_override=breakout_config_override,
         mean_reversion_config_override=mean_reversion_config_override,

@@ -150,7 +150,11 @@ def _paper_settings_for(tmp_path: Path):
     )
 
 
-def _write_paper_config(tmp_path: Path) -> Path:
+def _write_paper_config(
+    tmp_path: Path,
+    *,
+    risk_per_trade_fraction: float = 0.005,
+) -> Path:
     config_path = tmp_path / "paper_test.yaml"
     config_path.write_text(
         "\n".join(
@@ -166,7 +170,7 @@ def _write_paper_config(tmp_path: Path) -> Path:
                 "    - ETHUSDT",
                 "  quote_currency: USDT",
                 "risk:",
-                "  risk_per_trade_fraction: 0.005",
+                f"  risk_per_trade_fraction: {risk_per_trade_fraction}",
                 "  max_portfolio_gross_exposure: 1.0",
                 "  max_symbol_gross_exposure: 0.4",
                 "  max_daily_realized_loss: 0.015",
@@ -229,6 +233,17 @@ def _write_external_confirmation(
         encoding="utf-8",
     )
     return path
+
+
+def _first_risk_approved_notional(journal_path: Path) -> float:
+    for line in journal_path.read_text(encoding="utf-8").splitlines():
+        event = json.loads(line)
+        if event["event_type"] != "risk.check.completed":
+            continue
+        sizing = event["payload"]["sizing"]
+        assert isinstance(sizing, dict)
+        return float(sizing["approved_notional_usd"])
+    raise AssertionError("missing risk.check.completed event")
 
 
 def _tick(year: int, month: int, day: int, hour: int, minute: int) -> datetime:
@@ -930,6 +945,106 @@ def test_cli_forward_paper_conservative_external_confirmation_policy_blocks_conf
     assert pipeline["emitted_proposal_count"] == 1
     assert pipeline["dropped_by_external_confirmation_count"] == 1
     assert "impact_policy: conservative" in report
+
+
+def test_cli_forward_paper_boosted_external_confirmation_multiplier_increases_size(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _write_paper_config(tmp_path, risk_per_trade_fraction=0.0005)
+    artifact_path = _write_external_confirmation(tmp_path, directional_bias="buy")
+
+    exit_code = main(
+        [
+            str(FIXTURES_DIR / "paper_candles_breakout_long.jsonl"),
+            "--config",
+            str(config_path),
+            "--runtime-id",
+            "external-confirmation-boosted-sizing-proof",
+            "--execution-mode",
+            "paper",
+            "--max-sessions",
+            "1",
+            "--external-confirmation-path",
+            str(artifact_path),
+            "--external-confirmation-impact-policy",
+            "conservative",
+            "--external-confirmation-boosted-size-multiplier",
+            "1.25",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+
+    sessions_dir = Path(output["sessions_dir"])
+    session_payload = json.loads((sessions_dir / "session-0001.json").read_text(encoding="utf-8"))
+    summary_payload = json.loads(Path(session_payload["summary_path"]).read_text(encoding="utf-8"))
+    report = Path(session_payload["report_path"]).read_text(encoding="utf-8")
+    proposal_generation_summary = json.loads(
+        (sessions_dir / "session-0001.proposal_generation_summary.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    pipeline = proposal_generation_summary["proposal_generation"]["proposal_pipeline"]
+
+    assert summary_payload["external_confirmation"]["decision_status_counts"] == {
+        "boosted_confirmation": 1
+    }
+    assert summary_payload["external_confirmation"]["impact_policy"] == "conservative"
+    assert summary_payload["external_confirmation"]["boosted_size_multiplier"] == 1.25
+    assert pipeline["external_confirmation_boosted_size_multiplier"] == 1.25
+    assert _first_risk_approved_notional(Path(session_payload["journal_path"])) == pytest.approx(
+        37119.565217391304
+    )
+    assert "boosted_size_multiplier: 1.25" in report
+
+
+def test_cli_forward_paper_rejects_boosted_size_multiplier_outside_safe_range(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _write_paper_config(tmp_path)
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                str(FIXTURES_DIR / "paper_candles_breakout_long.jsonl"),
+                "--config",
+                str(config_path),
+                "--runtime-id",
+                "external-confirmation-boosted-sizing-range-reject",
+                "--execution-mode",
+                "paper",
+                "--external-confirmation-boosted-size-multiplier",
+                "1.75",
+            ]
+        )
+    assert exc_info.value.code == 2
+    stderr = capsys.readouterr().err
+    assert "--external-confirmation-boosted-size-multiplier must be between 1.0 and 1.5" in stderr
+
+
+def test_cli_forward_paper_rejects_boosted_size_multiplier_for_non_paper_mode(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _write_paper_config(tmp_path)
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                str(FIXTURES_DIR / "paper_candles_breakout_long.jsonl"),
+                "--config",
+                str(config_path),
+                "--runtime-id",
+                "external-confirmation-boosted-sizing-non-paper-reject",
+                "--execution-mode",
+                "shadow",
+                "--external-confirmation-boosted-size-multiplier",
+                "1.25",
+            ]
+        )
+    assert exc_info.value.code == 2
+    stderr = capsys.readouterr().err
+    assert "--external-confirmation-boosted-size-multiplier is paper-only" in stderr
 
 
 def test_cli_forward_paper_xrp_discovery_liquidity_tuning_is_not_default(

@@ -26,6 +26,7 @@ def evaluate_trade_proposal(
     portfolio: PortfolioState,
     settings: Settings,
     kill_switch_context: KillSwitchContext | None = None,
+    sizing_notional_multiplier: float = 1.0,
 ) -> RiskCheckResult:
     kill_switch = evaluate_kill_switch(kill_switch_context or KillSwitchContext(), settings)
     guardrail_decision = apply_policy_guardrails(proposal, settings, kill_switch, None)
@@ -52,7 +53,12 @@ def evaluate_trade_proposal(
         )
 
     try:
-        sizing = size_trade_proposal(proposal, portfolio, settings)
+        sizing = size_trade_proposal(
+            proposal,
+            portfolio,
+            settings,
+            notional_multiplier=sizing_notional_multiplier,
+        )
     except ValueError as exc:
         decision = PolicyDecision(
             proposal_id=proposal.proposal_id,

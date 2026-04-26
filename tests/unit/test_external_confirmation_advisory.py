@@ -27,6 +27,15 @@ def _paper_settings_for(tmp_path: Path):
     )
 
 
+def _low_risk_paper_settings_for(tmp_path: Path):
+    settings = _paper_settings_for(tmp_path)
+    return settings.model_copy(
+        update={
+            "risk": settings.risk.model_copy(update={"risk_per_trade_fraction": 0.0005})
+        }
+    )
+
+
 def _write_external_confirmation(
     tmp_path: Path,
     *,
@@ -60,6 +69,17 @@ def _first_proposal_confidence(journal_path: Path) -> float:
     ]
     assert proposal_events
     return float(proposal_events[0].payload["confidence"])
+
+
+def _first_approved_notional(journal_path: Path) -> float:
+    events = AppendOnlyJournal(journal_path).read_all()
+    risk_events = [
+        event for event in events if event.event_type is EventType.RISK_CHECK_COMPLETED
+    ]
+    assert risk_events
+    sizing = risk_events[0].payload["sizing"]
+    assert isinstance(sizing, dict)
+    return float(sizing["approved_notional_usd"])
 
 
 def _external_confirmation_events(journal_path: Path) -> list[dict[str, object]]:
@@ -119,6 +139,123 @@ def test_external_confirmation_confirmation_boosts_confidence_bounded(tmp_path: 
     external_events = _external_confirmation_events(boosted.journal_path)
     assert len(external_events) == 1
     assert external_events[0]["status"] == "boosted_confirmation"
+
+
+def test_boosted_size_multiplier_is_default_off_and_increases_only_boosted_sizing(
+    tmp_path: Path,
+) -> None:
+    settings = _low_risk_paper_settings_for(tmp_path)
+    artifact_path = _write_external_confirmation(
+        tmp_path,
+        asset="BTCUSDT",
+        directional_bias="buy",
+        confidence_adjustment=0.12,
+        veto_trade=False,
+    )
+    boosted_default = run_paper_replay(
+        FIXTURES_DIR / "paper_candles_breakout_long.jsonl",
+        settings=settings,
+        run_id="external-boosted-default-size",
+        external_confirmation_path=artifact_path,
+    )
+    boosted_sized = run_paper_replay(
+        FIXTURES_DIR / "paper_candles_breakout_long.jsonl",
+        settings=settings,
+        run_id="external-boosted-sized",
+        external_confirmation_path=artifact_path,
+        external_confirmation_boosted_size_multiplier=1.25,
+    )
+
+    default_notional = _first_approved_notional(boosted_default.journal_path)
+    sized_notional = _first_approved_notional(boosted_sized.journal_path)
+    summary = json.loads(boosted_sized.summary_path.read_text(encoding="utf-8"))
+    report = boosted_sized.report_path.read_text(encoding="utf-8")
+    pipeline = _proposal_pipeline(boosted_sized)
+
+    assert _external_confirmation_events(boosted_sized.journal_path)[0]["status"] == (
+        "boosted_confirmation"
+    )
+    assert sized_notional == pytest.approx(default_notional * 1.25)
+    assert summary["external_confirmation"]["boosted_size_multiplier"] == 1.25
+    assert pipeline["external_confirmation_boosted_size_multiplier"] == 1.25
+    assert "boosted_size_multiplier: 1.25" in report
+
+
+def test_boosted_size_multiplier_does_not_increase_non_boosted_advisories(
+    tmp_path: Path,
+) -> None:
+    settings = _low_risk_paper_settings_for(tmp_path)
+    baseline = run_paper_replay(
+        FIXTURES_DIR / "paper_candles_breakout_long.jsonl",
+        settings=settings,
+        run_id="external-sizing-baseline",
+    )
+    penalized_path = _write_external_confirmation(
+        tmp_path / "penalized",
+        asset="BTCUSDT",
+        directional_bias="sell",
+        confidence_adjustment=0.12,
+        veto_trade=False,
+    )
+    mismatch_path = _write_external_confirmation(
+        tmp_path / "mismatch",
+        asset="ETHUSDT",
+        directional_bias="buy",
+        confidence_adjustment=0.12,
+        veto_trade=False,
+    )
+
+    penalized = run_paper_replay(
+        FIXTURES_DIR / "paper_candles_breakout_long.jsonl",
+        settings=settings,
+        run_id="external-penalized-sized",
+        external_confirmation_path=penalized_path,
+        external_confirmation_boosted_size_multiplier=1.25,
+    )
+    mismatch = run_paper_replay(
+        FIXTURES_DIR / "paper_candles_breakout_long.jsonl",
+        settings=settings,
+        run_id="external-mismatch-sized",
+        external_confirmation_path=mismatch_path,
+        external_confirmation_boosted_size_multiplier=1.25,
+    )
+
+    baseline_notional = _first_approved_notional(baseline.journal_path)
+    assert _external_confirmation_events(penalized.journal_path)[0]["status"] == (
+        "penalized_conflict"
+    )
+    assert _external_confirmation_events(mismatch.journal_path)[0]["status"] == (
+        "ignored_asset_mismatch"
+    )
+    assert _first_approved_notional(penalized.journal_path) == pytest.approx(
+        baseline_notional
+    )
+    assert _first_approved_notional(mismatch.journal_path) == pytest.approx(baseline_notional)
+
+
+def test_boosted_size_multiplier_remains_capped_by_existing_exposure_limits(
+    tmp_path: Path,
+) -> None:
+    settings = _paper_settings_for(tmp_path)
+    artifact_path = _write_external_confirmation(
+        tmp_path,
+        asset="BTCUSDT",
+        directional_bias="buy",
+        confidence_adjustment=0.12,
+        veto_trade=False,
+    )
+
+    capped = run_paper_replay(
+        FIXTURES_DIR / "paper_candles_breakout_long.jsonl",
+        settings=settings,
+        run_id="external-boosted-sized-capped",
+        external_confirmation_path=artifact_path,
+        external_confirmation_boosted_size_multiplier=1.5,
+    )
+
+    assert _first_approved_notional(capped.journal_path) == pytest.approx(
+        settings.risk.max_symbol_gross_exposure * 100_000.0
+    )
 
 
 def test_external_confirmation_conflict_penalty_and_veto(tmp_path: Path) -> None:
@@ -275,6 +412,7 @@ def test_conservative_impact_policy_preserves_veto_blocking(
         run_id="external-vetoed-conservative",
         external_confirmation_path=veto_path,
         external_confirmation_impact_policy="conservative",
+        external_confirmation_boosted_size_multiplier=1.25,
     )
 
     assert _external_confirmation_events(vetoed.journal_path)[0]["status"] == "vetoed_conflict"

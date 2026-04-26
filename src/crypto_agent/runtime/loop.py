@@ -2687,6 +2687,7 @@ def run_forward_paper_runtime(
     manual_control_state: ManualControlState | None = None,
     external_confirmation_path: str | Path | None = None,
     external_confirmation_impact_policy: Literal["conservative"] | None = None,
+    external_confirmation_boosted_size_multiplier: float | None = None,
     regime_config_override: RegimeConfig | None = None,
     breakout_config_override: BreakoutSignalConfig | None = None,
     mean_reversion_config_override: MeanReversionSignalConfig | None = None,
@@ -2866,6 +2867,9 @@ def run_forward_paper_runtime(
                     starting_portfolio=account_state.to_portfolio_state(),
                     external_confirmation_path=external_confirmation_path,
                     external_confirmation_impact_policy=external_confirmation_impact_policy,
+                    external_confirmation_boosted_size_multiplier=(
+                        external_confirmation_boosted_size_multiplier
+                    ),
                     regime_config_override=effective_regime_config,
                     breakout_config_override=breakout_config_override,
                     mean_reversion_config_override=mean_reversion_config_override,
@@ -3049,6 +3053,9 @@ def run_forward_paper_runtime(
                         starting_portfolio=account_state.to_portfolio_state(),
                         external_confirmation_path=external_confirmation_path,
                         external_confirmation_impact_policy=external_confirmation_impact_policy,
+                        external_confirmation_boosted_size_multiplier=(
+                            external_confirmation_boosted_size_multiplier
+                        ),
                         regime_config_override=effective_regime_config,
                         breakout_config_override=breakout_config_override,
                         mean_reversion_config_override=mean_reversion_config_override,

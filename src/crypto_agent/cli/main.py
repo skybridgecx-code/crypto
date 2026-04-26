@@ -47,6 +47,7 @@ from crypto_agent.signals import (
 from crypto_agent.types import FillEvent, TradeProposal
 
 ExternalConfirmationImpactPolicy = Literal["conservative"]
+ExternalConfirmationBoostedSizeMultiplier = float
 
 
 class StrategyProposalGenerationDiagnostics(BaseModel):
@@ -70,6 +71,9 @@ class ProposalPipelineDiagnostics(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     external_confirmation_impact_policy: ExternalConfirmationImpactPolicy | None = None
+    external_confirmation_boosted_size_multiplier: (
+        ExternalConfirmationBoostedSizeMultiplier | None
+    ) = None
     emitted_proposal_count: int = Field(default=0, ge=0)
     dropped_by_external_confirmation_count: int = Field(default=0, ge=0)
     blocked_by_risk_or_policy_count: int = Field(default=0, ge=0)
@@ -159,6 +163,20 @@ def _external_confirmation_event(
         mode=settings.mode,
         payload=decision.model_dump(mode="json"),
     )
+
+
+def _boosted_external_confirmation_size_multiplier(
+    *,
+    proposal: TradeProposal,
+    configured_multiplier: ExternalConfirmationBoostedSizeMultiplier | None,
+) -> float:
+    if configured_multiplier is None:
+        return 1.0
+    if proposal.supporting_features.get("external_confirmation_applied") is not True:
+        return 1.0
+    if proposal.supporting_features.get("external_confirmation_status") != "boosted_confirmation":
+        return 1.0
+    return configured_multiplier
 
 
 def _kill_switch_event(
@@ -633,6 +651,11 @@ def _build_operator_report(
         )
         if external_confirmation_summary.get("impact_policy") is not None:
             lines.append(f"impact_policy: {external_confirmation_summary['impact_policy']}")
+        if external_confirmation_summary.get("boosted_size_multiplier") is not None:
+            lines.append(
+                "boosted_size_multiplier: "
+                f"{external_confirmation_summary['boosted_size_multiplier']}"
+            )
     return "\n".join(lines)
 
 
@@ -676,12 +699,21 @@ def run_paper_replay(
     run_dir: str | Path | None = None,
     external_confirmation_path: str | Path | None = None,
     external_confirmation_impact_policy: ExternalConfirmationImpactPolicy | None = None,
+    external_confirmation_boosted_size_multiplier: (
+        ExternalConfirmationBoostedSizeMultiplier | None
+    ) = None,
     regime_config_override: RegimeConfig | None = None,
     breakout_config_override: BreakoutSignalConfig | None = None,
     mean_reversion_config_override: MeanReversionSignalConfig | None = None,
 ) -> PaperRunResult:
     if settings.mode is not Mode.PAPER:
         raise ValueError("Paper replay harness requires settings.mode to be paper.")
+    if external_confirmation_boosted_size_multiplier is not None and not (
+        1.0 <= external_confirmation_boosted_size_multiplier <= 1.5
+    ):
+        raise ValueError(
+            "external_confirmation_boosted_size_multiplier must be between 1.0 and 1.5"
+        )
 
     replay_fixture_path = Path(replay_path)
     candles = load_candle_replay(replay_fixture_path)
@@ -955,6 +987,10 @@ def run_paper_replay(
                 portfolio,
                 settings,
                 kill_switch_context=kill_switch_context,
+                sizing_notional_multiplier=_boosted_external_confirmation_size_multiplier(
+                    proposal=evaluated_proposal,
+                    configured_multiplier=external_confirmation_boosted_size_multiplier,
+                ),
             )
 
             if risk_result.decision.action is PolicyAction.ALLOW:
@@ -1153,6 +1189,9 @@ def run_paper_replay(
         ),
         proposal_pipeline=ProposalPipelineDiagnostics(
             external_confirmation_impact_policy=external_confirmation_impact_policy,
+            external_confirmation_boosted_size_multiplier=(
+                external_confirmation_boosted_size_multiplier
+            ),
             emitted_proposal_count=emitted_proposal_count,
             dropped_by_external_confirmation_count=dropped_by_external_confirmation_count,
             blocked_by_risk_or_policy_count=blocked_by_risk_or_policy_count,
@@ -1189,6 +1228,10 @@ def run_paper_replay(
         }
         if external_confirmation_impact_policy is not None:
             external_confirmation_summary["impact_policy"] = external_confirmation_impact_policy
+        if external_confirmation_boosted_size_multiplier is not None:
+            external_confirmation_summary["boosted_size_multiplier"] = (
+                external_confirmation_boosted_size_multiplier
+            )
         summary["external_confirmation"] = external_confirmation_summary
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
     proposal_generation_summary_path.write_text(
