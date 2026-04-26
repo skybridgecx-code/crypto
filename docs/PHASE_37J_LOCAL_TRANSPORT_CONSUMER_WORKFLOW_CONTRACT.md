@@ -376,6 +376,22 @@ Status interpretation:
 - `vetoed_conflict` or `vetoed_neutral`: `veto_trade=true` blocks the proposal.
 - no decision statuses with `artifact_loaded=true`: bridge loaded, but the session emitted no proposals.
 
+Generate the operator-facing external confirmation impact report for the proven XRP
+policy run:
+
+```bash
+python -m crypto_agent.cli.forward_paper_external_confirmation_report \
+  --run-id poly-xrp-bridge-impact-policy-1 \
+  --runs-dir runs \
+  --journals-dir journals
+```
+
+The report writes deterministic JSON and Markdown artifacts under
+`runs/external_confirmation_reports/`. It summarizes whether the bridge artifact loaded,
+which asset/source was applied, status counts for boosted, penalized, ignored, and vetoed
+decisions, per-session external-confirmation drops, proposals, submitted orders, fills,
+and the active external-confirmation impact policy.
+
 Inspect per-session proposal-generation diagnostics for an executed forward-paper session:
 
 ```bash
