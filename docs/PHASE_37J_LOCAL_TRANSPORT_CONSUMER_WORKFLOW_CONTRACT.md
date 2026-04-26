@@ -307,20 +307,43 @@ python -m crypto_agent.cli.forward_paper \
 Advisory for XRP discovery is optional/experimental (not default); only add when running an explicit A/B check:
 
 ```bash
-python -m crypto_agent.cli.forward_paper \
+.venv/bin/python -m crypto_agent.cli.forward_paper \
   --config config/paper_coinbase_xrp_discovery.yaml \
-  --runtime-id coinbase-xrp-5m-advisory-experiment \
+  --runtime-id poly-xrp-bridge-test-1 \
   --market-source coinbase_spot \
   --live-symbol XRP-USD \
   --live-interval 5m \
   --session-interval-seconds 300 \
   --max-sessions 4 \
   --execution-mode paper \
-  --regime-liquidity-stress-dollar-volume-threshold 150000 \
-  --breakout-min-average-dollar-volume 150000 \
-  --mean-reversion-min-average-dollar-volume 150000 \
+  --xrp-discovery-liquidity-tuning \
   --mean-reversion-max-atr-pct 0.00225 \
-  --external-confirmation-path /absolute/path/xrp_external_confirmation.json
+  --external-confirmation-path /Users/muhammadaatif/polymarket-arb/.tmp/cryp-xrp-bridge-demo/exports/xrp_external_confirmation.json
+```
+
+The paired producer-side export command is:
+
+```bash
+cd /Users/muhammadaatif/polymarket-arb
+scripts/export_xrp_cryp_bridge_demo.sh
+```
+
+Inspect the loaded artifact, per-run decision status, and outcome counts:
+
+```bash
+find runs \( \
+  -path 'runs/poly-xrp-bridge-test-1/sessions/session-*.json' -o \
+  -path 'runs/poly-xrp-bridge-test-1-session-*/summary.json' \
+\) -print0 | xargs -0 rg -n '"external_confirmation"|"artifact_loaded"|"asset"|"source_system"|"decision_status_counts"|"proposal_count"|"orders_submitted_count"|"fill_event_count"|"session_outcome"|"message"'
+```
+
+Status interpretation:
+
+- `boosted_confirmation`: the advisory direction aligns with the proposal side.
+- `penalized_conflict`: the advisory direction conflicts with the proposal side.
+- `ignored_asset_mismatch`: the advisory asset differs from the proposal asset.
+- `vetoed_conflict` or `vetoed_neutral`: `veto_trade=true` blocks the proposal.
+- no decision statuses with `artifact_loaded=true`: bridge loaded, but the session emitted no proposals.
 ```
 
 Inspect per-session proposal-generation diagnostics for an executed forward-paper session:
