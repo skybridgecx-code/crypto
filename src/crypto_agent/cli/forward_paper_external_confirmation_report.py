@@ -67,6 +67,21 @@ def _safe_non_negative_int(value: object) -> int:
     return 0
 
 
+def _safe_float(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
 def _safe_string(value: object) -> str | None:
     if value is None:
         return None
@@ -183,6 +198,106 @@ def _journal_decision_status_counts(path: Path | None) -> dict[str, int]:
     return _decision_counts_with_tracked_zeros(counter)
 
 
+def _sum_optional_float(current: float | None, value: object) -> float | None:
+    numeric_value = _safe_float(value)
+    if numeric_value is None:
+        return current
+    return (current or 0.0) + numeric_value
+
+
+def _journal_execution_evidence(path: Path | None) -> dict[str, Any]:
+    evidence: dict[str, Any] = {
+        "approved_notional_usd": None,
+        "approved_quantity": None,
+        "submitted_quantity": None,
+        "submitted_order_notional_usd": None,
+        "total_fill_notional_usd": None,
+        "cap_or_block_reasons": [],
+    }
+    if path is None or not path.is_file():
+        return evidence
+
+    proposal_entry_reference_by_id: dict[str, float] = {}
+    cap_or_block_reasons: set[str] = set()
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"forward_paper_external_confirmation_invalid_journal_json:{path}:{line_number}"
+            ) from exc
+        if not isinstance(event, dict):
+            continue
+        event_type = _safe_string(event.get("event_type"))
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            continue
+
+        if event_type == "trade.proposal.created":
+            proposal_id = _safe_string(payload.get("proposal_id"))
+            entry_reference = _safe_float(payload.get("entry_reference"))
+            if proposal_id is not None and entry_reference is not None:
+                proposal_entry_reference_by_id[proposal_id] = entry_reference
+            continue
+
+        if event_type == "risk.check.completed":
+            sizing = payload.get("sizing")
+            if isinstance(sizing, dict):
+                evidence["approved_notional_usd"] = _safe_float(sizing.get("approved_notional_usd"))
+                evidence["approved_quantity"] = _safe_float(sizing.get("quantity"))
+            for reason in payload.get("rejection_reasons", []):
+                reason_value = _safe_string(reason)
+                if reason_value is not None:
+                    cap_or_block_reasons.add(reason_value)
+            decision = payload.get("decision")
+            if isinstance(decision, dict):
+                for reason in decision.get("reason_codes", []):
+                    reason_value = _safe_string(reason)
+                    if reason_value is not None and reason_value != "within_limits":
+                        cap_or_block_reasons.add(reason_value)
+            continue
+
+        if event_type == "policy.decision.made":
+            for reason in payload.get("reason_codes", []):
+                reason_value = _safe_string(reason)
+                if reason_value is not None and reason_value != "within_limits":
+                    cap_or_block_reasons.add(reason_value)
+            continue
+
+        if event_type == "order.submitted":
+            intent = payload.get("intent")
+            if isinstance(intent, dict):
+                submitted_quantity = _safe_float(intent.get("quantity"))
+                evidence["submitted_quantity"] = submitted_quantity
+                proposal_id = _safe_string(intent.get("proposal_id"))
+                if (
+                    proposal_id is not None
+                    and submitted_quantity is not None
+                    and proposal_id in proposal_entry_reference_by_id
+                ):
+                    evidence["submitted_order_notional_usd"] = (
+                        submitted_quantity * proposal_entry_reference_by_id[proposal_id]
+                    )
+            continue
+
+        if event_type == "order.rejected":
+            reason_value = _safe_string(payload.get("reject_reason"))
+            if reason_value is not None:
+                cap_or_block_reasons.add(reason_value)
+            continue
+
+        if event_type == "order.filled":
+            evidence["total_fill_notional_usd"] = _sum_optional_float(
+                _safe_float(evidence["total_fill_notional_usd"]),
+                payload.get("notional_usd"),
+            )
+
+    evidence["cap_or_block_reasons"] = sorted(cap_or_block_reasons)
+    return evidence
+
+
 def _load_session_records(
     *,
     run_id: str,
@@ -228,8 +343,8 @@ def _load_session_records(
 
         proposal_generation_path = sessions_dir / f"{session_id}.proposal_generation_summary.json"
         if not proposal_generation_path.is_file():
-            proposal_generation_path = runs_dir / f"{run_id}-{session_id}" / (
-                "proposal_generation_summary.json"
+            proposal_generation_path = (
+                runs_dir / f"{run_id}-{session_id}" / ("proposal_generation_summary.json")
             )
         pipeline_payload = _proposal_pipeline_payload(proposal_generation_path)
 
@@ -272,9 +387,16 @@ def _load_session_records(
                         pipeline_payload.get("external_confirmation_impact_policy"),
                     )
                 ),
+                "external_confirmation_boosted_size_multiplier": _safe_float(
+                    external_payload.get(
+                        "boosted_size_multiplier",
+                        pipeline_payload.get("external_confirmation_boosted_size_multiplier"),
+                    )
+                ),
                 "dropped_by_external_confirmation_count": _safe_non_negative_int(
                     pipeline_payload.get("dropped_by_external_confirmation_count")
                 ),
+                "sizing_evidence": _journal_execution_evidence(journal_path),
                 **scorecard_counts,
             }
         )
@@ -301,13 +423,20 @@ def _aggregate_run(*, run_id: str, runs_dir: Path, journals_dir: Path) -> dict[s
     source_system_counts: Counter[str] = Counter()
     asset_counts: Counter[str] = Counter()
     impact_policy_counts: Counter[str] = Counter()
+    boosted_size_multiplier_counts: Counter[str] = Counter()
     decision_status_counts: Counter[str] = Counter()
     journal_decision_status_counts: Counter[str] = Counter()
+    cap_or_block_reason_counts: Counter[str] = Counter()
 
     dropped_total = 0
     proposal_total = 0
     orders_submitted_total = 0
     fill_event_total = 0
+    approved_notional_total = 0.0
+    approved_notional_count = 0
+    submitted_order_notional_total = 0.0
+    submitted_order_notional_count = 0
+    total_fill_notional = 0.0
 
     for record in records:
         loaded_value = record["artifact_loaded"]
@@ -325,8 +454,31 @@ def _aggregate_run(*, run_id: str, runs_dir: Path, journals_dir: Path) -> dict[s
             asset_counts.update([record["asset"]])
         if record["external_confirmation_impact_policy"] is not None:
             impact_policy_counts.update([record["external_confirmation_impact_policy"]])
+        if record["external_confirmation_boosted_size_multiplier"] is not None:
+            boosted_size_multiplier_counts.update(
+                [str(record["external_confirmation_boosted_size_multiplier"])]
+            )
         _merge_count_map(decision_status_counts, record["decision_status_counts"])
         _merge_count_map(journal_decision_status_counts, record["journal_decision_status_counts"])
+        sizing_evidence = record["sizing_evidence"]
+        if isinstance(sizing_evidence, dict):
+            approved_notional = _safe_float(sizing_evidence.get("approved_notional_usd"))
+            if approved_notional is not None:
+                approved_notional_total += approved_notional
+                approved_notional_count += 1
+            submitted_order_notional = _safe_float(
+                sizing_evidence.get("submitted_order_notional_usd")
+            )
+            if submitted_order_notional is not None:
+                submitted_order_notional_total += submitted_order_notional
+                submitted_order_notional_count += 1
+            fill_notional = _safe_float(sizing_evidence.get("total_fill_notional_usd"))
+            if fill_notional is not None:
+                total_fill_notional += fill_notional
+            for reason in sizing_evidence.get("cap_or_block_reasons", []):
+                reason_value = _safe_string(reason)
+                if reason_value is not None:
+                    cap_or_block_reason_counts.update([reason_value])
         dropped_total += record["dropped_by_external_confirmation_count"]
         proposal_total += record["proposal_count"]
         orders_submitted_total += record["orders_submitted_count"]
@@ -340,8 +492,9 @@ def _aggregate_run(*, run_id: str, runs_dir: Path, journals_dir: Path) -> dict[s
         "artifact_loaded_counts": loaded_counts,
         "source_system_counts": _counter_to_sorted_dict(source_system_counts),
         "asset_counts": _counter_to_sorted_dict(asset_counts),
-        "external_confirmation_impact_policy_counts": _counter_to_sorted_dict(
-            impact_policy_counts
+        "external_confirmation_impact_policy_counts": _counter_to_sorted_dict(impact_policy_counts),
+        "external_confirmation_boosted_size_multiplier_counts": _counter_to_sorted_dict(
+            boosted_size_multiplier_counts
         ),
         "decision_status_counts": _decision_counts_with_tracked_zeros(decision_status_counts),
         "journal_decision_status_counts": _decision_counts_with_tracked_zeros(
@@ -352,6 +505,14 @@ def _aggregate_run(*, run_id: str, runs_dir: Path, journals_dir: Path) -> dict[s
             "proposal_count": proposal_total,
             "orders_submitted_count": orders_submitted_total,
             "fill_event_count": fill_event_total,
+            "approved_notional_usd": approved_notional_total
+            if approved_notional_count > 0
+            else None,
+            "submitted_order_notional_usd": submitted_order_notional_total
+            if submitted_order_notional_count > 0
+            else None,
+            "total_fill_notional_usd": total_fill_notional if total_fill_notional > 0 else None,
+            "cap_or_block_reason_counts": _counter_to_sorted_dict(cap_or_block_reason_counts),
         },
         "sessions": records,
     }
@@ -377,6 +538,10 @@ def _render_markdown(payload: dict[str, Any]) -> str:
             "- external_confirmation_impact_policy_counts: "
             f"`{_format_counts(run['external_confirmation_impact_policy_counts'])}`"
         ),
+        (
+            "- external_confirmation_boosted_size_multiplier_counts: "
+            f"`{_format_counts(run['external_confirmation_boosted_size_multiplier_counts'])}`"
+        ),
         f"- decision_status_counts: `{_format_counts(run['decision_status_counts'])}`",
         (
             "- journal_decision_status_counts: "
@@ -389,6 +554,13 @@ def _render_markdown(payload: dict[str, Any]) -> str:
         f"- proposal_count: {run['totals']['proposal_count']}",
         f"- orders_submitted_count: {run['totals']['orders_submitted_count']}",
         f"- fill_event_count: {run['totals']['fill_event_count']}",
+        f"- approved_notional_usd: {run['totals']['approved_notional_usd']}",
+        f"- submitted_order_notional_usd: {run['totals']['submitted_order_notional_usd']}",
+        f"- total_fill_notional_usd: {run['totals']['total_fill_notional_usd']}",
+        (
+            "- cap_or_block_reason_counts: "
+            f"`{_format_counts(run['totals']['cap_or_block_reason_counts'])}`"
+        ),
         "",
         "## Sessions",
     ]
@@ -400,6 +572,10 @@ def _render_markdown(payload: dict[str, Any]) -> str:
                 f"- source_system: `{session['source_system']}`",
                 f"- asset: `{session['asset']}`",
                 f"- impact_policy: `{session['external_confirmation_impact_policy']}`",
+                (
+                    "- boosted_size_multiplier: "
+                    f"`{session['external_confirmation_boosted_size_multiplier']}`"
+                ),
                 f"- decision_count: {session['decision_count']}",
                 (
                     "- decision_status_counts: "
@@ -416,6 +592,7 @@ def _render_markdown(payload: dict[str, Any]) -> str:
                 f"- proposal_count: {session['proposal_count']}",
                 f"- orders_submitted_count: {session['orders_submitted_count']}",
                 f"- fill_event_count: {session['fill_event_count']}",
+                f"- sizing_evidence: `{json.dumps(session['sizing_evidence'], sort_keys=True)}`",
                 "",
             ]
         )

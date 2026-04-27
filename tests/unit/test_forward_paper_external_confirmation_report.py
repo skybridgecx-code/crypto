@@ -23,6 +23,12 @@ def _write_session_fixture(
     pipeline: dict[str, object],
     scorecard: dict[str, object],
     journal_statuses: list[str],
+    approved_notional_usd: float | None = None,
+    approved_quantity: float | None = None,
+    entry_reference: float = 100.0,
+    submitted_quantity: float | None = None,
+    fill_notional_values: list[float] | None = None,
+    block_reasons: list[str] | None = None,
 ) -> None:
     session_id = f"session-{session_number:04d}"
     runtime_session_path = runs_dir / run_id / "sessions" / f"{session_id}.json"
@@ -73,6 +79,79 @@ def _write_session_fixture(
         )
         for status in journal_statuses
     ]
+    proposal_id = f"{run_id}-{session_id}-proposal"
+    if approved_notional_usd is not None and approved_quantity is not None:
+        lines.extend(
+            [
+                json.dumps(
+                    {
+                        "event_type": "trade.proposal.created",
+                        "payload": {
+                            "entry_reference": entry_reference,
+                            "proposal_id": proposal_id,
+                        },
+                    },
+                    sort_keys=True,
+                ),
+                json.dumps(
+                    {
+                        "event_type": "risk.check.completed",
+                        "payload": {
+                            "decision": {
+                                "reason_codes": ["within_limits"],
+                            },
+                            "rejection_reasons": [],
+                            "sizing": {
+                                "approved_notional_usd": approved_notional_usd,
+                                "quantity": approved_quantity,
+                            },
+                        },
+                    },
+                    sort_keys=True,
+                ),
+            ]
+        )
+    if block_reasons is not None:
+        lines.append(
+            json.dumps(
+                {
+                    "event_type": "risk.check.completed",
+                    "payload": {
+                        "decision": {"reason_codes": block_reasons},
+                        "rejection_reasons": block_reasons,
+                        "sizing": None,
+                    },
+                },
+                sort_keys=True,
+            )
+        )
+    if submitted_quantity is not None:
+        lines.append(
+            json.dumps(
+                {
+                    "event_type": "order.submitted",
+                    "payload": {
+                        "intent": {
+                            "proposal_id": proposal_id,
+                            "quantity": submitted_quantity,
+                        }
+                    },
+                },
+                sort_keys=True,
+            )
+        )
+    for fill_notional in fill_notional_values or []:
+        lines.append(
+            json.dumps(
+                {
+                    "event_type": "order.filled",
+                    "payload": {
+                        "notional_usd": fill_notional,
+                    },
+                },
+                sort_keys=True,
+            )
+        )
     journal_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
 
@@ -97,11 +176,13 @@ def test_forward_paper_external_confirmation_report_aggregates_bridge_impact(
                 "penalized_conflict": 1,
             },
             "impact_policy": "conservative",
+            "boosted_size_multiplier": 1.25,
             "source_system": "polymarket-arb",
         },
         pipeline={
             "dropped_by_external_confirmation_count": 1,
             "external_confirmation_impact_policy": "conservative",
+            "external_confirmation_boosted_size_multiplier": 1.25,
         },
         scorecard={
             "proposal_count": 1,
@@ -109,6 +190,11 @@ def test_forward_paper_external_confirmation_report_aggregates_bridge_impact(
             "fill_event_count": 2,
         },
         journal_statuses=["boosted_confirmation", "penalized_conflict"],
+        approved_notional_usd=1250.0,
+        approved_quantity=12.5,
+        entry_reference=100.0,
+        submitted_quantity=12.5,
+        fill_notional_values=[750.0, 500.0],
     )
     _write_session_fixture(
         runs_dir=runs_dir,
@@ -124,11 +210,13 @@ def test_forward_paper_external_confirmation_report_aggregates_bridge_impact(
                 "vetoed_neutral": 1,
             },
             "impact_policy": "conservative",
+            "boosted_size_multiplier": 1.25,
             "source_system": "polymarket-arb",
         },
         pipeline={
             "dropped_by_external_confirmation_count": 1,
             "external_confirmation_impact_policy": "conservative",
+            "external_confirmation_boosted_size_multiplier": 1.25,
         },
         scorecard={
             "proposal_count": 0,
@@ -136,6 +224,7 @@ def test_forward_paper_external_confirmation_report_aggregates_bridge_impact(
             "fill_event_count": 0,
         },
         journal_statuses=["ignored_asset_mismatch", "vetoed_neutral"],
+        block_reasons=["no_risk_capacity"],
     )
 
     assert (
@@ -168,6 +257,7 @@ def test_forward_paper_external_confirmation_report_aggregates_bridge_impact(
     assert run_payload["source_system_counts"] == {"polymarket-arb": 2}
     assert run_payload["asset_counts"] == {"XRPUSD": 2}
     assert run_payload["external_confirmation_impact_policy_counts"] == {"conservative": 2}
+    assert run_payload["external_confirmation_boosted_size_multiplier_counts"] == {"1.25": 2}
     assert run_payload["decision_status_counts"] == {
         "boosted_confirmation": 1,
         "ignored_asset_mismatch": 1,
@@ -177,10 +267,14 @@ def test_forward_paper_external_confirmation_report_aggregates_bridge_impact(
     }
     assert run_payload["journal_decision_status_counts"] == run_payload["decision_status_counts"]
     assert run_payload["totals"] == {
+        "approved_notional_usd": 1250.0,
+        "cap_or_block_reason_counts": {"no_risk_capacity": 1},
         "dropped_by_external_confirmation_count": 2,
         "fill_event_count": 2,
         "orders_submitted_count": 1,
         "proposal_count": 1,
+        "submitted_order_notional_usd": 1250.0,
+        "total_fill_notional_usd": 1250.0,
     }
     assert [entry["session_id"] for entry in run_payload["sessions"]] == [
         "session-0001",
@@ -188,12 +282,26 @@ def test_forward_paper_external_confirmation_report_aggregates_bridge_impact(
     ]
     assert run_payload["sessions"][0]["dropped_by_external_confirmation_count"] == 1
     assert run_payload["sessions"][0]["orders_submitted_count"] == 1
+    assert run_payload["sessions"][0]["external_confirmation_boosted_size_multiplier"] == 1.25
+    assert run_payload["sessions"][0]["sizing_evidence"] == {
+        "approved_notional_usd": 1250.0,
+        "approved_quantity": 12.5,
+        "cap_or_block_reasons": [],
+        "submitted_order_notional_usd": 1250.0,
+        "submitted_quantity": 12.5,
+        "total_fill_notional_usd": 1250.0,
+    }
 
     report = report_path.read_text(encoding="utf-8")
     assert "# Forward-Paper External Confirmation Impact Report" in report
     assert f"- run_id: `{run_id}`" in report
     assert "penalized_conflict:1" in report
     assert "dropped_by_external_confirmation_count: 2" in report
+    assert "external_confirmation_boosted_size_multiplier_counts: `1.25:2`" in report
+    assert "approved_notional_usd: 1250.0" in report
+    assert "submitted_order_notional_usd: 1250.0" in report
+    assert "total_fill_notional_usd: 1250.0" in report
+    assert "cap_or_block_reason_counts: `no_risk_capacity:1`" in report
 
 
 def test_forward_paper_external_confirmation_report_handles_absent_markers(
