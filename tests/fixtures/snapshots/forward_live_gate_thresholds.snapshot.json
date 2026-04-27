@@ -1,0 +1,152 @@
+{
+  "blocking_passed": true,
+  "checks": [
+    {
+      "actual": "clean",
+      "category": "blocking",
+      "check_id": "reconciliation_clean",
+      "description": "Runtime reconciliation must be clean.",
+      "expected": "clean",
+      "passed": true,
+      "reason_code": "reconciliation_mismatch"
+    },
+    {
+      "actual": "ready",
+      "category": "blocking",
+      "check_id": "operator_ready",
+      "description": "Operator readiness must be ready.",
+      "expected": "ready",
+      "passed": true,
+      "reason_code": "operator_not_ready_status"
+    },
+    {
+      "actual": "inactive",
+      "category": "blocking",
+      "check_id": "manual_halt_inactive",
+      "description": "Manual halt must be inactive.",
+      "expected": "inactive",
+      "passed": true,
+      "reason_code": "manual_halt_active"
+    },
+    {
+      "actual": "go",
+      "category": "blocking",
+      "check_id": "current_controls_go",
+      "description": "Current live controls must be go.",
+      "expected": "go",
+      "passed": true,
+      "reason_code": "control_status_go"
+    },
+    {
+      "actual": "ready_for_review",
+      "category": "readiness",
+      "check_id": "limited_live_ready_for_review",
+      "description": "Future limited-live gate status must be ready_for_review.",
+      "expected": "ready_for_review",
+      "passed": true,
+      "reason_code": "limited_live_gate_not_ready_for_review"
+    },
+    {
+      "actual": "3",
+      "category": "readiness",
+      "check_id": "min_completed_sessions",
+      "description": "Completed sessions must meet the minimum soak requirement.",
+      "expected": ">=3",
+      "passed": true,
+      "reason_code": "insufficient_completed_sessions"
+    },
+    {
+      "actual": "2",
+      "category": "readiness",
+      "check_id": "min_executed_sessions",
+      "description": "Executed sessions must meet the minimum paper baseline requirement.",
+      "expected": ">=2",
+      "passed": true,
+      "reason_code": "insufficient_executed_sessions"
+    },
+    {
+      "actual": "0",
+      "category": "readiness",
+      "check_id": "max_failed_sessions",
+      "description": "Failed sessions must stay within the allowed maximum.",
+      "expected": "<=0",
+      "passed": true,
+      "reason_code": "failed_sessions_present"
+    },
+    {
+      "actual": "0",
+      "category": "readiness",
+      "check_id": "max_interrupted_sessions",
+      "description": "Interrupted sessions must stay within the allowed maximum.",
+      "expected": "<=0",
+      "passed": true,
+      "reason_code": "interrupted_sessions_present"
+    },
+    {
+      "actual": "3",
+      "category": "readiness",
+      "check_id": "min_shadow_sessions",
+      "description": "Shadow evaluation must include the minimum number of sessions.",
+      "expected": ">=1",
+      "passed": true,
+      "reason_code": "insufficient_shadow_sessions"
+    },
+    {
+      "actual": "0",
+      "category": "readiness",
+      "check_id": "min_shadow_request_count",
+      "description": "Shadow evaluation must include the minimum number of normalized requests.",
+      "expected": ">=1",
+      "passed": false,
+      "reason_code": "insufficient_shadow_requests"
+    },
+    {
+      "actual": "0",
+      "category": "readiness",
+      "check_id": "min_nonzero_shadow_request_sessions",
+      "description": "Shadow evaluation must include the minimum number of executed sessions with at least one normalized request.",
+      "expected": ">=1",
+      "passed": false,
+      "reason_code": "insufficient_shadow_nonzero_request_sessions"
+    },
+    {
+      "actual": "0",
+      "category": "readiness",
+      "check_id": "min_shadow_would_send_count",
+      "description": "Shadow evaluation must include the minimum number of would-send execution results.",
+      "expected": ">=1",
+      "passed": false,
+      "reason_code": "insufficient_shadow_would_send_requests"
+    },
+    {
+      "actual": "0.000000",
+      "category": "readiness",
+      "check_id": "min_cumulative_net_realized_pnl_usd",
+      "description": "Cumulative net realized paper PnL must stay above the configured floor.",
+      "expected": ">=-1000000000.000000",
+      "passed": true,
+      "reason_code": "cumulative_net_realized_pnl_below_floor"
+    },
+    {
+      "actual": "0.000000000000",
+      "category": "readiness",
+      "check_id": "min_average_return_fraction",
+      "description": "Average return fraction must stay above the configured floor.",
+      "expected": ">=-1.000000000000",
+      "passed": true,
+      "reason_code": "average_return_fraction_below_floor"
+    },
+    {
+      "actual": "missing",
+      "category": "readiness",
+      "check_id": "shadow_artifacts_present",
+      "description": "Shadow evidence artifacts must be present for evaluated sessions.",
+      "expected": "present",
+      "passed": false,
+      "reason_code": "shadow_artifacts_missing"
+    }
+  ],
+  "generated_at": "2026-04-05T16:00:00Z",
+  "readiness_passed": false,
+  "runtime_id": "forward-gate-thresholds-snapshot"
+}

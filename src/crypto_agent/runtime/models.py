@@ -40,6 +40,7 @@ class ForwardPaperRuntimePaths(BaseModel):
     soak_evaluation_path: Path
     shadow_evaluation_path: Path
     live_market_preflight_path: Path
+    live_gate_config_path: Path
     live_gate_decision_path: Path
     live_gate_threshold_summary_path: Path
     live_gate_report_path: Path
@@ -181,7 +182,7 @@ class ForwardPaperSessionSummary(BaseModel):
     session_number: int = Field(ge=1)
     mode: Mode = Mode.PAPER
     execution_mode: Literal["paper", "shadow", "sandbox"] = "paper"
-    market_source: Literal["replay", "binance_spot"] = "replay"
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"] = "replay"
     live_symbol: str | None = None
     live_interval: str | None = None
     status: Literal["running", "completed", "interrupted", "failed"]
@@ -346,6 +347,7 @@ class ForwardPaperShadowEvaluation(BaseModel):
     generated_at: datetime
     shadow_session_count: int = Field(default=0, ge=0)
     shadow_executed_session_count: int = Field(default=0, ge=0)
+    shadow_nonzero_request_session_count: int = Field(default=0, ge=0)
     request_count: int = Field(default=0, ge=0)
     rejected_request_count: int = Field(default=0, ge=0)
     would_send_count: int = Field(default=0, ge=0)
@@ -401,7 +403,7 @@ class ForwardPaperShadowCanaryEvaluation(BaseModel):
     runtime_id: str
     generated_at: datetime
     execution_mode: Literal["paper", "shadow", "sandbox"]
-    market_source: Literal["replay", "binance_spot"]
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"]
     applicable: bool
     state: Literal["pass", "fail", "not_applicable"]
     summary: str
@@ -784,13 +786,15 @@ class ForwardPaperRuntimeStatus(BaseModel):
     runtime_id: str
     mode: Mode = Mode.PAPER
     execution_mode: Literal["paper", "shadow", "sandbox"] = "paper"
-    market_source: Literal["replay", "binance_spot"] = "replay"
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"] = "replay"
     replay_path: Path | None = None
     live_symbol: str | None = None
     live_interval: str | None = None
     live_lookback_candles: int | None = Field(default=None, ge=2)
     feed_stale_after_seconds: int | None = Field(default=None, gt=0)
     binance_base_url: str | None = None
+    regime_config_source: Literal["default", "override"] = "default"
+    regime_config: dict[str, float] = Field(default_factory=dict)
     starting_equity_usd: float = Field(gt=0)
     session_interval_seconds: int = Field(gt=0)
     status: Literal["idle", "running"] = "idle"
@@ -828,6 +832,7 @@ class ForwardPaperRuntimeStatus(BaseModel):
     soak_evaluation_path: Path
     shadow_evaluation_path: Path
     live_market_preflight_path: Path | None = None
+    live_gate_config_path: Path | None = None
     live_gate_decision_path: Path
     live_gate_threshold_summary_path: Path
     live_gate_report_path: Path
@@ -859,10 +864,12 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
     runtime_id: str
     mode: Mode = Mode.PAPER
     execution_mode: Literal["paper", "shadow", "sandbox"] = "paper"
-    market_source: Literal["replay", "binance_spot"] = "replay"
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"] = "replay"
     replay_path: Path | None = None
     live_symbol: str | None = None
     live_interval: str | None = None
+    regime_config_source: Literal["default", "override"] = "default"
+    regime_config: dict[str, float] = Field(default_factory=dict)
     runtime_dir: Path
     status_path: Path
     history_path: Path
@@ -880,6 +887,7 @@ class ForwardPaperRuntimeRegistryEntry(BaseModel):
     shadow_canary_evaluation_path: Path
     soak_evaluation_path: Path
     shadow_evaluation_path: Path
+    live_gate_config_path: Path | None = None
     live_gate_decision_path: Path
     live_gate_threshold_summary_path: Path
     live_gate_report_path: Path
@@ -961,6 +969,7 @@ class ForwardPaperRuntimeResult(BaseModel):
     live_market_preflight_path: Path
     soak_evaluation_path: Path
     shadow_evaluation_path: Path
+    live_gate_config_path: Path | None = None
     live_gate_decision_path: Path
     live_gate_threshold_summary_path: Path
     live_gate_report_path: Path

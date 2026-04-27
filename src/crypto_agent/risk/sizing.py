@@ -21,14 +21,18 @@ def size_trade_proposal(
     proposal: TradeProposal,
     portfolio: PortfolioState,
     settings: Settings,
+    notional_multiplier: float = 1.0,
 ) -> SizingResult:
+    if not 1.0 <= notional_multiplier <= 1.5:
+        raise ValueError("Sizing notional multiplier must be between 1.0 and 1.5.")
+
     stop_distance = abs(proposal.entry_reference - proposal.stop_price)
     if stop_distance <= 0:
         raise ValueError("Proposal stop distance must be positive for sizing.")
 
     risk_amount_usd = portfolio.equity_usd * settings.risk.risk_per_trade_fraction
     initial_quantity = risk_amount_usd / stop_distance
-    initial_notional = initial_quantity * proposal.entry_reference
+    initial_notional = initial_quantity * proposal.entry_reference * notional_multiplier
 
     max_symbol_notional = max(
         0.0,

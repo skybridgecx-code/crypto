@@ -692,6 +692,7 @@ def test_cli_sandbox_fixture_rehearsal_passes_flag_and_prints_paths(
             )
             soak_evaluation_path = tmp_path / "runs" / "sandbox-fixture-cli" / "soak.json"
             shadow_evaluation_path = tmp_path / "runs" / "sandbox-fixture-cli" / "shadow_eval.json"
+            live_gate_config_path = tmp_path / "runs" / "sandbox-fixture-cli" / "gate_config.json"
             live_gate_decision_path = tmp_path / "runs" / "sandbox-fixture-cli" / "gate.json"
             live_gate_threshold_summary_path = (
                 tmp_path / "runs" / "sandbox-fixture-cli" / "thresholds.json"

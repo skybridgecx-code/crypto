@@ -32,9 +32,13 @@ class LiveGateConfig(BaseModel):
     min_completed_sessions: int = Field(default=3, ge=0)
     min_executed_sessions: int = Field(default=2, ge=0)
     min_shadow_sessions: int = Field(default=1, ge=0)
+    min_nonzero_shadow_request_sessions: int = Field(default=1, ge=0)
     min_shadow_request_count: int = Field(default=1, ge=0)
+    min_shadow_would_send_count: int = Field(default=1, ge=0)
     max_failed_sessions: int = Field(default=0, ge=0)
     max_interrupted_sessions: int = Field(default=0, ge=0)
+    min_cumulative_net_realized_pnl_usd: float = -1_000_000_000.0
+    min_average_return_fraction: float = -1.0
 
     @field_validator("updated_at")
     @classmethod
@@ -157,6 +161,53 @@ def build_live_gate_threshold_summary(
             actual=str(shadow.request_count),
             expected=f">={config.min_shadow_request_count}",
             reason_code="insufficient_shadow_requests",
+        ),
+        LiveGateThresholdCheck(
+            check_id="min_nonzero_shadow_request_sessions",
+            category="readiness",
+            description=(
+                "Shadow evaluation must include the minimum number of executed sessions "
+                "with at least one normalized request."
+            ),
+            passed=(
+                shadow.shadow_nonzero_request_session_count
+                >= config.min_nonzero_shadow_request_sessions
+            ),
+            actual=str(shadow.shadow_nonzero_request_session_count),
+            expected=f">={config.min_nonzero_shadow_request_sessions}",
+            reason_code="insufficient_shadow_nonzero_request_sessions",
+        ),
+        LiveGateThresholdCheck(
+            check_id="min_shadow_would_send_count",
+            category="readiness",
+            description=(
+                "Shadow evaluation must include the minimum number of would-send execution "
+                "results."
+            ),
+            passed=shadow.would_send_count >= config.min_shadow_would_send_count,
+            actual=str(shadow.would_send_count),
+            expected=f">={config.min_shadow_would_send_count}",
+            reason_code="insufficient_shadow_would_send_requests",
+        ),
+        LiveGateThresholdCheck(
+            check_id="min_cumulative_net_realized_pnl_usd",
+            category="readiness",
+            description="Cumulative net realized paper PnL must stay above the configured floor.",
+            passed=(
+                soak.cumulative_net_realized_pnl_usd >= config.min_cumulative_net_realized_pnl_usd
+            ),
+            actual=f"{soak.cumulative_net_realized_pnl_usd:.6f}",
+            expected=f">={config.min_cumulative_net_realized_pnl_usd:.6f}",
+            reason_code="cumulative_net_realized_pnl_below_floor",
+        ),
+        LiveGateThresholdCheck(
+            check_id="min_average_return_fraction",
+            category="readiness",
+            description="Average return fraction must stay above the configured floor.",
+            passed=soak.average_return_fraction >= config.min_average_return_fraction,
+            actual=f"{soak.average_return_fraction:.12f}",
+            expected=f">={config.min_average_return_fraction:.12f}",
+            reason_code="average_return_fraction_below_floor",
         ),
         LiveGateThresholdCheck(
             check_id="shadow_artifacts_present",

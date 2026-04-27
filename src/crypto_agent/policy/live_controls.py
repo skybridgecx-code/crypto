@@ -26,7 +26,9 @@ def _normalize_datetime(value: datetime) -> datetime:
 
 
 def _normalize_symbol(value: str) -> str:
-    return value.strip().upper()
+    # Canonicalize symbol formatting so venue-style pairs (for example BTC-USD)
+    # and compact pairs (BTCUSD) match the same allowlist entry.
+    return value.strip().upper().replace("-", "").replace("_", "").replace("/", "")
 
 
 def _daily_loss_fraction(account_state: ForwardPaperRuntimeAccountState) -> float:
@@ -124,7 +126,7 @@ class LiveControlStatusArtifact(BaseModel):
     runtime_id: str
     updated_at: datetime
     execution_mode: Literal["paper", "shadow", "sandbox"]
-    market_source: Literal["replay", "binance_spot"]
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"]
     readiness_status: Literal["ready", "not_ready"]
     limited_live_gate_status: Literal["not_ready", "ready_for_review"]
     allowed_execution_modes: list[Literal["paper", "shadow", "sandbox"]] = Field(
@@ -191,6 +193,7 @@ def evaluate_preflight_controls(
     last_completed_session: ForwardPaperSessionSummary | None,
 ) -> LiveControlDecision:
     normalized_symbols = sorted({_normalize_symbol(symbol) for symbol in requested_symbols})
+    normalized_allowlist = {_normalize_symbol(symbol) for symbol in controls.symbol_allowlist}
     reasons: list[str] = []
     current_daily_loss_fraction = _daily_loss_fraction(account_state)
     last_session_loss_fraction = _session_loss_fraction(
@@ -205,7 +208,7 @@ def evaluate_preflight_controls(
         reasons.append("execution_mode_not_allowed")
     if normalized_symbols:
         disallowed_symbols = [
-            symbol for symbol in normalized_symbols if symbol not in controls.symbol_allowlist
+            symbol for symbol in normalized_symbols if symbol not in normalized_allowlist
         ]
         if disallowed_symbols:
             reasons.extend(f"symbol_not_allowed:{symbol}" for symbol in disallowed_symbols)
@@ -256,6 +259,7 @@ def evaluate_post_run_controls(
     reasons: list[str] = []
     requests = [] if request_artifact is None else request_artifact.requests
     requested_symbols = sorted({_normalize_symbol(request.symbol) for request in requests})
+    normalized_allowlist = {_normalize_symbol(symbol) for symbol in controls.symbol_allowlist}
     max_estimated_notional_usd = (
         max((request.estimated_notional_usd for request in requests), default=0.0)
         if requests
@@ -273,7 +277,7 @@ def evaluate_post_run_controls(
 
     if request_artifact is not None:
         disallowed_symbols = [
-            symbol for symbol in requested_symbols if symbol not in controls.symbol_allowlist
+            symbol for symbol in requested_symbols if symbol not in normalized_allowlist
         ]
         if disallowed_symbols:
             reasons.extend(f"symbol_not_allowed:{symbol}" for symbol in disallowed_symbols)
@@ -341,7 +345,7 @@ def build_live_control_status_artifact(
     *,
     runtime_id: str,
     execution_mode: Literal["paper", "shadow", "sandbox"],
-    market_source: Literal["replay", "binance_spot"],
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"],
     controls: LiveControlConfig,
     manual_controls: ManualControlState,
     readiness_status: Literal["ready", "not_ready"],

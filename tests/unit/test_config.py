@@ -43,3 +43,12 @@ def test_load_settings_rejects_live_orders_outside_limited_live(tmp_path: Path) 
 
     with pytest.raises(ValueError, match="allow_live_orders"):
         load_settings(config_file)
+
+
+def test_load_xrp_coinbase_discovery_settings_profile() -> None:
+    settings = load_settings(Path("config/paper_coinbase_xrp_discovery.yaml"))
+
+    assert settings.mode is Mode.PAPER
+    assert settings.venue.allowed_symbols == ["XRPUSD"]
+    assert settings.venue.quote_currency == "USD"
+    assert settings.risk.min_average_dollar_volume_usd == 150_000.0

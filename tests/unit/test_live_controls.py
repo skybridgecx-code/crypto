@@ -116,6 +116,61 @@ def test_preflight_controls_block_disallowed_mode_and_symbol_allowlist() -> None
     assert "symbol_not_allowed:BTCUSDT" in decision.reason_codes
 
 
+def test_preflight_controls_normalize_symbol_delimiters_for_allowlist() -> None:
+    controls = LiveControlConfig(
+        runtime_id="runtime-demo",
+        updated_at=_ts(2026, 4, 6, 9, 0),
+        allowed_execution_modes=["paper"],
+        symbol_allowlist=["BTC-USD"],
+    )
+    decision = evaluate_preflight_controls(
+        runtime_id="runtime-demo",
+        session_id="session-0001",
+        execution_mode="paper",
+        requested_symbols=["BTCUSD"],
+        account_state=_account_state(),
+        controls=controls,
+        readiness_status="ready",
+        manual_controls=ManualControlState(
+            runtime_id="runtime-demo",
+            updated_at=_ts(2026, 4, 6, 9, 0),
+        ),
+        checked_at=_ts(2026, 4, 6, 9, 1),
+        last_completed_session=None,
+    )
+
+    assert decision.action == "go"
+    assert decision.reason_codes == []
+    assert decision.requested_symbols == ["BTCUSD"]
+
+
+def test_preflight_controls_normalize_allowlist_after_model_copy_update() -> None:
+    controls = LiveControlConfig(
+        runtime_id="runtime-demo",
+        updated_at=_ts(2026, 4, 6, 9, 0),
+        allowed_execution_modes=["paper"],
+        symbol_allowlist=["BTCUSD"],
+    ).model_copy(update={"symbol_allowlist": ["BTC-USD"]})
+    decision = evaluate_preflight_controls(
+        runtime_id="runtime-demo",
+        session_id="session-0001",
+        execution_mode="paper",
+        requested_symbols=["BTCUSD"],
+        account_state=_account_state(),
+        controls=controls,
+        readiness_status="ready",
+        manual_controls=ManualControlState(
+            runtime_id="runtime-demo",
+            updated_at=_ts(2026, 4, 6, 9, 0),
+        ),
+        checked_at=_ts(2026, 4, 6, 9, 1),
+        last_completed_session=None,
+    )
+
+    assert decision.action == "go"
+    assert decision.reason_codes == []
+
+
 def test_preflight_controls_block_daily_loss_open_positions_and_prior_session_loss() -> None:
     controls = LiveControlConfig(
         runtime_id="runtime-demo",

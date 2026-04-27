@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from crypto_agent.market_data.live_adapter import (
     BinanceSpotLiveMarketDataAdapter,
+    CoinbaseSpotLiveMarketDataAdapter,
     LiveMarketDataUnavailableError,
 )
 
@@ -71,13 +72,50 @@ def _kline(
     ]
 
 
+def _coinbase_product(product_id: str = "BTC-USD") -> dict[str, object]:
+    return {
+        "product_id": product_id,
+        "base_currency_id": "BTC",
+        "quote_currency_id": "USD",
+        "base_increment": "0.00000001",
+        "quote_increment": "0.01",
+        "base_min_size": "0.0001",
+        "quote_min_size": "1",
+        "trading_disabled": False,
+    }
+
+
+def _coinbase_candle(
+    *,
+    open_time_ms: int,
+    open_price: str,
+    high_price: str,
+    low_price: str,
+    close_price: str,
+    volume: str,
+) -> dict[str, str]:
+    return {
+        "start": str(open_time_ms),
+        "open": open_price,
+        "high": high_price,
+        "low": low_price,
+        "close": close_price,
+        "volume": volume,
+    }
+
+
 class ScriptedFetcher:
     def __init__(self, responses: list[object]) -> None:
         self._responses = list(responses)
-        self.calls: list[tuple[str, dict[str, str]]] = []
+        self.calls: list[tuple[str, dict[str, str], dict[str, str] | None]] = []
 
-    def __call__(self, endpoint: str, params: dict[str, str]) -> object:
-        self.calls.append((endpoint, params))
+    def __call__(
+        self,
+        endpoint: str,
+        params: dict[str, str],
+        headers: dict[str, str] | None = None,
+    ) -> object:
+        self.calls.append((endpoint, params, headers))
         if not self._responses:
             raise AssertionError("No scripted responses left")
         response = self._responses.pop(0)
@@ -302,3 +340,424 @@ def test_binance_spot_live_adapter_raises_when_no_cached_state_exists() -> None:
             stale_after_seconds=60,
             now=_ts(2026, 4, 5, 12, 0),
         )
+
+
+def test_binance_spot_live_adapter_excludes_open_1m_candle_and_accepts_closed_set() -> None:
+    fetcher = ScriptedFetcher(
+        [
+            _exchange_info(),
+            [
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 0),
+                    close_time_ms=_millis(2026, 4, 5, 12, 1) - 1,
+                    open_price="100.0",
+                    high_price="101.0",
+                    low_price="99.5",
+                    close_price="100.4",
+                    volume="1000",
+                ),
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 1),
+                    close_time_ms=_millis(2026, 4, 5, 12, 2) - 1,
+                    open_price="100.4",
+                    high_price="101.2",
+                    low_price="100.1",
+                    close_price="100.9",
+                    volume="1001",
+                ),
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 2),
+                    close_time_ms=_millis(2026, 4, 5, 12, 3) - 1,
+                    open_price="100.9",
+                    high_price="101.8",
+                    low_price="100.8",
+                    close_price="101.5",
+                    volume="1002",
+                ),
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 3),
+                    close_time_ms=_millis(2026, 4, 5, 12, 4) - 1,
+                    open_price="101.5",
+                    high_price="102.0",
+                    low_price="101.4",
+                    close_price="101.8",
+                    volume="1003",
+                ),
+            ],
+            {
+                "symbol": "BTCUSDT",
+                "bidPrice": "101.70",
+                "bidQty": "1.0",
+                "askPrice": "101.80",
+                "askQty": "1.2",
+            },
+        ]
+    )
+    adapter = BinanceSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    state = adapter.poll_market_state(
+        symbol="BTCUSDT",
+        interval="1m",
+        lookback_candles=3,
+        stale_after_seconds=120,
+        now=_ts(2026, 4, 5, 12, 3),
+    )
+
+    assert len(state.candles) == 3
+    assert state.candles[0].open_time == _ts(2026, 4, 5, 12, 0)
+    assert state.candles[-1].close_time == _ts(2026, 4, 5, 12, 3) - timedelta(milliseconds=1)
+    assert state.feed_health.status == "healthy"
+
+
+def test_binance_spot_live_adapter_raises_when_not_enough_closed_1m_candles() -> None:
+    fetcher = ScriptedFetcher(
+        [
+            _exchange_info(),
+            [
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 0),
+                    close_time_ms=_millis(2026, 4, 5, 12, 1) - 1,
+                    open_price="100.0",
+                    high_price="101.0",
+                    low_price="99.5",
+                    close_price="100.4",
+                    volume="1000",
+                ),
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 1),
+                    close_time_ms=_millis(2026, 4, 5, 12, 2) - 1,
+                    open_price="100.4",
+                    high_price="101.2",
+                    low_price="100.1",
+                    close_price="100.9",
+                    volume="1001",
+                ),
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 2),
+                    close_time_ms=_millis(2026, 4, 5, 12, 3) - 1,
+                    open_price="100.9",
+                    high_price="101.8",
+                    low_price="100.8",
+                    close_price="101.5",
+                    volume="1002",
+                ),
+                _kline(
+                    open_time_ms=_millis(2026, 4, 5, 12, 3),
+                    close_time_ms=_millis(2026, 4, 5, 12, 4) - 1,
+                    open_price="101.5",
+                    high_price="102.0",
+                    low_price="101.4",
+                    close_price="101.8",
+                    volume="1003",
+                ),
+            ],
+            {
+                "symbol": "BTCUSDT",
+                "bidPrice": "101.70",
+                "bidQty": "1.0",
+                "askPrice": "101.80",
+                "askQty": "1.2",
+            },
+        ]
+    )
+    adapter = BinanceSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    with pytest.raises(
+        LiveMarketDataUnavailableError,
+        match="Not enough closed venue candles available",
+    ):
+        adapter.poll_market_state(
+            symbol="BTCUSDT",
+            interval="1m",
+            lookback_candles=4,
+            stale_after_seconds=120,
+            now=_ts(2026, 4, 5, 12, 3),
+        )
+
+
+def test_coinbase_spot_live_adapter_returns_normalized_market_state() -> None:
+    fetcher = ScriptedFetcher(
+        [
+            _coinbase_product(),
+            {
+                "candles": [
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 12, 0),
+                        open_price="100.0",
+                        high_price="101.0",
+                        low_price="99.5",
+                        close_price="100.5",
+                        volume="1000",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 12, 1),
+                        open_price="100.5",
+                        high_price="101.5",
+                        low_price="100.2",
+                        close_price="101.0",
+                        volume="1001",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 12, 2),
+                        open_price="101.0",
+                        high_price="101.8",
+                        low_price="100.8",
+                        close_price="101.5",
+                        volume="1002",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 12, 3),
+                        open_price="101.5",
+                        high_price="102.0",
+                        low_price="101.2",
+                        close_price="101.9",
+                        volume="1003",
+                    ),
+                ]
+            },
+            {
+                "pricebook": {
+                    "bids": [{"price": "101.80"}],
+                    "asks": [{"price": "101.90"}],
+                }
+            },
+        ]
+    )
+    adapter = CoinbaseSpotLiveMarketDataAdapter(
+        fetch_json=fetcher,
+        jwt_token_factory=lambda _method, _endpoint, _now: "test-token",
+    )
+
+    state = adapter.poll_market_state(
+        symbol="BTC-USD",
+        interval="1m",
+        lookback_candles=3,
+        stale_after_seconds=120,
+        now=_ts(2026, 4, 5, 12, 4),
+    )
+
+    assert state.venue == "coinbase_spot"
+    assert state.symbol == "BTCUSD"
+    assert len(state.candles) == 3
+    assert state.constraints.tick_size == 0.01
+    assert state.constraints.step_size == 0.00000001
+    assert state.constraints.min_notional == 1.0
+    assert state.order_book.bids[0].price == 101.80
+    assert state.order_book.asks[0].price == 101.90
+    assert state.feed_health.status == "healthy"
+    assert state.feed_health.last_candle_close_time == _ts(2026, 4, 5, 12, 4)
+    assert fetcher.calls == [
+        (
+            "/api/v3/brokerage/products/BTC-USD",
+            {},
+            {
+                "Authorization": "Bearer test-token",
+                "Content-Type": "application/json",
+            },
+        ),
+        (
+            "/api/v3/brokerage/products/BTC-USD/candles",
+            {
+                "start": str(int(_ts(2026, 4, 5, 12, 0).timestamp())),
+                "end": str(int(_ts(2026, 4, 5, 12, 4).timestamp())),
+                "granularity": "ONE_MINUTE",
+            },
+            {
+                "Authorization": "Bearer test-token",
+                "Content-Type": "application/json",
+            },
+        ),
+        (
+            "/api/v3/brokerage/product_book",
+            {"product_id": "BTC-USD", "limit": "1"},
+            {
+                "Authorization": "Bearer test-token",
+                "Content-Type": "application/json",
+            },
+        ),
+    ]
+
+
+def test_coinbase_spot_live_adapter_accepts_pair_symbol_and_px_book_shape() -> None:
+    fetcher = ScriptedFetcher(
+        [
+            _coinbase_product(),
+            {
+                "candles": [
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 12, 0),
+                        open_price="100.0",
+                        high_price="101.0",
+                        low_price="99.5",
+                        close_price="100.5",
+                        volume="1000",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 12, 1),
+                        open_price="100.5",
+                        high_price="101.5",
+                        low_price="100.2",
+                        close_price="101.0",
+                        volume="1001",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 12, 2),
+                        open_price="101.0",
+                        high_price="101.8",
+                        low_price="100.8",
+                        close_price="101.5",
+                        volume="1002",
+                    ),
+                ]
+            },
+            {
+                "bids": [{"px": "101.45"}],
+                "asks": [{"px": "101.55"}],
+            },
+        ]
+    )
+    adapter = CoinbaseSpotLiveMarketDataAdapter(
+        fetch_json=fetcher,
+        jwt_token_factory=lambda _method, _endpoint, _now: "test-token",
+    )
+
+    state = adapter.poll_market_state(
+        symbol="BTCUSD",
+        interval="1m",
+        lookback_candles=2,
+        stale_after_seconds=120,
+        now=_ts(2026, 4, 5, 12, 3),
+    )
+
+    assert state.symbol == "BTCUSD"
+    assert state.order_book.bids[0].price == 101.45
+    assert state.order_book.asks[0].price == 101.55
+
+
+def test_coinbase_spot_live_adapter_requires_auth_env_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("COINBASE_API_KEY_NAME", raising=False)
+    monkeypatch.delenv("COINBASE_API_KEY_SECRET", raising=False)
+    fetcher = ScriptedFetcher([])
+    adapter = CoinbaseSpotLiveMarketDataAdapter(fetch_json=fetcher)
+
+    with pytest.raises(
+        LiveMarketDataUnavailableError,
+        match="coinbase_auth_config_error: COINBASE_API_KEY_NAME is required",
+    ):
+        adapter.poll_market_state(
+            symbol="BTC-USD",
+            interval="1m",
+            lookback_candles=2,
+            stale_after_seconds=120,
+            now=_ts(2026, 4, 5, 12, 3),
+        )
+
+
+def test_coinbase_spot_auth_header_uses_official_sdk_jwt_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "COINBASE_API_KEY_NAME",
+        "organizations/test-org/apiKeys/test-key",
+    )
+    monkeypatch.setenv(
+        "COINBASE_API_KEY_SECRET",
+        "-----BEGIN EC PRIVATE KEY-----\\nabc\\n-----END EC PRIVATE KEY-----",
+    )
+    recorded: dict[str, str] = {}
+
+    def _format_uri(method: str, path: str) -> str:
+        recorded["method"] = method
+        recorded["path"] = path
+        return f"{method} api.coinbase.com{path}"
+
+    def _build_rest_jwt(uri: str, key_var: str, secret_var: str) -> str:
+        recorded["uri"] = uri
+        recorded["key_var"] = key_var
+        recorded["secret_var"] = secret_var
+        return "sdk-token"
+
+    adapter = CoinbaseSpotLiveMarketDataAdapter(
+        sdk_format_uri=_format_uri,
+        sdk_build_rest_jwt=_build_rest_jwt,
+    )
+
+    headers = adapter._auth_headers(
+        method="GET",
+        endpoint="/api/v3/brokerage/products/BTC-USD",
+        now=_ts(2026, 4, 5, 12, 3),
+    )
+
+    assert headers["Authorization"] == "Bearer sdk-token"
+    assert headers["Content-Type"] == "application/json"
+    assert recorded["method"] == "GET"
+    assert recorded["path"] == "/api/v3/brokerage/products/BTC-USD"
+    assert recorded["uri"] == "GET api.coinbase.com/api/v3/brokerage/products/BTC-USD"
+    assert recorded["key_var"] == "organizations/test-org/apiKeys/test-key"
+    assert "BEGIN EC PRIVATE KEY" in recorded["secret_var"]
+
+
+def test_coinbase_spot_candle_request_uses_required_params_for_5m_interval() -> None:
+    fetcher = ScriptedFetcher(
+        [
+            _coinbase_product(),
+            {
+                "candles": [
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 11, 45),
+                        open_price="100.0",
+                        high_price="101.0",
+                        low_price="99.5",
+                        close_price="100.5",
+                        volume="1000",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 11, 50),
+                        open_price="100.5",
+                        high_price="101.5",
+                        low_price="100.2",
+                        close_price="101.0",
+                        volume="1001",
+                    ),
+                    _coinbase_candle(
+                        open_time_ms=_millis(2026, 4, 5, 11, 55),
+                        open_price="101.0",
+                        high_price="101.8",
+                        low_price="100.8",
+                        close_price="101.5",
+                        volume="1002",
+                    ),
+                ]
+            },
+            {
+                "pricebook": {
+                    "bids": [{"price": "101.80"}],
+                    "asks": [{"price": "101.90"}],
+                }
+            },
+        ]
+    )
+    adapter = CoinbaseSpotLiveMarketDataAdapter(
+        fetch_json=fetcher,
+        jwt_token_factory=lambda _method, _endpoint, _now: "test-token",
+    )
+
+    now = _ts(2026, 4, 5, 12, 0)
+    adapter.poll_market_state(
+        symbol="BTC-USD",
+        interval="5m",
+        lookback_candles=2,
+        stale_after_seconds=300,
+        now=now,
+    )
+
+    candles_call = fetcher.calls[1]
+    assert candles_call[0] == "/api/v3/brokerage/products/BTC-USD/candles"
+    assert candles_call[1]["start"] == str(int(now.timestamp()) - (3 * 300))
+    assert candles_call[1]["end"] == str(int(now.timestamp()))
+    assert candles_call[1]["granularity"] == "FIVE_MINUTE"
+    product_book_call = fetcher.calls[2]
+    assert product_book_call[0] == "/api/v3/brokerage/product_book"
+    assert product_book_call[1]["product_id"] == "BTC-USD"

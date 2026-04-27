@@ -366,3 +366,58 @@ Phase L2M records the exact prerequisites that must be true before any future bo
 Closeout doc:
 - `docs/PHASE_L2M_SECOND_ATTEMPT_PREREQUISITES_CLOSEOUT.md`
 
+## Phase L2N — Live edge qualification gate
+
+Phase L2N adds bounded edge-quality readiness checks to the live-gate threshold summary so session completion alone cannot be misread as launchable edge evidence.
+
+Closeout doc:
+- `docs/PHASE_L2N_LIVE_EDGE_QUALIFICATION_GATE.md`
+
+## Phase L2O — Edge qualification reason-code freeze
+
+Phase L2O freezes the operator-facing reason-code contract for L2N edge-qualification checks.
+
+Closeout doc:
+- `docs/PHASE_L2O_EDGE_REASON_CODE_FREEZE.md`
+
+## Phase L2P — Live gate config artifact surface
+
+Phase L2P persists `live_gate_config.json` and threads `live_gate_config_path` through runtime status, registry, and CLI/shared operator surfaces.
+
+Closeout doc:
+- `docs/PHASE_L2P_LIVE_GATE_CONFIG_ARTIFACT_SURFACE.md`
+
+## Phase L2Q — Live gate config regression snapshots
+
+Phase L2Q adds deterministic regression snapshot coverage for `live_gate_config.json` and asserts runtime status and CLI path reconciliation for `live_gate_config_path`.
+
+Closeout doc:
+- `docs/PHASE_L2Q_LIVE_GATE_CONFIG_REGRESSION_SNAPSHOTS.md`
+
+## Phase L2R — Runtime status index regression snapshot
+
+Phase L2R adds deterministic snapshot coverage for canonical `forward_paper_status.json` index fields, including `live_gate_config_path`, to prevent operator-surface path drift.
+
+Closeout doc:
+- `docs/PHASE_L2R_RUNTIME_STATUS_INDEX_REGRESSION_SNAPSHOT.md`
+
+## Phase L2S — Runtime registry entry regression snapshot
+
+Phase L2S adds deterministic snapshot coverage for canonical `forward_paper_registry.json` runtime entry path fields, including `live_gate_config_path`, to prevent status/registry surface drift.
+
+Closeout doc:
+- `docs/PHASE_L2S_RUNTIME_REGISTRY_ENTRY_REGRESSION_SNAPSHOT.md`
+
+## Phase L2T — Runtime CLI path surface regression snapshot
+
+Phase L2T adds deterministic snapshot coverage for forward-paper CLI path output fields, including `live_gate_config_path`, to prevent CLI/status operator-surface drift.
+
+Closeout doc:
+- `docs/PHASE_L2T_RUNTIME_CLI_PATH_SURFACE_REGRESSION_SNAPSHOT.md`
+
+## Phase L2U — Live gate thresholds and decision regression snapshots
+
+Phase L2U adds deterministic snapshot coverage for `live_gate_threshold_summary.json` and `live_gate_decision.json` payloads to prevent live-gate semantic drift.
+
+Closeout doc:
+- `docs/PHASE_L2U_LIVE_GATE_THRESHOLDS_DECISION_REGRESSION_SNAPSHOTS.md`

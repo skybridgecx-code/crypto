@@ -1,0 +1,20 @@
+{
+  "artifact_kind": "external_confirmation_advisory_v1",
+  "asset": "BTCUSDT",
+  "confidence_adjustment": 0.18,
+  "correlation_id": "omega_fused_signal_fixture_btc_buy",
+  "directional_bias": "buy",
+  "observed_at_epoch_ns": 1700000000000000123,
+  "rationale": "OMEGA fused posture strong_long supports buy bias at confidence 0.680.",
+  "source_system": "omega_fusion_engine",
+  "supporting_tags": [
+    "omega",
+    "advisory_only",
+    "posture:strong_long",
+    "venue:binance",
+    "directional_bias:buy",
+    "cross_venue_confirmed",
+    "exogenous_net:risk_on"
+  ],
+  "veto_trade": false
+}

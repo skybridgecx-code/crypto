@@ -32,6 +32,7 @@ from crypto_agent.execution.shadow import (
 )
 from crypto_agent.market_data.live_adapter import (
     BinanceSpotLiveMarketDataAdapter,
+    CoinbaseSpotLiveMarketDataAdapter,
     LiveMarketDataUnavailableError,
 )
 from crypto_agent.market_data.live_models import LiveFeedHealth, LiveMarketState
@@ -60,6 +61,7 @@ from crypto_agent.policy.live_gate import (
     default_live_gate_config,
 )
 from crypto_agent.policy.readiness import LiveReadinessStatus, default_live_readiness_status
+from crypto_agent.regime.base import RegimeConfig
 from crypto_agent.runtime.canary import build_forward_paper_shadow_canary_evaluation
 from crypto_agent.runtime.history import append_forward_paper_history
 from crypto_agent.runtime.launch_verdict import build_live_launch_verdict
@@ -94,6 +96,7 @@ from crypto_agent.runtime.soak import (
     build_forward_paper_soak_evaluation,
     load_runtime_session_summaries,
 )
+from crypto_agent.signals.base import BreakoutSignalConfig, MeanReversionSignalConfig
 
 
 class RuntimeAlreadyActiveError(RuntimeError):
@@ -112,6 +115,9 @@ class _RehearsalGateEvaluation:
     scope_state: Literal["absent", "mismatched", "matched"]
     matched: bool
     reason_codes: tuple[str, ...]
+
+
+_LiveMarketAdapter = BinanceSpotLiveMarketDataAdapter | CoinbaseSpotLiveMarketDataAdapter
 
 
 def _utc_now() -> datetime:
@@ -186,6 +192,10 @@ def _session_control_decision_path(sessions_dir: Path, session_id: str) -> Path:
 
 def _session_skip_evidence_path(sessions_dir: Path, session_id: str) -> Path:
     return sessions_dir / f"{session_id}.skip_evidence.json"
+
+
+def _session_proposal_generation_summary_path(sessions_dir: Path, session_id: str) -> Path:
+    return sessions_dir / f"{session_id}.proposal_generation_summary.json"
 
 
 def _write_session_summary(summary: ForwardPaperSessionSummary, path: Path) -> None:
@@ -712,6 +722,7 @@ def build_forward_paper_runtime_paths(
         soak_evaluation_path=runtime_dir / "soak_evaluation.json",
         shadow_evaluation_path=runtime_dir / "shadow_evaluation.json",
         live_market_preflight_path=runtime_dir / "live_market_preflight.json",
+        live_gate_config_path=runtime_dir / "live_gate_config.json",
         live_gate_decision_path=runtime_dir / "live_gate_decision.json",
         live_gate_threshold_summary_path=runtime_dir / "live_gate_threshold_summary.json",
         live_gate_report_path=runtime_dir / "live_gate_report.md",
@@ -868,17 +879,28 @@ def _clear_live_market_state_artifacts(paths: ForwardPaperRuntimePaths) -> None:
             path.unlink()
 
 
+def _effective_regime_config_payload(
+    regime_config_override: RegimeConfig | None,
+) -> tuple[Literal["default", "override"], dict[str, float], RegimeConfig]:
+    if regime_config_override is None:
+        config = RegimeConfig()
+        return "default", config.model_dump(mode="json"), config
+    return "override", regime_config_override.model_dump(mode="json"), regime_config_override
+
+
 def _initial_runtime_status(
     *,
     runtime_id: str,
     execution_mode: Literal["paper", "shadow", "sandbox"],
-    market_source: Literal["replay", "binance_spot"],
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"],
     replay_path: Path | None,
     live_symbol: str | None,
     live_interval: str | None,
     live_lookback_candles: int | None,
     feed_stale_after_seconds: int | None,
     binance_base_url: str | None,
+    regime_config_source: Literal["default", "override"],
+    regime_config: dict[str, float],
     starting_equity_usd: float,
     session_interval_seconds: int,
     now: datetime,
@@ -895,6 +917,8 @@ def _initial_runtime_status(
         live_lookback_candles=live_lookback_candles,
         feed_stale_after_seconds=feed_stale_after_seconds,
         binance_base_url=binance_base_url,
+        regime_config_source=regime_config_source,
+        regime_config=regime_config,
         starting_equity_usd=starting_equity_usd,
         session_interval_seconds=session_interval_seconds,
         status="idle",
@@ -918,6 +942,7 @@ def _initial_runtime_status(
         soak_evaluation_path=paths.soak_evaluation_path,
         shadow_evaluation_path=paths.shadow_evaluation_path,
         live_market_preflight_path=paths.live_market_preflight_path,
+        live_gate_config_path=paths.live_gate_config_path,
         live_gate_decision_path=paths.live_gate_decision_path,
         live_gate_threshold_summary_path=paths.live_gate_threshold_summary_path,
         live_gate_report_path=paths.live_gate_report_path,
@@ -934,7 +959,7 @@ def _ensure_runtime_status(
     *,
     settings: Settings,
     execution_mode: Literal["paper", "shadow", "sandbox"],
-    market_source: Literal["replay", "binance_spot"],
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"],
     sandbox_fixture_rehearsal: bool = False,
     replay_path: Path | None,
     live_symbol: str | None,
@@ -942,6 +967,8 @@ def _ensure_runtime_status(
     live_lookback_candles: int | None,
     feed_stale_after_seconds: int | None,
     binance_base_url: str | None,
+    regime_config_source: Literal["default", "override"],
+    regime_config: dict[str, float],
     runtime_id: str,
     starting_equity_usd: float,
     session_interval_seconds: int,
@@ -969,7 +996,7 @@ def _ensure_runtime_status(
 
     if market_source == "replay" and replay_path is None:
         raise ValueError("Replay market source requires replay_path")
-    if market_source == "binance_spot" and (
+    if market_source in {"binance_spot", "coinbase_spot"} and (
         live_symbol is None
         or live_interval is None
         or live_lookback_candles is None
@@ -997,6 +1024,8 @@ def _ensure_runtime_status(
             live_lookback_candles=live_lookback_candles,
             feed_stale_after_seconds=feed_stale_after_seconds,
             binance_base_url=binance_base_url,
+            regime_config_source=regime_config_source,
+            regime_config=regime_config,
             starting_equity_usd=starting_equity_usd,
             session_interval_seconds=session_interval_seconds,
             now=now,
@@ -1015,6 +1044,7 @@ def _ensure_runtime_status(
     status = status.model_copy(
         update={
             "live_market_preflight_path": paths.live_market_preflight_path,
+            "live_gate_config_path": paths.live_gate_config_path,
             "live_authority_state_path": paths.live_authority_state_path,
             "live_launch_window_path": paths.live_launch_window_path,
             "live_transmission_decision_path": paths.live_transmission_decision_path,
@@ -1036,6 +1066,10 @@ def _ensure_runtime_status(
         raise ValueError("Existing runtime lookback does not match requested value")
     if status.feed_stale_after_seconds != feed_stale_after_seconds:
         raise ValueError("Existing runtime stale-feed threshold does not match requested value")
+    if status.regime_config_source != regime_config_source:
+        raise ValueError("Existing runtime regime_config_source does not match requested value")
+    if status.regime_config != regime_config:
+        raise ValueError("Existing runtime regime_config does not match requested value")
     if status.starting_equity_usd != starting_equity_usd:
         raise ValueError("Existing runtime starting_equity_usd does not match requested value")
     if status.session_interval_seconds != session_interval_seconds:
@@ -1163,7 +1197,9 @@ def _recover_interrupted_session(
             status="interrupted",
             replay_path=status.replay_path,
             venue_constraints_path=(
-                status.venue_constraints_path if status.market_source == "binance_spot" else None
+                status.venue_constraints_path
+                if status.market_source in {"binance_spot", "coinbase_spot"}
+                else None
             ),
             scheduled_at=status.active_session_started_at or recovered_at,
             started_at=status.active_session_started_at or recovered_at,
@@ -1219,7 +1255,9 @@ def _start_session(
         status="running",
         replay_path=status.replay_path,
         venue_constraints_path=(
-            status.venue_constraints_path if status.market_source == "binance_spot" else None
+            status.venue_constraints_path
+            if status.market_source in {"binance_spot", "coinbase_spot"}
+            else None
         ),
         scheduled_at=scheduled_at,
         started_at=scheduled_at,
@@ -1257,6 +1295,7 @@ def _completed_session_summary(
     session_summary: ForwardPaperSessionSummary,
     result: PaperRunResult,
     completed_at: datetime,
+    proposal_generation_summary_path: Path | None = None,
 ) -> ForwardPaperSessionSummary:
     path_exists = {
         "journal_path": result.journal_path.exists(),
@@ -1270,6 +1309,8 @@ def _completed_session_summary(
         path_exists["market_state_path"] = session_summary.market_state_path.exists()
     if session_summary.venue_constraints_path is not None:
         path_exists["venue_constraints_path"] = session_summary.venue_constraints_path.exists()
+    if proposal_generation_summary_path is not None:
+        path_exists["proposal_generation_summary_path"] = proposal_generation_summary_path.exists()
     return session_summary.model_copy(
         update={
             "status": "completed",
@@ -1289,6 +1330,25 @@ def _completed_session_summary(
             "all_artifact_paths_exist": all(path_exists.values()),
         }
     )
+
+
+def _write_session_proposal_generation_summary_artifact(
+    *,
+    session_id: str,
+    run_id: str,
+    sessions_dir: Path,
+    result: PaperRunResult,
+) -> Path:
+    path = _session_proposal_generation_summary_path(sessions_dir, session_id)
+    payload = {
+        "artifact_kind": "forward_paper_proposal_generation_summary_v1",
+        "session_id": session_id,
+        "run_id": run_id,
+        "proposal_generation": result.proposal_generation_summary.model_dump(mode="json"),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    return path
 
 
 def _skipped_session_summary(
@@ -1416,12 +1476,13 @@ def _iter_scheduled_times(
     scheduled_times: list[datetime] = []
     next_scheduled_at = initial_next_scheduled_at
     for _ in range(max_sessions):
-        due_at = (
-            _normalize_datetime(next_scheduled_at)
-            if next_scheduled_at is not None
-            else _normalize_datetime(now_fn())
-        )
         current_time = _normalize_datetime(now_fn())
+        if next_scheduled_at is not None:
+            candidate_due_at = _normalize_datetime(next_scheduled_at)
+            # If the persisted schedule is already in the past, poll at current time.
+            due_at = candidate_due_at if candidate_due_at >= current_time else current_time
+        else:
+            due_at = current_time
         delay_seconds = (due_at - current_time).total_seconds()
         if delay_seconds > 0:
             sleep_fn(delay_seconds)
@@ -1433,7 +1494,7 @@ def _iter_scheduled_times(
 def _refresh_live_state(
     *,
     status: ForwardPaperRuntimeStatus,
-    adapter: BinanceSpotLiveMarketDataAdapter,
+    adapter: _LiveMarketAdapter,
     now: datetime,
 ) -> LiveMarketState:
     if (
@@ -1455,7 +1516,7 @@ def _refresh_live_state(
 def _poll_with_retry_result(
     *,
     status: ForwardPaperRuntimeStatus,
-    adapter: BinanceSpotLiveMarketDataAdapter,
+    adapter: _LiveMarketAdapter,
     now: datetime,
     retry_count: int,
     retry_delay_seconds: float,
@@ -1501,7 +1562,7 @@ def _poll_with_retry_result(
 def _poll_with_retry(
     *,
     status: ForwardPaperRuntimeStatus,
-    adapter: BinanceSpotLiveMarketDataAdapter,
+    adapter: _LiveMarketAdapter,
     now: datetime,
     retry_count: int,
     retry_delay_seconds: float,
@@ -1569,10 +1630,30 @@ def _build_failed_preflight_artifact(
     )
 
 
+def _resolve_live_endpoint_context(
+    *,
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"],
+    status: ForwardPaperRuntimeStatus,
+    live_adapter: _LiveMarketAdapter | None,
+) -> tuple[str, str | None]:
+    adapter_base_url = getattr(live_adapter, "base_url", None) if live_adapter is not None else None
+    if market_source == "coinbase_spot":
+        return adapter_base_url or "https://api.coinbase.com", None
+    if market_source == "binance_spot":
+        return (
+            status.binance_base_url or adapter_base_url or "https://api.binance.com",
+            "--binance-base-url",
+        )
+    return "n/a", None
+
+
 def _build_default_live_adapter(
     *,
+    market_source: Literal["binance_spot", "coinbase_spot"],
     binance_base_url: str | None,
-) -> BinanceSpotLiveMarketDataAdapter:
+) -> _LiveMarketAdapter:
+    if market_source == "coinbase_spot":
+        return CoinbaseSpotLiveMarketDataAdapter()
     if binance_base_url is not None:
         return BinanceSpotLiveMarketDataAdapter(base_url=binance_base_url)
     return BinanceSpotLiveMarketDataAdapter()
@@ -1590,8 +1671,8 @@ def run_live_market_preflight_probe(
     binance_base_url: str | None = None,
     live_market_poll_retry_count: int = 2,
     live_market_poll_retry_delay_seconds: float = 2.0,
-    live_adapter: BinanceSpotLiveMarketDataAdapter | None = None,
-    live_adapter_factory: Callable[[], BinanceSpotLiveMarketDataAdapter] | None = None,
+    live_adapter: _LiveMarketAdapter | None = None,
+    live_adapter_factory: Callable[[], _LiveMarketAdapter] | None = None,
     now_fn: Callable[[], datetime] = _utc_now,
     sleep_fn: Callable[[float], None] = time.sleep,
 ) -> LiveMarketPreflightResult:
@@ -1613,18 +1694,23 @@ def run_live_market_preflight_probe(
         live_lookback_candles=live_lookback_candles,
         feed_stale_after_seconds=feed_stale_after_seconds,
         binance_base_url=binance_base_url,
+        regime_config_source="default",
+        regime_config=RegimeConfig().model_dump(mode="json"),
         starting_equity_usd=1.0,
         session_interval_seconds=1,
         now=observed_at,
         paths=paths,
     )
 
-    def _make_probe_adapter() -> BinanceSpotLiveMarketDataAdapter:
+    def _make_probe_adapter() -> _LiveMarketAdapter:
         if live_adapter_factory is not None:
             return live_adapter_factory()
         if live_adapter is not None:
             return live_adapter
-        return _build_default_live_adapter(binance_base_url=binance_base_url)
+        return _build_default_live_adapter(
+            market_source=market_source,
+            binance_base_url=binance_base_url,
+        )
 
     initial_adapter = _make_probe_adapter()
     configured_base_url = binance_base_url or initial_adapter.base_url
@@ -2191,6 +2277,7 @@ def _materialize_live_gate_artifacts(
     _write_json_artifact(paths.shadow_canary_evaluation_path, shadow_canary)
     _write_json_artifact(paths.soak_evaluation_path, soak_evaluation)
     _write_json_artifact(paths.shadow_evaluation_path, shadow_evaluation)
+    _write_json_artifact(paths.live_gate_config_path, gate_config)
     _write_json_artifact(paths.live_gate_threshold_summary_path, threshold_summary)
     _write_json_artifact(paths.live_gate_decision_path, decision)
     _write_json_artifact(paths.live_launch_verdict_path, launch_verdict)
@@ -2579,12 +2666,12 @@ def run_forward_paper_runtime(
     recover_interrupted: bool = True,
     now_fn: Callable[[], datetime] = _utc_now,
     sleep_fn: Callable[[float], None] = time.sleep,
-    market_source: Literal["replay", "binance_spot"] = "replay",
+    market_source: Literal["replay", "binance_spot", "coinbase_spot"] = "replay",
     live_symbol: str | None = None,
     live_interval: str | None = None,
     live_lookback_candles: int | None = None,
     feed_stale_after_seconds: int | None = None,
-    live_adapter: BinanceSpotLiveMarketDataAdapter | None = None,
+    live_adapter: _LiveMarketAdapter | None = None,
     binance_base_url: str | None = None,
     live_market_poll_retry_count: int = 2,
     live_market_poll_retry_delay_seconds: float = 2.0,
@@ -2598,6 +2685,12 @@ def run_forward_paper_runtime(
     live_control_config: LiveControlConfig | None = None,
     readiness_status: LiveReadinessStatus | None = None,
     manual_control_state: ManualControlState | None = None,
+    external_confirmation_path: str | Path | None = None,
+    external_confirmation_impact_policy: Literal["conservative"] | None = None,
+    external_confirmation_boosted_size_multiplier: float | None = None,
+    regime_config_override: RegimeConfig | None = None,
+    breakout_config_override: BreakoutSignalConfig | None = None,
+    mean_reversion_config_override: MeanReversionSignalConfig | None = None,
 ) -> ForwardPaperRuntimeResult:
     replay_fixture_path = Path(replay_path) if replay_path is not None else None
     scheduled_ticks = (
@@ -2614,6 +2707,9 @@ def run_forward_paper_runtime(
         if live_launch_window_ends_at is not None
         else None
     )
+    regime_config_source, regime_config_payload, effective_regime_config = (
+        _effective_regime_config_payload(regime_config_override)
+    )
     status, account_state, recovered_session_id, recovery_note = _ensure_runtime_status(
         settings=settings,
         execution_mode=execution_mode,
@@ -2625,6 +2721,8 @@ def run_forward_paper_runtime(
         live_lookback_candles=live_lookback_candles,
         feed_stale_after_seconds=feed_stale_after_seconds,
         binance_base_url=binance_base_url,
+        regime_config_source=regime_config_source,
+        regime_config=regime_config_payload,
         runtime_id=runtime_id,
         starting_equity_usd=equity_usd,
         session_interval_seconds=session_interval_seconds,
@@ -2669,13 +2767,14 @@ def run_forward_paper_runtime(
     )
 
     completed_sessions: list[ForwardPaperSessionSummary] = []
-    if live_adapter is not None and market_source == "binance_spot":
-        resolved_live_adapter: BinanceSpotLiveMarketDataAdapter | None = live_adapter
-    elif market_source == "binance_spot":
-        resolved_live_adapter = (
-            BinanceSpotLiveMarketDataAdapter(base_url=binance_base_url)
-            if binance_base_url is not None
-            else BinanceSpotLiveMarketDataAdapter()
+    if live_adapter is not None and (
+        market_source == "binance_spot" or market_source == "coinbase_spot"
+    ):
+        resolved_live_adapter: _LiveMarketAdapter | None = live_adapter
+    elif market_source == "binance_spot" or market_source == "coinbase_spot":
+        resolved_live_adapter = _build_default_live_adapter(
+            market_source=market_source,
+            binance_base_url=binance_base_url,
         )
     else:
         resolved_live_adapter = None
@@ -2766,6 +2865,22 @@ def run_forward_paper_runtime(
                     run_id=run_id,
                     equity_usd=account_state.ending_equity_usd,
                     starting_portfolio=account_state.to_portfolio_state(),
+                    external_confirmation_path=external_confirmation_path,
+                    external_confirmation_impact_policy=external_confirmation_impact_policy,
+                    external_confirmation_boosted_size_multiplier=(
+                        external_confirmation_boosted_size_multiplier
+                    ),
+                    regime_config_override=effective_regime_config,
+                    breakout_config_override=breakout_config_override,
+                    mean_reversion_config_override=mean_reversion_config_override,
+                )
+                proposal_generation_summary_path = (
+                    _write_session_proposal_generation_summary_artifact(
+                        session_id=running_session.session_id,
+                        run_id=run_id,
+                        sessions_dir=status.sessions_dir,
+                        result=result,
+                    )
                 )
                 replay_session = running_session
                 if sandbox_fixture_rehearsal and execution_mode == "sandbox":
@@ -2813,14 +2928,18 @@ def run_forward_paper_runtime(
                     session_summary=replay_session,
                     result=result,
                     completed_at=completed_at,
+                    proposal_generation_summary_path=proposal_generation_summary_path,
                 )
             else:
                 if resolved_live_adapter is None:
                     raise ValueError("Live market runtime requires a live market adapter")
+                poll_now = (
+                    scheduled_at if scheduled_ticks is not None else _normalize_datetime(now_fn())
+                )
                 market_state = _poll_with_retry(
                     status=status,
                     adapter=resolved_live_adapter,
-                    now=scheduled_at,
+                    now=poll_now,
                     retry_count=live_market_poll_retry_count,
                     retry_delay_seconds=live_market_poll_retry_delay_seconds,
                     sleep_fn=sleep_fn,
@@ -2932,12 +3051,29 @@ def run_forward_paper_runtime(
                         run_id=run_id,
                         equity_usd=account_state.ending_equity_usd,
                         starting_portfolio=account_state.to_portfolio_state(),
+                        external_confirmation_path=external_confirmation_path,
+                        external_confirmation_impact_policy=external_confirmation_impact_policy,
+                        external_confirmation_boosted_size_multiplier=(
+                            external_confirmation_boosted_size_multiplier
+                        ),
+                        regime_config_override=effective_regime_config,
+                        breakout_config_override=breakout_config_override,
+                        mean_reversion_config_override=mean_reversion_config_override,
+                    )
+                    proposal_generation_summary_path = (
+                        _write_session_proposal_generation_summary_artifact(
+                            session_id=running_session.session_id,
+                            run_id=run_id,
+                            sessions_dir=status.sessions_dir,
+                            result=result,
+                        )
                     )
                     completed_at = _normalize_datetime(now_fn())
                     completed_session = _completed_session_summary(
                         session_summary=live_session,
                         result=result,
                         completed_at=completed_at,
+                        proposal_generation_summary_path=proposal_generation_summary_path,
                     )
                 else:
                     completed_at = _normalize_datetime(now_fn())
@@ -3091,18 +3227,26 @@ def run_forward_paper_runtime(
         except LiveMarketDataUnavailableError as exc:
             completed_at = _normalize_datetime(now_fn())
             exc_msg = str(exc)
-            configured_base_url = status.binance_base_url or "https://api.binance.com"
+            configured_base_url, endpoint_override_flag = _resolve_live_endpoint_context(
+                market_source=market_source,
+                status=status,
+                live_adapter=resolved_live_adapter,
+            )
             if "451" in exc_msg:
                 feed_message = (
                     f"{exc_msg} | venue_access: feed unavailable — HTTP 451 indicates a "
                     f"legal/geo/IP restriction at the configured endpoint "
-                    f"({configured_base_url}); verify network path or set --binance-base-url"
+                    f"({configured_base_url}); verify network path"
                 )
             else:
+                override_hint = (
+                    f" or use {endpoint_override_flag} to override the endpoint"
+                    if endpoint_override_flag is not None
+                    else ""
+                )
                 feed_message = (
                     f"{exc_msg} | venue_access: feed unavailable on first call to "
-                    f"{configured_base_url}; check network access or use --binance-base-url "
-                    f"to override the endpoint"
+                    f"{configured_base_url}; check network access{override_hint}"
                 )
             unavailable_health = LiveFeedHealth(
                 status="degraded",
@@ -3246,6 +3390,7 @@ def run_forward_paper_runtime(
         live_market_preflight_path=paths.live_market_preflight_path,
         soak_evaluation_path=status.soak_evaluation_path,
         shadow_evaluation_path=status.shadow_evaluation_path,
+        live_gate_config_path=status.live_gate_config_path,
         live_gate_decision_path=status.live_gate_decision_path,
         live_gate_threshold_summary_path=status.live_gate_threshold_summary_path,
         live_gate_report_path=status.live_gate_report_path,

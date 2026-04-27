@@ -5,7 +5,7 @@ import json
 from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -21,13 +21,21 @@ from crypto_agent.events.journal import (
     build_review_packet,
 )
 from crypto_agent.execution.router import ExecutionRouter
+from crypto_agent.external_signals.loader import (
+    apply_external_confirmation_to_proposal,
+    load_external_confirmation_artifact,
+)
+from crypto_agent.external_signals.models import ExternalConfirmationDecision
+from crypto_agent.features.models import FeatureSnapshot
 from crypto_agent.features.pipeline import build_feature_snapshot
 from crypto_agent.ids import new_id
+from crypto_agent.market_data.models import Candle
 from crypto_agent.market_data.replay import assess_candle_quality, load_candle_replay
 from crypto_agent.monitoring.alerts import generate_execution_alerts, generate_kill_switch_alerts
 from crypto_agent.monitoring.models import AlertEvent
 from crypto_agent.policy.kill_switch import KillSwitchContext
 from crypto_agent.portfolio.positions import PortfolioState, Position
+from crypto_agent.regime.base import RegimeAssessment, RegimeConfig, RegimeLabel
 from crypto_agent.regime.rules import classify_regime
 from crypto_agent.risk.checks import RiskCheckResult, evaluate_trade_proposal
 from crypto_agent.signals import (
@@ -37,6 +45,52 @@ from crypto_agent.signals import (
     generate_mean_reversion_proposal,
 )
 from crypto_agent.types import FillEvent, TradeProposal
+
+ExternalConfirmationImpactPolicy = Literal["conservative"]
+ExternalConfirmationBoostedSizeMultiplier = float
+
+
+class StrategyProposalGenerationDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_id: str
+    required_lookback_candles: int = Field(ge=1)
+    considered_window_count: int = Field(default=0, ge=0)
+    insufficient_lookback_count: int = Field(default=0, ge=0)
+    emitted_proposal_count: int = Field(default=0, ge=0)
+    emitted_side_counts: dict[str, int] = Field(default_factory=dict)
+    non_emit_reason_counts: dict[str, int] = Field(default_factory=dict)
+    last_outcome_status: Literal["insufficient_lookback", "not_emitted", "emitted"] | None = None
+    last_outcome_reason: str | None = None
+    strategy_config_source: Literal["default", "override"] = "default"
+    strategy_config: dict[str, float | int | str] = Field(default_factory=dict)
+    threshold_visibility: dict[str, object] = Field(default_factory=dict)
+
+
+class ProposalPipelineDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    external_confirmation_impact_policy: ExternalConfirmationImpactPolicy | None = None
+    external_confirmation_boosted_size_multiplier: (
+        ExternalConfirmationBoostedSizeMultiplier | None
+    ) = None
+    emitted_proposal_count: int = Field(default=0, ge=0)
+    dropped_by_external_confirmation_count: int = Field(default=0, ge=0)
+    blocked_by_risk_or_policy_count: int = Field(default=0, ge=0)
+    blocked_reason_counts: dict[str, int] = Field(default_factory=dict)
+    allowed_for_execution_count: int = Field(default=0, ge=0)
+
+
+class ProposalGenerationSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: Literal["proposal_generation_summary_v1"] = "proposal_generation_summary_v1"
+    run_id: str
+    replay_path: str
+    candle_count: int = Field(ge=0)
+    breakout: StrategyProposalGenerationDiagnostics
+    mean_reversion: StrategyProposalGenerationDiagnostics
+    proposal_pipeline: ProposalPipelineDiagnostics
 
 
 class PaperRunResult(BaseModel):
@@ -53,6 +107,8 @@ class PaperRunResult(BaseModel):
     trade_ledger: TradeLedger
     review_packet: dict[str, object]
     operator_summary: dict[str, object]
+    proposal_generation_summary_path: Path
+    proposal_generation_summary: ProposalGenerationSummary
     quality_issue_count: int = Field(ge=0)
 
 
@@ -89,6 +145,38 @@ def _alert_events(
         )
         for alert in alerts
     ]
+
+
+def _external_confirmation_event(
+    *,
+    run_id: str,
+    proposal: TradeProposal,
+    settings: Settings,
+    decision: ExternalConfirmationDecision,
+) -> EventEnvelope:
+    return EventEnvelope(
+        event_type=EventType.ALERT_RAISED,
+        source="external_confirmation",
+        run_id=run_id,
+        strategy_id=proposal.strategy_id,
+        symbol=proposal.symbol,
+        mode=settings.mode,
+        payload=decision.model_dump(mode="json"),
+    )
+
+
+def _boosted_external_confirmation_size_multiplier(
+    *,
+    proposal: TradeProposal,
+    configured_multiplier: ExternalConfirmationBoostedSizeMultiplier | None,
+) -> float:
+    if configured_multiplier is None:
+        return 1.0
+    if proposal.supporting_features.get("external_confirmation_applied") is not True:
+        return 1.0
+    if proposal.supporting_features.get("external_confirmation_status") != "boosted_confirmation":
+        return 1.0
+    return configured_multiplier
 
 
 def _kill_switch_event(
@@ -231,6 +319,119 @@ def _operator_summary(
     }
 
 
+def _sorted_counter(counter: Counter[str]) -> dict[str, int]:
+    return {key: int(counter[key]) for key in sorted(counter)}
+
+
+class _NumericSummaryAccumulator:
+    def __init__(self) -> None:
+        self.count = 0
+        self.sum = 0.0
+        self.min: float | None = None
+        self.max: float | None = None
+
+    def add(self, value: float) -> None:
+        self.count += 1
+        self.sum += value
+        if self.min is None or value < self.min:
+            self.min = value
+        if self.max is None or value > self.max:
+            self.max = value
+
+    def to_summary(self) -> dict[str, float | int] | None:
+        if self.count == 0 or self.min is None or self.max is None:
+            return None
+        return {
+            "count": self.count,
+            "min": self.min,
+            "max": self.max,
+            "avg": self.sum / self.count,
+        }
+
+
+def _evaluate_breakout_proposal_with_reason(
+    *,
+    candles: list[Candle],
+    features: FeatureSnapshot,
+    regime: RegimeAssessment,
+    config: BreakoutSignalConfig,
+) -> tuple[TradeProposal | None, str]:
+    proposal = generate_breakout_proposal(candles, features, regime, config)
+    if proposal is not None:
+        return proposal, f"emitted_{proposal.side.value.lower()}"
+    if regime.label is not RegimeLabel.TREND:
+        return None, "regime_not_trend"
+    if features.average_dollar_volume < config.min_average_dollar_volume:
+        return None, "average_dollar_volume_below_min"
+    if features.average_range_bps > config.max_average_range_bps:
+        return None, "average_range_bps_above_max"
+
+    trigger_candle = candles[-1]
+    reference_window = candles[-(config.lookback_candles + 1) : -1]
+    reference_high = max(candle.high for candle in reference_window)
+    reference_low = min(candle.low for candle in reference_window)
+    if (
+        trigger_candle.close > reference_high
+        and features.momentum_return < config.min_momentum_return
+    ):
+        return None, "upside_breakout_without_momentum"
+    if (
+        trigger_candle.close < reference_low
+        and features.momentum_return > -config.min_momentum_return
+    ):
+        return None, "downside_breakout_without_momentum"
+    if reference_low <= trigger_candle.close <= reference_high:
+        return None, "price_within_reference_range"
+    return None, "no_breakout_trigger"
+
+
+def _evaluate_mean_reversion_proposal_with_reason(
+    *,
+    candles: list[Candle],
+    features: FeatureSnapshot,
+    regime: RegimeAssessment,
+    config: MeanReversionSignalConfig,
+) -> tuple[TradeProposal | None, str]:
+    proposal = generate_mean_reversion_proposal(candles, features, regime, config)
+    if proposal is not None:
+        return proposal, f"emitted_{proposal.side.value.lower()}"
+    if regime.label is not RegimeLabel.RANGE:
+        return None, "regime_not_range"
+    if features.average_dollar_volume < config.min_average_dollar_volume:
+        return None, "average_dollar_volume_below_min"
+    if features.realized_volatility > config.max_realized_volatility:
+        return None, "realized_volatility_above_max"
+    if features.atr_pct > config.max_atr_pct:
+        return None, "atr_pct_above_max"
+
+    reference_window = candles[-(config.lookback_candles + 1) : -1]
+    reference_closes = [candle.close for candle in reference_window]
+    mean_close = sum(reference_closes) / len(reference_closes)
+    variance = sum((value - mean_close) ** 2 for value in reference_closes) / len(reference_closes)
+    stddev_close = variance**0.5
+    if stddev_close == 0:
+        return None, "reference_stddev_zero"
+    zscore = (candles[-1].close - mean_close) / stddev_close
+    if abs(zscore) < config.zscore_entry_threshold:
+        return None, "zscore_below_entry_threshold"
+    return None, "no_mean_reversion_trigger"
+
+
+def _compute_mean_reversion_abs_zscore(
+    candles: list[Candle],
+    config: MeanReversionSignalConfig,
+) -> float | None:
+    reference_window = candles[-(config.lookback_candles + 1) : -1]
+    reference_closes = [candle.close for candle in reference_window]
+    mean_close = sum(reference_closes) / len(reference_closes)
+    variance = sum((value - mean_close) ** 2 for value in reference_closes) / len(reference_closes)
+    stddev_close = variance**0.5
+    if stddev_close == 0:
+        return None
+    zscore = (candles[-1].close - mean_close) / stddev_close
+    return float(abs(zscore))
+
+
 def _format_float(value: float) -> str:
     text = f"{value:.10f}".rstrip("0").rstrip(".")
     return text or "0"
@@ -356,6 +557,7 @@ def _build_operator_report(
     pnl: ReplayPnLSummary,
     review_packet: dict[str, Any],
     operator_summary: dict[str, object],
+    external_confirmation_summary: dict[str, object] | None = None,
 ) -> str:
     lines = [
         "# Paper Run Operator Report",
@@ -434,6 +636,26 @@ def _build_operator_report(
         f"first_event_type: {operator_summary['first_event_type']}",
         f"last_event_type: {operator_summary['last_event_type']}",
     ]
+    if external_confirmation_summary is not None:
+        lines.extend(
+            [
+                "",
+                "## External Confirmation",
+                f"artifact_loaded: {external_confirmation_summary['artifact_loaded']}",
+                f"asset: {external_confirmation_summary['asset']}",
+                f"source_system: {external_confirmation_summary['source_system']}",
+                f"decision_count: {external_confirmation_summary['decision_count']}",
+                "decision_status_counts: "
+                f"{external_confirmation_summary['decision_status_counts']}",
+            ]
+        )
+        if external_confirmation_summary.get("impact_policy") is not None:
+            lines.append(f"impact_policy: {external_confirmation_summary['impact_policy']}")
+        if external_confirmation_summary.get("boosted_size_multiplier") is not None:
+            lines.append(
+                "boosted_size_multiplier: "
+                f"{external_confirmation_summary['boosted_size_multiplier']}"
+            )
     return "\n".join(lines)
 
 
@@ -448,6 +670,7 @@ def _write_operator_report(
     pnl: ReplayPnLSummary,
     review_packet: dict[str, Any],
     operator_summary: dict[str, object],
+    external_confirmation_summary: dict[str, object] | None = None,
 ) -> None:
     report_path.write_text(
         _build_operator_report(
@@ -459,6 +682,7 @@ def _write_operator_report(
             pnl=pnl,
             review_packet=review_packet,
             operator_summary=operator_summary,
+            external_confirmation_summary=external_confirmation_summary,
         ),
         encoding="utf-8",
     )
@@ -473,9 +697,23 @@ def run_paper_replay(
     starting_portfolio: PortfolioState | None = None,
     journal_path: str | Path | None = None,
     run_dir: str | Path | None = None,
+    external_confirmation_path: str | Path | None = None,
+    external_confirmation_impact_policy: ExternalConfirmationImpactPolicy | None = None,
+    external_confirmation_boosted_size_multiplier: (
+        ExternalConfirmationBoostedSizeMultiplier | None
+    ) = None,
+    regime_config_override: RegimeConfig | None = None,
+    breakout_config_override: BreakoutSignalConfig | None = None,
+    mean_reversion_config_override: MeanReversionSignalConfig | None = None,
 ) -> PaperRunResult:
     if settings.mode is not Mode.PAPER:
         raise ValueError("Paper replay harness requires settings.mode to be paper.")
+    if external_confirmation_boosted_size_multiplier is not None and not (
+        1.0 <= external_confirmation_boosted_size_multiplier <= 1.5
+    ):
+        raise ValueError(
+            "external_confirmation_boosted_size_multiplier must be between 1.0 and 1.5"
+        )
 
     replay_fixture_path = Path(replay_path)
     candles = load_candle_replay(replay_fixture_path)
@@ -501,6 +739,7 @@ def run_paper_replay(
     summary_path = resolved_run_dir / "summary.json"
     report_path = resolved_run_dir / "report.md"
     trade_ledger_path = resolved_run_dir / "trade_ledger.json"
+    proposal_generation_summary_path = resolved_run_dir / "proposal_generation_summary.json"
 
     if resolved_journal_path.exists():
         raise FileExistsError(f"Journal path already exists: {resolved_journal_path}")
@@ -523,65 +762,250 @@ def run_paper_replay(
     portfolio = initial_portfolio.model_copy(deep=True)
     kill_switch_context = KillSwitchContext()
     execution_router = ExecutionRouter()
-    breakout_config = BreakoutSignalConfig()
-    mean_reversion_config = MeanReversionSignalConfig()
+    breakout_config = breakout_config_override or BreakoutSignalConfig()
+    mean_reversion_config = mean_reversion_config_override or MeanReversionSignalConfig()
+    breakout_config_source: Literal["default", "override"] = (
+        "override" if breakout_config_override is not None else "default"
+    )
+    mean_reversion_config_source: Literal["default", "override"] = (
+        "override" if mean_reversion_config_override is not None else "default"
+    )
+    external_confirmation = load_external_confirmation_artifact(external_confirmation_path)
+    external_confirmation_decisions: list[ExternalConfirmationDecision] = []
+    breakout_feature_lookback = breakout_config.lookback_candles + 1
+    mean_reversion_feature_lookback = mean_reversion_config.lookback_candles + 1
+    breakout_emitted_side_counts: Counter[str] = Counter()
+    breakout_non_emit_reason_counts: Counter[str] = Counter()
+    mean_reversion_emitted_side_counts: Counter[str] = Counter()
+    mean_reversion_non_emit_reason_counts: Counter[str] = Counter()
+    breakout_considered_window_count = 0
+    mean_reversion_considered_window_count = 0
+    breakout_insufficient_lookback_count = 0
+    mean_reversion_insufficient_lookback_count = 0
+    breakout_last_outcome_status: (
+        Literal["insufficient_lookback", "not_emitted", "emitted"] | None
+    ) = None
+    mean_reversion_last_outcome_status: (
+        Literal["insufficient_lookback", "not_emitted", "emitted"] | None
+    ) = None
+    breakout_last_outcome_reason: str | None = None
+    mean_reversion_last_outcome_reason: str | None = None
+    breakout_average_dollar_volume_observed = _NumericSummaryAccumulator()
+    breakout_average_dollar_volume_gap = _NumericSummaryAccumulator()
+    breakout_average_range_bps_observed = _NumericSummaryAccumulator()
+    breakout_average_range_bps_gap = _NumericSummaryAccumulator()
+    breakout_abs_momentum_return_observed = _NumericSummaryAccumulator()
+    breakout_abs_momentum_return_gap = _NumericSummaryAccumulator()
+    breakout_observed_average_dollar_volume_last: float | None = None
+    breakout_gap_to_min_average_dollar_volume_last: float | None = None
+    breakout_observed_average_range_bps_last: float | None = None
+    breakout_gap_to_max_average_range_bps_last: float | None = None
+    breakout_observed_abs_momentum_return_last: float | None = None
+    breakout_gap_to_min_abs_momentum_return_last: float | None = None
+    mean_reversion_average_dollar_volume_observed = _NumericSummaryAccumulator()
+    mean_reversion_average_dollar_volume_gap = _NumericSummaryAccumulator()
+    mean_reversion_realized_volatility_observed = _NumericSummaryAccumulator()
+    mean_reversion_realized_volatility_gap = _NumericSummaryAccumulator()
+    mean_reversion_atr_pct_observed = _NumericSummaryAccumulator()
+    mean_reversion_atr_pct_gap = _NumericSummaryAccumulator()
+    mean_reversion_abs_zscore_observed = _NumericSummaryAccumulator()
+    mean_reversion_abs_zscore_gap = _NumericSummaryAccumulator()
+    mean_reversion_observed_average_dollar_volume_last: float | None = None
+    mean_reversion_gap_to_min_average_dollar_volume_last: float | None = None
+    mean_reversion_observed_realized_volatility_last: float | None = None
+    mean_reversion_gap_to_max_realized_volatility_last: float | None = None
+    mean_reversion_observed_atr_pct_last: float | None = None
+    mean_reversion_gap_to_max_atr_pct_last: float | None = None
+    mean_reversion_observed_abs_zscore_last: float | None = None
+    mean_reversion_gap_to_zscore_entry_threshold_last: float | None = None
+    emitted_proposal_count = 0
+    dropped_by_external_confirmation_count = 0
+    blocked_by_risk_or_policy_count = 0
+    allowed_for_execution_count = 0
+    blocked_reason_counts: Counter[str] = Counter()
 
     for candle_index in range(1, len(candles) + 1):
         candle_window = candles[:candle_index]
         proposals: list[TradeProposal] = []
 
-        breakout_feature_lookback = breakout_config.lookback_candles + 1
         if len(candle_window) >= breakout_feature_lookback:
+            breakout_considered_window_count += 1
             breakout_features = build_feature_snapshot(
                 candle_window,
                 lookback_periods=breakout_feature_lookback,
             )
-            breakout_regime = classify_regime(breakout_features)
-            breakout_proposal = generate_breakout_proposal(
-                candle_window,
-                breakout_features,
-                breakout_regime,
-                breakout_config,
+            breakout_observed_average_dollar_volume_last = breakout_features.average_dollar_volume
+            breakout_gap_to_min_average_dollar_volume_last = (
+                breakout_features.average_dollar_volume - breakout_config.min_average_dollar_volume
+            )
+            breakout_average_dollar_volume_observed.add(
+                breakout_observed_average_dollar_volume_last
+            )
+            breakout_average_dollar_volume_gap.add(breakout_gap_to_min_average_dollar_volume_last)
+            breakout_observed_average_range_bps_last = breakout_features.average_range_bps
+            breakout_gap_to_max_average_range_bps_last = (
+                breakout_features.average_range_bps - breakout_config.max_average_range_bps
+            )
+            breakout_average_range_bps_observed.add(breakout_observed_average_range_bps_last)
+            breakout_average_range_bps_gap.add(breakout_gap_to_max_average_range_bps_last)
+            breakout_observed_abs_momentum_return_last = abs(breakout_features.momentum_return)
+            breakout_gap_to_min_abs_momentum_return_last = (
+                breakout_observed_abs_momentum_return_last - breakout_config.min_momentum_return
+            )
+            breakout_abs_momentum_return_observed.add(breakout_observed_abs_momentum_return_last)
+            breakout_abs_momentum_return_gap.add(breakout_gap_to_min_abs_momentum_return_last)
+            breakout_regime = classify_regime(breakout_features, regime_config_override)
+            breakout_proposal, breakout_reason = _evaluate_breakout_proposal_with_reason(
+                candles=candle_window,
+                features=breakout_features,
+                regime=breakout_regime,
+                config=breakout_config,
             )
             if breakout_proposal is not None:
                 proposals.append(breakout_proposal)
+                breakout_emitted_side_counts[breakout_proposal.side.value.lower()] += 1
+                breakout_last_outcome_status = "emitted"
+            else:
+                breakout_non_emit_reason_counts[breakout_reason] += 1
+                breakout_last_outcome_status = "not_emitted"
+            breakout_last_outcome_reason = breakout_reason
+        else:
+            breakout_insufficient_lookback_count += 1
+            breakout_last_outcome_status = "insufficient_lookback"
+            breakout_last_outcome_reason = "insufficient_lookback"
 
-        mean_reversion_feature_lookback = mean_reversion_config.lookback_candles + 1
         if len(candle_window) >= mean_reversion_feature_lookback:
+            mean_reversion_considered_window_count += 1
             mean_reversion_features = build_feature_snapshot(
                 candle_window,
                 lookback_periods=mean_reversion_feature_lookback,
             )
-            mean_reversion_regime = classify_regime(mean_reversion_features)
-            mean_reversion_proposal = generate_mean_reversion_proposal(
+            mean_reversion_observed_average_dollar_volume_last = (
+                mean_reversion_features.average_dollar_volume
+            )
+            mean_reversion_gap_to_min_average_dollar_volume_last = (
+                mean_reversion_features.average_dollar_volume
+                - mean_reversion_config.min_average_dollar_volume
+            )
+            mean_reversion_average_dollar_volume_observed.add(
+                mean_reversion_observed_average_dollar_volume_last
+            )
+            mean_reversion_average_dollar_volume_gap.add(
+                mean_reversion_gap_to_min_average_dollar_volume_last
+            )
+            mean_reversion_observed_realized_volatility_last = (
+                mean_reversion_features.realized_volatility
+            )
+            mean_reversion_gap_to_max_realized_volatility_last = (
+                mean_reversion_features.realized_volatility
+                - mean_reversion_config.max_realized_volatility
+            )
+            mean_reversion_realized_volatility_observed.add(
+                mean_reversion_observed_realized_volatility_last
+            )
+            mean_reversion_realized_volatility_gap.add(
+                mean_reversion_gap_to_max_realized_volatility_last
+            )
+            mean_reversion_observed_atr_pct_last = mean_reversion_features.atr_pct
+            mean_reversion_gap_to_max_atr_pct_last = (
+                mean_reversion_features.atr_pct - mean_reversion_config.max_atr_pct
+            )
+            mean_reversion_atr_pct_observed.add(mean_reversion_observed_atr_pct_last)
+            mean_reversion_atr_pct_gap.add(mean_reversion_gap_to_max_atr_pct_last)
+            mean_reversion_observed_abs_zscore_last = _compute_mean_reversion_abs_zscore(
                 candle_window,
-                mean_reversion_features,
-                mean_reversion_regime,
                 mean_reversion_config,
+            )
+            if mean_reversion_observed_abs_zscore_last is not None:
+                mean_reversion_gap_to_zscore_entry_threshold_last = (
+                    mean_reversion_observed_abs_zscore_last
+                    - mean_reversion_config.zscore_entry_threshold
+                )
+                mean_reversion_abs_zscore_observed.add(mean_reversion_observed_abs_zscore_last)
+                mean_reversion_abs_zscore_gap.add(mean_reversion_gap_to_zscore_entry_threshold_last)
+            else:
+                mean_reversion_gap_to_zscore_entry_threshold_last = None
+            mean_reversion_regime = classify_regime(
+                mean_reversion_features,
+                regime_config_override,
+            )
+            mean_reversion_proposal, mean_reversion_reason = (
+                _evaluate_mean_reversion_proposal_with_reason(
+                    candles=candle_window,
+                    features=mean_reversion_features,
+                    regime=mean_reversion_regime,
+                    config=mean_reversion_config,
+                )
             )
             if mean_reversion_proposal is not None:
                 proposals.append(mean_reversion_proposal)
+                mean_reversion_emitted_side_counts[mean_reversion_proposal.side.value.lower()] += 1
+                mean_reversion_last_outcome_status = "emitted"
+            else:
+                mean_reversion_non_emit_reason_counts[mean_reversion_reason] += 1
+                mean_reversion_last_outcome_status = "not_emitted"
+            mean_reversion_last_outcome_reason = mean_reversion_reason
+        else:
+            mean_reversion_insufficient_lookback_count += 1
+            mean_reversion_last_outcome_status = "insufficient_lookback"
+            mean_reversion_last_outcome_reason = "insufficient_lookback"
 
         for proposal in proposals:
+            emitted_proposal_count += 1
+            proposal_for_evaluation: TradeProposal | None = proposal
+            if external_confirmation is not None:
+                proposal_for_evaluation, confirmation_decision = (
+                    apply_external_confirmation_to_proposal(
+                        proposal=proposal,
+                        artifact=external_confirmation,
+                    )
+                )
+                external_confirmation_decisions.append(confirmation_decision)
+                journal.append(
+                    _external_confirmation_event(
+                        run_id=resolved_run_id,
+                        proposal=proposal,
+                        settings=settings,
+                        decision=confirmation_decision,
+                    )
+                )
+                if proposal_for_evaluation is None:
+                    dropped_by_external_confirmation_count += 1
+                    continue
+                if (
+                    external_confirmation_impact_policy == "conservative"
+                    and confirmation_decision.status == "penalized_conflict"
+                ):
+                    dropped_by_external_confirmation_count += 1
+                    continue
+            if proposal_for_evaluation is None:
+                continue
+            evaluated_proposal = proposal_for_evaluation
+
             risk_result = evaluate_trade_proposal(
-                proposal,
+                evaluated_proposal,
                 portfolio,
                 settings,
                 kill_switch_context=kill_switch_context,
+                sizing_notional_multiplier=_boosted_external_confirmation_size_multiplier(
+                    proposal=evaluated_proposal,
+                    configured_multiplier=external_confirmation_boosted_size_multiplier,
+                ),
             )
 
             if risk_result.decision.action is PolicyAction.ALLOW:
+                allowed_for_execution_count += 1
                 report = execution_router.execute(risk_result)
                 journal.append_many(
-                    build_execution_events(resolved_run_id, proposal, risk_result, report)
+                    build_execution_events(resolved_run_id, evaluated_proposal, risk_result, report)
                 )
                 alerts = generate_execution_alerts(report)
                 journal.append_many(
                     _alert_events(
                         alerts,
                         run_id=resolved_run_id,
-                        strategy_id=proposal.strategy_id,
-                        symbol=proposal.symbol,
+                        strategy_id=evaluated_proposal.strategy_id,
+                        symbol=evaluated_proposal.symbol,
                         mode=settings.mode,
                     )
                 )
@@ -595,7 +1019,11 @@ def run_paper_replay(
                     portfolio = _apply_execution_to_portfolio(portfolio, report.fills)
                 continue
 
-            journal.append_many(build_execution_events(resolved_run_id, proposal, risk_result))
+            blocked_by_risk_or_policy_count += 1
+            blocked_reason_counts.update(risk_result.decision.reason_codes)
+            journal.append_many(
+                build_execution_events(resolved_run_id, evaluated_proposal, risk_result)
+            )
             if (
                 risk_result.decision.action is PolicyAction.HALT
                 and "kill_switch_active" in risk_result.decision.reason_codes
@@ -608,7 +1036,7 @@ def run_paper_replay(
                 journal.append(
                     _kill_switch_event(
                         run_id=resolved_run_id,
-                        proposal=proposal,
+                        proposal=evaluated_proposal,
                         settings=settings,
                         reason_codes=kill_reason_codes,
                     )
@@ -622,8 +1050,8 @@ def run_paper_replay(
                     _alert_events(
                         kill_switch_alerts,
                         run_id=resolved_run_id,
-                        strategy_id=proposal.strategy_id,
-                        symbol=proposal.symbol,
+                        strategy_id=evaluated_proposal.strategy_id,
+                        symbol=evaluated_proposal.symbol,
                         mode=settings.mode,
                     )
                 )
@@ -648,7 +1076,131 @@ def run_paper_replay(
         scorecard=scorecard,
         review_packet=review_packet,
     )
+    proposal_generation_summary = ProposalGenerationSummary(
+        run_id=resolved_run_id,
+        replay_path=str(replay_fixture_path),
+        candle_count=len(candles),
+        breakout=StrategyProposalGenerationDiagnostics(
+            strategy_id=breakout_config.strategy_id,
+            required_lookback_candles=breakout_feature_lookback,
+            considered_window_count=breakout_considered_window_count,
+            insufficient_lookback_count=breakout_insufficient_lookback_count,
+            emitted_proposal_count=sum(breakout_emitted_side_counts.values()),
+            emitted_side_counts=_sorted_counter(breakout_emitted_side_counts),
+            non_emit_reason_counts=_sorted_counter(breakout_non_emit_reason_counts),
+            last_outcome_status=breakout_last_outcome_status,
+            last_outcome_reason=breakout_last_outcome_reason,
+            strategy_config_source=breakout_config_source,
+            strategy_config=breakout_config.model_dump(mode="json"),
+            threshold_visibility={
+                "min_average_dollar_volume_threshold_used": (
+                    breakout_config.min_average_dollar_volume
+                ),
+                "observed_average_dollar_volume_last": breakout_observed_average_dollar_volume_last,
+                "gap_to_min_average_dollar_volume_last": (
+                    breakout_gap_to_min_average_dollar_volume_last
+                ),
+                "observed_average_dollar_volume_summary": (
+                    breakout_average_dollar_volume_observed.to_summary()
+                ),
+                "gap_to_min_average_dollar_volume_summary": (
+                    breakout_average_dollar_volume_gap.to_summary()
+                ),
+                "max_average_range_bps_threshold_used": breakout_config.max_average_range_bps,
+                "observed_average_range_bps_last": breakout_observed_average_range_bps_last,
+                "gap_to_max_average_range_bps_last": breakout_gap_to_max_average_range_bps_last,
+                "observed_average_range_bps_summary": (
+                    breakout_average_range_bps_observed.to_summary()
+                ),
+                "gap_to_max_average_range_bps_summary": (
+                    breakout_average_range_bps_gap.to_summary()
+                ),
+                "min_abs_momentum_return_threshold_used": (breakout_config.min_momentum_return),
+                "observed_abs_momentum_return_last": breakout_observed_abs_momentum_return_last,
+                "gap_to_min_abs_momentum_return_last": (
+                    breakout_gap_to_min_abs_momentum_return_last
+                ),
+                "observed_abs_momentum_return_summary": (
+                    breakout_abs_momentum_return_observed.to_summary()
+                ),
+                "gap_to_min_abs_momentum_return_summary": (
+                    breakout_abs_momentum_return_gap.to_summary()
+                ),
+            },
+        ),
+        mean_reversion=StrategyProposalGenerationDiagnostics(
+            strategy_id=mean_reversion_config.strategy_id,
+            required_lookback_candles=mean_reversion_feature_lookback,
+            considered_window_count=mean_reversion_considered_window_count,
+            insufficient_lookback_count=mean_reversion_insufficient_lookback_count,
+            emitted_proposal_count=sum(mean_reversion_emitted_side_counts.values()),
+            emitted_side_counts=_sorted_counter(mean_reversion_emitted_side_counts),
+            non_emit_reason_counts=_sorted_counter(mean_reversion_non_emit_reason_counts),
+            last_outcome_status=mean_reversion_last_outcome_status,
+            last_outcome_reason=mean_reversion_last_outcome_reason,
+            strategy_config_source=mean_reversion_config_source,
+            strategy_config=mean_reversion_config.model_dump(mode="json"),
+            threshold_visibility={
+                "min_average_dollar_volume_threshold_used": (
+                    mean_reversion_config.min_average_dollar_volume
+                ),
+                "observed_average_dollar_volume_last": (
+                    mean_reversion_observed_average_dollar_volume_last
+                ),
+                "gap_to_min_average_dollar_volume_last": (
+                    mean_reversion_gap_to_min_average_dollar_volume_last
+                ),
+                "observed_average_dollar_volume_summary": (
+                    mean_reversion_average_dollar_volume_observed.to_summary()
+                ),
+                "gap_to_min_average_dollar_volume_summary": (
+                    mean_reversion_average_dollar_volume_gap.to_summary()
+                ),
+                "max_realized_volatility_threshold_used": (
+                    mean_reversion_config.max_realized_volatility
+                ),
+                "observed_realized_volatility_last": (
+                    mean_reversion_observed_realized_volatility_last
+                ),
+                "gap_to_max_realized_volatility_last": (
+                    mean_reversion_gap_to_max_realized_volatility_last
+                ),
+                "observed_realized_volatility_summary": (
+                    mean_reversion_realized_volatility_observed.to_summary()
+                ),
+                "gap_to_max_realized_volatility_summary": (
+                    mean_reversion_realized_volatility_gap.to_summary()
+                ),
+                "max_atr_pct_threshold_used": mean_reversion_config.max_atr_pct,
+                "observed_atr_pct_last": mean_reversion_observed_atr_pct_last,
+                "gap_to_max_atr_pct_last": mean_reversion_gap_to_max_atr_pct_last,
+                "observed_atr_pct_summary": mean_reversion_atr_pct_observed.to_summary(),
+                "gap_to_max_atr_pct_summary": mean_reversion_atr_pct_gap.to_summary(),
+                "zscore_entry_threshold_used": mean_reversion_config.zscore_entry_threshold,
+                "observed_abs_zscore_last": mean_reversion_observed_abs_zscore_last,
+                "gap_to_zscore_entry_threshold_last": (
+                    mean_reversion_gap_to_zscore_entry_threshold_last
+                ),
+                "observed_abs_zscore_summary": mean_reversion_abs_zscore_observed.to_summary(),
+                "gap_to_zscore_entry_threshold_summary": (
+                    mean_reversion_abs_zscore_gap.to_summary()
+                ),
+            },
+        ),
+        proposal_pipeline=ProposalPipelineDiagnostics(
+            external_confirmation_impact_policy=external_confirmation_impact_policy,
+            external_confirmation_boosted_size_multiplier=(
+                external_confirmation_boosted_size_multiplier
+            ),
+            emitted_proposal_count=emitted_proposal_count,
+            dropped_by_external_confirmation_count=dropped_by_external_confirmation_count,
+            blocked_by_risk_or_policy_count=blocked_by_risk_or_policy_count,
+            blocked_reason_counts=_sorted_counter(blocked_reason_counts),
+            allowed_for_execution_count=allowed_for_execution_count,
+        ),
+    )
 
+    external_confirmation_summary: dict[str, object] | None = None
     summary = {
         "run_id": resolved_run_id,
         "mode": settings.mode.value,
@@ -661,7 +1213,31 @@ def run_paper_replay(
         "review_packet": review_packet,
         "operator_summary": operator_summary,
     }
+    if external_confirmation_path is not None:
+        external_confirmation_summary = {
+            "artifact_path": str(Path(external_confirmation_path).resolve()),
+            "artifact_loaded": external_confirmation is not None,
+            "source_system": external_confirmation.source_system
+            if external_confirmation is not None
+            else None,
+            "asset": external_confirmation.asset if external_confirmation is not None else None,
+            "decision_count": len(external_confirmation_decisions),
+            "decision_status_counts": dict(
+                Counter(decision.status for decision in external_confirmation_decisions)
+            ),
+        }
+        if external_confirmation_impact_policy is not None:
+            external_confirmation_summary["impact_policy"] = external_confirmation_impact_policy
+        if external_confirmation_boosted_size_multiplier is not None:
+            external_confirmation_summary["boosted_size_multiplier"] = (
+                external_confirmation_boosted_size_multiplier
+            )
+        summary["external_confirmation"] = external_confirmation_summary
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+    proposal_generation_summary_path.write_text(
+        json.dumps(proposal_generation_summary.model_dump(mode="json"), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     trade_ledger_path.write_text(
         json.dumps(trade_ledger.model_dump(mode="json"), indent=2, sort_keys=True),
         encoding="utf-8",
@@ -676,6 +1252,7 @@ def run_paper_replay(
         pnl=pnl,
         review_packet=review_packet,
         operator_summary=operator_summary,
+        external_confirmation_summary=external_confirmation_summary,
     )
     write_operator_run_index(settings.paths.runs_dir)
 
@@ -691,6 +1268,8 @@ def run_paper_replay(
         trade_ledger=trade_ledger,
         review_packet=review_packet,
         operator_summary=operator_summary,
+        proposal_generation_summary_path=proposal_generation_summary_path,
+        proposal_generation_summary=proposal_generation_summary,
         quality_issue_count=len(quality_issues),
     )
 

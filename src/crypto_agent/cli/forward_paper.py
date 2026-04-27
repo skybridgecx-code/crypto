@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Literal, cast
 
-from crypto_agent.config import load_settings
+from crypto_agent.config import Settings, load_settings
 from crypto_agent.execution.live_adapter import ScriptedSandboxExecutionAdapter
 from crypto_agent.execution.models import VenueExecutionAck, VenueOrderRequest, VenueOrderState
 from crypto_agent.policy.live_controls import (
@@ -14,10 +14,14 @@ from crypto_agent.policy.live_controls import (
     default_manual_control_state,
 )
 from crypto_agent.policy.readiness import default_live_readiness_status
+from crypto_agent.regime.base import RegimeConfig
 from crypto_agent.runtime.loop import (
     run_forward_paper_runtime,
     run_live_market_preflight_probe,
 )
+from crypto_agent.signals.base import BreakoutSignalConfig, MeanReversionSignalConfig
+
+_XRP_DISCOVERY_LIQUIDITY_TUNING_THRESHOLD = 50_000.0
 
 
 def _symbol_cap(value: str) -> tuple[str, float]:
@@ -52,7 +56,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--market-source",
-        choices=("replay", "binance_spot"),
+        choices=("replay", "binance_spot", "coinbase_spot"),
         default="replay",
         help="Paper runtime market input source.",
     )
@@ -88,12 +92,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--live-symbol",
         default=None,
-        help="Live market symbol when --market-source=binance_spot.",
+        help=(
+            "Live market symbol/product when --market-source is a live venue "
+            "(for example BTCUSDT or BTC-USD)."
+        ),
     )
     parser.add_argument(
         "--live-interval",
         default="1m",
-        help="Live candle interval when --market-source=binance_spot.",
+        help="Live candle interval when --market-source is a live venue.",
     )
     parser.add_argument(
         "--live-lookback-candles",
@@ -217,6 +224,112 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--external-confirmation-path",
+        default=None,
+        help=(
+            "Optional advisory external confirmation artifact path. "
+            "This input can adjust confidence or veto proposals only; it cannot author "
+            "entry/stop/take-profit fields."
+        ),
+    )
+    parser.add_argument(
+        "--external-confirmation-impact-policy",
+        choices=("conservative",),
+        default=None,
+        help=(
+            "Optional paper-only advisory impact policy. conservative blocks "
+            "penalized_conflict proposals before risk/sizing and does not boost size."
+        ),
+    )
+    parser.add_argument(
+        "--external-confirmation-boosted-size-multiplier",
+        type=float,
+        default=None,
+        help=(
+            "Optional paper-only boosted_confirmation sizing multiplier in [1.0, 1.5]. "
+            "Applies only to externally confirmed aligned proposals before existing "
+            "risk/exposure caps."
+        ),
+    )
+    parser.add_argument(
+        "--xrp-discovery-liquidity-tuning",
+        action="store_true",
+        help=(
+            "Paper-only Coinbase XRP discovery preset that lowers proposal-generation, "
+            "regime, and risk liquidity thresholds to 50000.0. It does not change "
+            "zscore or advisory behavior."
+        ),
+    )
+    parser.add_argument(
+        "--regime-liquidity-stress-dollar-volume-threshold",
+        type=float,
+        default=None,
+        help=(
+            "Optional paper-only override for regime liquidity_stress_dollar_volume_threshold. "
+            "Default behavior is unchanged when omitted."
+        ),
+    )
+    parser.add_argument(
+        "--regime-high-volatility-threshold",
+        type=float,
+        default=None,
+        help="Optional paper-only override for regime high_volatility_threshold.",
+    )
+    parser.add_argument(
+        "--regime-high-atr-pct-threshold",
+        type=float,
+        default=None,
+        help="Optional paper-only override for regime high_atr_pct_threshold.",
+    )
+    parser.add_argument(
+        "--regime-trend-return-threshold",
+        type=float,
+        default=None,
+        help="Optional paper-only override for regime trend_return_threshold.",
+    )
+    parser.add_argument(
+        "--regime-trend-range-bps-threshold",
+        type=float,
+        default=None,
+        help="Optional paper-only override for regime trend_range_bps_threshold.",
+    )
+    parser.add_argument(
+        "--mean-reversion-min-average-dollar-volume",
+        type=float,
+        default=None,
+        help=(
+            "Optional paper-only override for mean_reversion min_average_dollar_volume. "
+            "Default behavior is unchanged when omitted."
+        ),
+    )
+    parser.add_argument(
+        "--mean-reversion-zscore-entry-threshold",
+        type=float,
+        default=None,
+        help=(
+            "Optional paper-only override for mean_reversion zscore_entry_threshold. "
+            "Default behavior is unchanged when omitted."
+        ),
+    )
+    parser.add_argument(
+        "--mean-reversion-max-atr-pct",
+        type=float,
+        default=None,
+        help=(
+            "Optional paper-only override for mean_reversion max_atr_pct. "
+            "Default behavior is unchanged when omitted."
+        ),
+    )
+    parser.add_argument(
+        "--breakout-min-average-dollar-volume",
+        type=float,
+        default=None,
+        help=(
+            "Optional paper-only override for breakout min_average_dollar_volume. "
+            "Default behavior is unchanged when omitted."
+        ),
+    )
+    parser.add_argument(
         "--live-market-poll-retry-count",
         type=int,
         default=2,
@@ -232,6 +345,60 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Seconds to wait between live-market fetch retry attempts (default: 2.0).",
     )
     return parser
+
+
+def _normalize_symbol_token(value: str) -> str:
+    return value.strip().upper().replace("-", "").replace("_", "").replace("/", "")
+
+
+def _apply_xrp_discovery_liquidity_tuning(
+    *,
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    settings_allowed_symbols: Sequence[str],
+) -> None:
+    if not args.xrp_discovery_liquidity_tuning:
+        return
+    if args.execution_mode != "paper":
+        parser.error("--xrp-discovery-liquidity-tuning is paper-only")
+    if args.mean_reversion_zscore_entry_threshold is not None:
+        parser.error("--xrp-discovery-liquidity-tuning cannot be combined with zscore tuning")
+    if args.regime_liquidity_stress_dollar_volume_threshold is not None:
+        parser.error(
+            "--xrp-discovery-liquidity-tuning owns "
+            "--regime-liquidity-stress-dollar-volume-threshold"
+        )
+    if args.breakout_min_average_dollar_volume is not None:
+        parser.error("--xrp-discovery-liquidity-tuning owns --breakout-min-average-dollar-volume")
+    if args.mean_reversion_min_average_dollar_volume is not None:
+        parser.error(
+            "--xrp-discovery-liquidity-tuning owns "
+            "--mean-reversion-min-average-dollar-volume"
+        )
+
+    allowed = {_normalize_symbol_token(symbol) for symbol in settings_allowed_symbols}
+    if "XRPUSD" not in allowed:
+        parser.error("--xrp-discovery-liquidity-tuning requires an XRPUSD config profile")
+
+    args.regime_liquidity_stress_dollar_volume_threshold = (
+        _XRP_DISCOVERY_LIQUIDITY_TUNING_THRESHOLD
+    )
+    args.breakout_min_average_dollar_volume = _XRP_DISCOVERY_LIQUIDITY_TUNING_THRESHOLD
+    args.mean_reversion_min_average_dollar_volume = _XRP_DISCOVERY_LIQUIDITY_TUNING_THRESHOLD
+
+
+def _settings_with_xrp_discovery_liquidity_tuning(settings: Settings) -> Settings:
+    return settings.model_copy(
+        update={
+            "risk": settings.risk.model_copy(
+                update={
+                    "min_average_dollar_volume_usd": (
+                        _XRP_DISCOVERY_LIQUIDITY_TUNING_THRESHOLD
+                    )
+                }
+            )
+        }
+    )
 
 
 def _build_cli_sandbox_execution_adapter() -> ScriptedSandboxExecutionAdapter:
@@ -292,13 +459,67 @@ def _build_cli_sandbox_execution_adapter() -> ScriptedSandboxExecutionAdapter:
     )
 
 
+def _build_regime_config_override(args: argparse.Namespace) -> RegimeConfig | None:
+    override_values: dict[str, float] = {}
+    if args.regime_liquidity_stress_dollar_volume_threshold is not None:
+        override_values["liquidity_stress_dollar_volume_threshold"] = (
+            args.regime_liquidity_stress_dollar_volume_threshold
+        )
+    if args.regime_high_volatility_threshold is not None:
+        override_values["high_volatility_threshold"] = args.regime_high_volatility_threshold
+    if args.regime_high_atr_pct_threshold is not None:
+        override_values["high_atr_pct_threshold"] = args.regime_high_atr_pct_threshold
+    if args.regime_trend_return_threshold is not None:
+        override_values["trend_return_threshold"] = args.regime_trend_return_threshold
+    if args.regime_trend_range_bps_threshold is not None:
+        override_values["trend_range_bps_threshold"] = args.regime_trend_range_bps_threshold
+    if not override_values:
+        return None
+    return RegimeConfig.model_validate(override_values)
+
+
+def _build_strategy_config_overrides(
+    args: argparse.Namespace,
+) -> tuple[BreakoutSignalConfig | None, MeanReversionSignalConfig | None]:
+    breakout_override: BreakoutSignalConfig | None = None
+    mean_reversion_override: MeanReversionSignalConfig | None = None
+    if args.breakout_min_average_dollar_volume is not None:
+        breakout_override = BreakoutSignalConfig(
+            min_average_dollar_volume=args.breakout_min_average_dollar_volume
+        )
+    if (
+        args.mean_reversion_min_average_dollar_volume is not None
+        or args.mean_reversion_zscore_entry_threshold is not None
+        or args.mean_reversion_max_atr_pct is not None
+    ):
+        default_mean_reversion_config = MeanReversionSignalConfig()
+        mean_reversion_override = MeanReversionSignalConfig(
+            min_average_dollar_volume=(
+                args.mean_reversion_min_average_dollar_volume
+                if args.mean_reversion_min_average_dollar_volume is not None
+                else default_mean_reversion_config.min_average_dollar_volume
+            ),
+            zscore_entry_threshold=(
+                args.mean_reversion_zscore_entry_threshold
+                if args.mean_reversion_zscore_entry_threshold is not None
+                else default_mean_reversion_config.zscore_entry_threshold
+            ),
+            max_atr_pct=(
+                args.mean_reversion_max_atr_pct
+                if args.mean_reversion_max_atr_pct is not None
+                else default_mean_reversion_config.max_atr_pct
+            ),
+        )
+    return breakout_override, mean_reversion_override
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.market_source == "replay" and args.replay_path is None:
         parser.error("replay_path is required when --market-source=replay")
-    if args.market_source == "binance_spot" and args.live_symbol is None:
-        parser.error("--live-symbol is required when --market-source=binance_spot")
+    if args.market_source in {"binance_spot", "coinbase_spot"} and args.live_symbol is None:
+        parser.error("--live-symbol is required when using a live --market-source")
     if args.preflight_only and args.market_source != "binance_spot":
         parser.error("--preflight-only requires --market-source=binance_spot")
     if args.preflight_only and args.canary_only:
@@ -319,8 +540,39 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--sandbox-fixture-rehearsal cannot be used with --canary-only")
     if args.manual_halt and args.manual_resume:
         parser.error("--manual-halt and --manual-resume are mutually exclusive")
-    market_source = cast(Literal["replay", "binance_spot"], args.market_source)
+    if (
+        args.external_confirmation_impact_policy is not None
+        and args.execution_mode != "paper"
+    ):
+        parser.error("--external-confirmation-impact-policy is paper-only")
+    if (
+        args.external_confirmation_boosted_size_multiplier is not None
+        and args.execution_mode != "paper"
+    ):
+        parser.error("--external-confirmation-boosted-size-multiplier is paper-only")
+    if args.external_confirmation_boosted_size_multiplier is not None and not (
+        1.0 <= args.external_confirmation_boosted_size_multiplier <= 1.5
+    ):
+        parser.error("--external-confirmation-boosted-size-multiplier must be between 1.0 and 1.5")
     settings = load_settings(args.config)
+    _apply_xrp_discovery_liquidity_tuning(
+        args=args,
+        parser=parser,
+        settings_allowed_symbols=settings.venue.allowed_symbols,
+    )
+    if args.xrp_discovery_liquidity_tuning:
+        settings = _settings_with_xrp_discovery_liquidity_tuning(settings)
+    regime_config_override = _build_regime_config_override(args)
+    if regime_config_override is not None and args.execution_mode != "paper":
+        parser.error("Regime config overrides are paper-only and require --execution-mode=paper")
+    breakout_config_override, mean_reversion_config_override = _build_strategy_config_overrides(
+        args
+    )
+    if (
+        breakout_config_override is not None or mean_reversion_config_override is not None
+    ) and args.execution_mode != "paper":
+        parser.error("Strategy config overrides are paper-only and require --execution-mode=paper")
+    market_source = cast(Literal["replay", "binance_spot", "coinbase_spot"], args.market_source)
     runtime_control_id = args.runtime_id
     updated_at = datetime.now(UTC)
     controls = default_live_control_config(
@@ -441,6 +693,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         sandbox_execution_adapter=(
             _build_cli_sandbox_execution_adapter() if args.execution_mode == "sandbox" else None
         ),
+        external_confirmation_path=args.external_confirmation_path,
+        external_confirmation_impact_policy=args.external_confirmation_impact_policy,
+        external_confirmation_boosted_size_multiplier=(
+            args.external_confirmation_boosted_size_multiplier
+        ),
+        regime_config_override=regime_config_override,
+        breakout_config_override=breakout_config_override,
+        mean_reversion_config_override=mean_reversion_config_override,
     )
     print(
         json.dumps(
@@ -469,6 +729,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "live_market_preflight_path": str(result.live_market_preflight_path),
                 "soak_evaluation_path": str(result.soak_evaluation_path),
                 "shadow_evaluation_path": str(result.shadow_evaluation_path),
+                "live_gate_config_path": str(result.live_gate_config_path)
+                if result.live_gate_config_path is not None
+                else None,
                 "live_gate_decision_path": str(result.live_gate_decision_path),
                 "live_gate_threshold_summary_path": str(result.live_gate_threshold_summary_path),
                 "live_gate_report_path": str(result.live_gate_report_path),

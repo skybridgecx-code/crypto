@@ -164,6 +164,7 @@ def build_forward_paper_shadow_evaluation(
         shadow_executed_session_count=sum(
             1 for session in shadow_sessions if session.session_outcome == "executed"
         ),
+        shadow_nonzero_request_session_count=sum(1 for row in rows if row.request_count > 0),
         request_count=sum(row.request_count for row in rows),
         rejected_request_count=sum(row.rejected_request_count for row in rows),
         would_send_count=sum(row.would_send_count for row in rows),

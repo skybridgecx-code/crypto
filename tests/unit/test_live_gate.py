@@ -10,6 +10,7 @@ from crypto_agent.policy.readiness import LiveReadinessStatus
 from crypto_agent.runtime.loop import run_forward_paper_runtime
 
 FIXTURES_DIR = Path("tests/fixtures")
+SNAPSHOTS_DIR = FIXTURES_DIR / "snapshots"
 _FORWARD_RUNTIME_STATUS_CLI_SHARED_FIELDS: tuple[str, ...] = (
     "runtime_id",
     "registry_path",
@@ -30,11 +31,51 @@ _FORWARD_RUNTIME_STATUS_CLI_SHARED_FIELDS: tuple[str, ...] = (
     "live_market_preflight_path",
     "soak_evaluation_path",
     "shadow_evaluation_path",
+    "live_gate_config_path",
     "live_gate_decision_path",
     "live_gate_threshold_summary_path",
     "live_gate_report_path",
     "live_launch_verdict_path",
 )
+
+
+def _load_snapshot(snapshot_name: str) -> dict[str, object]:
+    return json.loads((SNAPSHOTS_DIR / snapshot_name).read_text(encoding="utf-8"))
+
+
+def _normalize_cli_paths_snapshot(
+    payload: dict[str, object],
+    *,
+    runs_dir: Path,
+) -> dict[str, object]:
+    normalized: dict[str, object] = {}
+    for field in _FORWARD_RUNTIME_STATUS_CLI_SHARED_FIELDS:
+        value = payload[field]
+        if field == "runtime_id":
+            normalized[field] = value
+            continue
+        if value is None:
+            normalized[field] = None
+            continue
+        path_value = Path(str(value))
+        normalized[field] = str(path_value.relative_to(runs_dir))
+    return normalized
+
+
+def _normalize_live_gate_decision_snapshot(
+    payload: dict[str, object],
+    *,
+    runs_dir: Path,
+) -> dict[str, object]:
+    normalized = dict(payload)
+    for field in (
+        "soak_evaluation_path",
+        "shadow_evaluation_path",
+        "threshold_summary_path",
+    ):
+        path_value = Path(str(payload[field]))
+        normalized[field] = str(path_value.relative_to(runs_dir))
+    return normalized
 
 
 def _paper_settings_for(tmp_path: Path):
@@ -157,6 +198,81 @@ def _live_adapter(session_count: int) -> BinanceSpotLiveMarketDataAdapter:
     return BinanceSpotLiveMarketDataAdapter(fetch_json=ScriptedFetcher(responses))
 
 
+def _flat_live_adapter(session_count: int) -> BinanceSpotLiveMarketDataAdapter:
+    flat_klines = [
+        _kline(
+            open_time_ms=_millis(2026, 4, 5, 11, 55),
+            close_time_ms=_millis(2026, 4, 5, 11, 56),
+            open_price="101.0",
+            high_price="101.0",
+            low_price="101.0",
+            close_price="101.0",
+            volume="1000",
+        ),
+        _kline(
+            open_time_ms=_millis(2026, 4, 5, 11, 56),
+            close_time_ms=_millis(2026, 4, 5, 11, 57),
+            open_price="101.0",
+            high_price="101.0",
+            low_price="101.0",
+            close_price="101.0",
+            volume="1000",
+        ),
+        _kline(
+            open_time_ms=_millis(2026, 4, 5, 11, 57),
+            close_time_ms=_millis(2026, 4, 5, 11, 58),
+            open_price="101.0",
+            high_price="101.0",
+            low_price="101.0",
+            close_price="101.0",
+            volume="1000",
+        ),
+        _kline(
+            open_time_ms=_millis(2026, 4, 5, 11, 58),
+            close_time_ms=_millis(2026, 4, 5, 11, 59),
+            open_price="101.0",
+            high_price="101.0",
+            low_price="101.0",
+            close_price="101.0",
+            volume="1000",
+        ),
+        _kline(
+            open_time_ms=_millis(2026, 4, 5, 11, 59),
+            close_time_ms=_millis(2026, 4, 5, 12, 0),
+            open_price="101.0",
+            high_price="101.0",
+            low_price="101.0",
+            close_price="101.0",
+            volume="1000",
+        ),
+        _kline(
+            open_time_ms=_millis(2026, 4, 5, 12, 0),
+            close_time_ms=_millis(2026, 4, 5, 12, 1),
+            open_price="101.0",
+            high_price="101.0",
+            low_price="101.0",
+            close_price="101.0",
+            volume="1000",
+        ),
+    ]
+    responses: list[object] = []
+    for _ in range(session_count):
+        responses.extend(
+            [
+                _exchange_info(),
+                flat_klines,
+                {
+                    "symbol": "BTCUSDT",
+                    "bidPrice": "100.90",
+                    "bidQty": "1.5",
+                    "askPrice": "101.10",
+                    "askQty": "1.4",
+                },
+            ]
+        )
+    return BinanceSpotLiveMarketDataAdapter(fetch_json=ScriptedFetcher(responses))
+
+
 def _unavailable_live_adapter() -> BinanceSpotLiveMarketDataAdapter:
     return BinanceSpotLiveMarketDataAdapter(
         fetch_json=ScriptedFetcher([RuntimeError("exchange unavailable")])
@@ -270,6 +386,8 @@ def test_fresh_runtime_materializes_live_gate_artifacts_without_existing_control
 
     assert session.session_outcome == "skipped_unavailable_feed"
     assert result.live_control_status_path.exists()
+    assert result.live_gate_config_path is not None
+    assert result.live_gate_config_path.exists()
     assert result.live_gate_decision_path.exists()
     assert result.live_gate_threshold_summary_path.exists()
     assert result.live_gate_report_path.exists()
@@ -413,6 +531,110 @@ def test_live_gate_is_not_ready_when_shadow_evidence_is_missing(tmp_path: Path) 
     assert "insufficient_shadow_requests" in gate["reason_codes"]
 
 
+def test_live_gate_is_not_ready_for_executed_non_firing_shadow_sessions(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="forward-gate-non-firing-shadow",
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=3,
+        tick_times=[
+            _ts(2026, 4, 5, 12, 2),
+            _ts(2026, 4, 5, 12, 3),
+            _ts(2026, 4, 5, 12, 4),
+        ],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_flat_live_adapter(3),
+        readiness_status=LiveReadinessStatus(
+            runtime_id="forward-gate-non-firing-shadow",
+            updated_at=_ts(2026, 4, 5, 12, 1),
+            status="ready",
+            limited_live_gate_status="ready_for_review",
+        ),
+    )
+
+    gate = json.loads(result.live_gate_decision_path.read_text(encoding="utf-8"))
+    shadow = json.loads(result.shadow_evaluation_path.read_text(encoding="utf-8"))
+
+    assert any(session.session_outcome == "executed" for session in result.session_summaries)
+    assert shadow["shadow_nonzero_request_session_count"] == 0
+    assert shadow["request_count"] == 0
+    assert shadow["would_send_count"] == 0
+    assert gate["state"] == "not_ready"
+    assert "insufficient_shadow_requests" in gate["reason_codes"]
+    assert "insufficient_shadow_nonzero_request_sessions" in gate["reason_codes"]
+    assert "insufficient_shadow_would_send_requests" in gate["reason_codes"]
+
+
+def test_live_gate_config_snapshot_and_path_contract(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    generated_at = _ts(2026, 4, 5, 14, 0)
+    result = run_forward_paper_runtime(
+        FIXTURES_DIR / "paper_candles_breakout_long.jsonl",
+        settings=settings,
+        runtime_id="forward-gate-config-snapshot",
+        session_interval_seconds=60,
+        max_sessions=1,
+        tick_times=[_ts(2026, 4, 5, 13, 59)],
+        now_fn=lambda: generated_at,
+    )
+
+    assert result.live_gate_config_path is not None
+    live_gate_config_payload = json.loads(result.live_gate_config_path.read_text(encoding="utf-8"))
+    status_payload = json.loads(result.status_path.read_text(encoding="utf-8"))
+
+    assert live_gate_config_payload == _load_snapshot("forward_live_gate_config.snapshot.json")
+    assert status_payload["live_gate_config_path"] == str(result.live_gate_config_path)
+
+
+def test_live_gate_thresholds_and_decision_snapshot(tmp_path: Path) -> None:
+    settings = _paper_settings_for(tmp_path)
+    generated_at = _ts(2026, 4, 5, 16, 0)
+    result = run_forward_paper_runtime(
+        None,
+        settings=settings,
+        runtime_id="forward-gate-thresholds-snapshot",
+        session_interval_seconds=60,
+        execution_mode="shadow",
+        max_sessions=3,
+        tick_times=[
+            _ts(2026, 4, 5, 12, 2),
+            _ts(2026, 4, 5, 12, 3),
+            _ts(2026, 4, 5, 12, 4),
+        ],
+        market_source="binance_spot",
+        live_symbol="BTCUSDT",
+        live_interval="1m",
+        live_lookback_candles=4,
+        feed_stale_after_seconds=120,
+        live_adapter=_flat_live_adapter(3),
+        readiness_status=LiveReadinessStatus(
+            runtime_id="forward-gate-thresholds-snapshot",
+            updated_at=_ts(2026, 4, 5, 12, 1),
+            status="ready",
+            limited_live_gate_status="ready_for_review",
+        ),
+        now_fn=lambda: generated_at,
+    )
+    thresholds_payload = json.loads(
+        result.live_gate_threshold_summary_path.read_text(encoding="utf-8")
+    )
+    decision_payload = json.loads(result.live_gate_decision_path.read_text(encoding="utf-8"))
+    normalized_decision_payload = _normalize_live_gate_decision_snapshot(
+        decision_payload,
+        runs_dir=tmp_path / "runs",
+    )
+
+    assert thresholds_payload == _load_snapshot("forward_live_gate_thresholds.snapshot.json")
+    assert normalized_decision_payload == _load_snapshot("forward_live_gate_decision.snapshot.json")
+
+
 def test_cli_forward_runtime_prints_live_gate_paths(tmp_path: Path, capsys) -> None:
     config_path = tmp_path / "paper_test.yaml"
     config_path.write_text(
@@ -472,5 +694,64 @@ def test_cli_forward_runtime_prints_live_gate_paths(tmp_path: Path, capsys) -> N
     assert Path(output["live_gate_threshold_summary_path"]).exists()
     assert Path(output["live_gate_report_path"]).exists()
     assert Path(output["live_launch_verdict_path"]).exists()
+    assert Path(output["live_gate_config_path"]).exists()
     for field in _FORWARD_RUNTIME_STATUS_CLI_SHARED_FIELDS:
         assert output[field] == status_payload[field]
+
+
+def test_cli_forward_runtime_paths_snapshot(tmp_path: Path, capsys) -> None:
+    config_path = tmp_path / "paper_test.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "mode: paper",
+                "paths:",
+                f"  runs_dir: {tmp_path / 'runs'}",
+                f"  journals_dir: {tmp_path / 'journals'}",
+                "venue:",
+                "  default_venue: paper",
+                "  allowed_symbols:",
+                "    - BTCUSDT",
+                "risk:",
+                "  risk_per_trade_fraction: 0.005",
+                "  max_portfolio_gross_exposure: 1.0",
+                "  max_symbol_gross_exposure: 0.4",
+                "  max_daily_realized_loss: 0.015",
+                "  max_open_positions: 2",
+                "  max_leverage: 1.0",
+                "  max_spread_bps: 12.0",
+                "  max_expected_slippage_bps: 15.0",
+                "  min_average_dollar_volume_usd: 5000000.0",
+                "policy:",
+                "  allow_live_orders: false",
+                "  require_manual_approval_above_notional_usd: 1000.0",
+                "  kill_switch_enabled: true",
+                "  max_consecutive_order_rejects: 3",
+                "  max_slippage_breaches: 2",
+                "  max_drawdown_fraction: 0.03",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    from crypto_agent.cli.forward_paper import main
+
+    exit_code = main(
+        [
+            str(FIXTURES_DIR / "paper_candles_breakout_long.jsonl"),
+            "--config",
+            str(config_path),
+            "--runtime-id",
+            "forward-gate-cli-snapshot",
+            "--max-sessions",
+            "1",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    normalized_paths = _normalize_cli_paths_snapshot(
+        output,
+        runs_dir=tmp_path / "runs",
+    )
+
+    assert exit_code == 0
+    assert normalized_paths == _load_snapshot("forward_runtime_cli_paths.snapshot.json")
